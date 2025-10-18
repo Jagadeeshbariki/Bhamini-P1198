@@ -37,6 +37,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                     <div className="hidden md:block">
                         <div className="ml-10 flex items-baseline space-x-4">
                             <NavLink page="home">Home</NavLink>
+                            <NavLink page="activity">Activity</NavLink>
                             {user && (
                                 <button
                                     onClick={onLogout}
