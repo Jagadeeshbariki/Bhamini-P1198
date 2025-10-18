@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -85,9 +84,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                             {isLoading ? 'Signing in...' : 'Sign in'}
                         </button>
                     </div>
-                     <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
-                        Hint: Use 'user' and 'password' to login.
-                    </p>
                 </form>
             </div>
         </div>

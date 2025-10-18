@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -28,12 +27,16 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16">
                     <div className="flex items-center">
-                        <span className="font-bold text-xl text-blue-600 dark:text-blue-400">Bhamini-P1198</span>
+                        <button
+                            onClick={() => onNavigate('home')}
+                            className="font-bold text-xl text-blue-600 dark:text-blue-400 focus:outline-none"
+                        >
+                            Bhamini-P1198
+                        </button>
                     </div>
                     <div className="hidden md:block">
                         <div className="ml-10 flex items-baseline space-x-4">
                             <NavLink page="home">Home</NavLink>
-                            <NavLink page="activity">Activity</NavLink>
                             {user && (
                                 <button
                                     onClick={onLogout}

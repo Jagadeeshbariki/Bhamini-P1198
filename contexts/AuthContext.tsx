@@ -6,6 +6,14 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 const SESSION_DURATION = 12 * 60 * 60 * 1000; // 12 hours
 
+const users = [
+    { username: 'user', password: 'password' },
+    { username: 'Jagadeesh', password: 'Jagadeesh@P1198' },
+    { username: 'Manikumar', password: 'Manikumar@P1198' },
+    { username: 'Jeddiskung', password: 'Jeddiskung@P1198' },
+    { username: 'Sampath', password: 'Sampath@P1198' },
+];
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,10 +38,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
-    // In a real app, this would be a network request.
-    // For this demo, we use hardcoded credentials.
-    if (username === 'user' && password === 'password') {
-      const authUser: AuthUser = { username };
+    const foundUser = users.find(u => u.username === username && u.password === password);
+
+    if (foundUser) {
+      const authUser: AuthUser = { username: foundUser.username };
       const session: Session = {
         user: authUser,
         expiry: Date.now() + SESSION_DURATION,
