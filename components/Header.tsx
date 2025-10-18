@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import InstallPWAButton from './InstallPWAButton';
 
 interface HeaderProps {
     onNavigate: (page: 'home' | 'activity') => void;
@@ -35,9 +36,10 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                         </button>
                     </div>
                     <div className="hidden md:block">
-                        <div className="ml-10 flex items-baseline space-x-4">
+                        <div className="ml-10 flex items-center space-x-4">
                             <NavLink page="home">Home</NavLink>
                             <NavLink page="activity">Activity</NavLink>
+                            <InstallPWAButton />
                             {user && (
                                 <button
                                     onClick={onLogout}
@@ -52,6 +54,8 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                         <button
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
                             className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:bg-gray-700 focus:text-white transition"
+                            aria-expanded={isMenuOpen}
+                            aria-label="Open main menu"
                         >
                             <svg className="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
                                 {isMenuOpen ? (
@@ -69,6 +73,9 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                     <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
                         <NavLink page="home">Home</NavLink>
                         <NavLink page="activity">Activity</NavLink>
+                        <div className="px-1 py-1">
+                             <InstallPWAButton />
+                        </div>
                         {user && (
                             <button
                                 onClick={() => {
