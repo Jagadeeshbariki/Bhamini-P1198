@@ -1,9 +1,10 @@
+
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import InstallPWAButton from './InstallPWAButton';
 
 interface HeaderProps {
-    onNavigate: (page: 'home' | 'activity') => void;
+    onNavigate: (page: 'home' | 'activity' | 'attendance-report' | 'mark-attendance') => void;
     onLogout: () => void;
 }
 
@@ -11,7 +12,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
     const { user } = useAuth();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-    const NavLink: React.FC<{ page: 'home' | 'activity'; children: React.ReactNode }> = ({ page, children }) => (
+    const NavLink: React.FC<{ page: 'home' | 'activity' | 'attendance-report' | 'mark-attendance'; children: React.ReactNode }> = ({ page, children }) => (
         <button
             onClick={() => {
                 onNavigate(page);
@@ -39,6 +40,8 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                         <div className="ml-10 flex items-center space-x-4">
                             <NavLink page="home">Home</NavLink>
                             <NavLink page="activity">Activity</NavLink>
+                            {user && <NavLink page="mark-attendance">Mark Attendance</NavLink>}
+                            {user && <NavLink page="attendance-report">Attendance Report</NavLink>}
                             <InstallPWAButton />
                             {user && (
                                 <button
@@ -73,6 +76,8 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                     <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
                         <NavLink page="home">Home</NavLink>
                         <NavLink page="activity">Activity</NavLink>
+                        {user && <NavLink page="mark-attendance">Mark Attendance</NavLink>}
+                        {user && <NavLink page="attendance-report">Attendance Report</NavLink>}
                         <div className="px-1 py-1">
                              <InstallPWAButton />
                         </div>

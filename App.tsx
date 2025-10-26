@@ -6,25 +6,31 @@ import Header from './components/Header';
 import HomePage from './components/HomePage';
 import ActivityPage from './components/ActivityPage';
 import LoginPage from './components/LoginPage';
+import ReportPage from './components/ReportPage';
+import MarkAttendancePage from './components/MarkAttendancePage';
 
-type Page = 'home' | 'activity' | 'login';
+type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>('home');
     const { user, logout } = useAuth();
+    const [lastProtectedPage, setLastProtectedPage] = useState<Page>('activity');
+
 
     useEffect(() => {
-        if (!user && page === 'activity') {
+        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance'];
+        if (!user && protectedPages.includes(page)) {
+            setLastProtectedPage(page);
             setPage('login');
         }
     }, [user, page]);
 
-    const handleNavigate = (targetPage: 'home' | 'activity') => {
-        if (targetPage === 'activity' && !user) {
-            setPage('login');
-        } else {
-            setPage(targetPage);
-        }
+    const handleNavigate = (targetPage: 'home' | 'activity' | 'attendance-report' | 'mark-attendance') => {
+        setPage(targetPage);
+    };
+
+    const handleLoginSuccess = () => {
+        setPage(lastProtectedPage);
     };
 
     const handleLogout = () => {
@@ -38,8 +44,12 @@ const AppContent: React.FC = () => {
                 return <HomePage />;
             case 'activity':
                 return <ActivityPage />;
+            case 'attendance-report':
+                return <ReportPage />;
+            case 'mark-attendance':
+                return <MarkAttendancePage />;
             case 'login':
-                return <LoginPage onLoginSuccess={() => setPage('home')} />;
+                return <LoginPage onLoginSuccess={handleLoginSuccess} />;
             default:
                 return <HomePage />;
         }
