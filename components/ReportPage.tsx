@@ -3,7 +3,6 @@ import { useAuth } from '../hooks/useAuth';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { GOOGLE_SHEET_CSV_URL } from '../config';
-import { noto_sans_telugu_regular_base64 } from '../assets/noto-sans-telugu-font';
 
 interface AttendanceRecord {
     timestamp: string;
@@ -165,12 +164,6 @@ const ReportPage: React.FC = () => {
         try {
             const doc = new jsPDF({ orientation: 'landscape' });
 
-            // Add Telugu font support
-            const fontFileName = 'NotoSansTelugu-Regular.ttf';
-            doc.addFileToVFS(fontFileName, noto_sans_telugu_regular_base64);
-            doc.addFont(fontFileName, 'NotoSansTelugu', 'normal');
-            doc.setFont('NotoSansTelugu'); // Set as default
-
             const pageWidth = doc.internal.pageSize.getWidth();
             doc.setFontSize(12);
             doc.text('LEAD TECHNICAL AGENCY – WASSAN', pageWidth / 2, 15, { align: 'center' });
@@ -198,13 +191,9 @@ const ReportPage: React.FC = () => {
                 head: [tableColumn],
                 body: tableRows,
                 theme: 'grid',
-                styles: {
-                    font: 'NotoSansTelugu', // Ensure table uses the Telugu font
-                },
                 headStyles: {
                     fillColor: [22, 160, 133],
                     textColor: 255,
-                    font: 'NotoSansTelugu',
                 },
             });
 
