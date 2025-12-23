@@ -127,7 +127,8 @@ const ReportPage: React.FC = () => {
                 const filtered = userRecords.filter(record => {
                     const parts = record.date.split('/');
                     if (parts.length === 3) {
-                       const recordMonth = parseInt(parts[0], 10) - 1;
+                       // Date format is D/M/YYYY
+                       const recordMonth = parseInt(parts[1], 10) - 1; // Month is index 1
                        const recordYear = parseInt(parts[2], 10);
                        return recordMonth === monthIndex && recordYear.toString() === selectedYear;
                     }
@@ -135,8 +136,9 @@ const ReportPage: React.FC = () => {
                 }).sort((a, b) => {
                     const datePartsA = a.date.split('/');
                     const datePartsB = b.date.split('/');
-                    const dateA = new Date(+datePartsA[2], +datePartsA[0] - 1, +datePartsA[1]).getTime();
-                    const dateB = new Date(+datePartsB[2], +datePartsB[0] - 1, +datePartsB[1]).getTime();
+                    // Format: D/M/YYYY -> Year, Month-1, Day
+                    const dateA = new Date(+datePartsA[2], +datePartsA[1] - 1, +datePartsA[0]).getTime();
+                    const dateB = new Date(+datePartsB[2], +datePartsB[1] - 1, +datePartsB[0]).getTime();
                     return dateA - dateB;
                 });
                 setFilteredData(filtered);
@@ -243,15 +245,32 @@ const ReportPage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                            {filteredData.map((record, index) => (
-                                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{record.date}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{record.placeOfVisit}</td>
-                                    <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 dark:text-gray-400">{record.purposeOfVisit}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{record.workingHours}</td>
-                                    <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 dark:text-gray-400">{record.outcomes}</td>
-                                </tr>
-                            ))}
+                            {filteredData.map((record, index) => {
+                                const isWorking = record.workingStatus === 'Working';
+                                return (
+                                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{record.date}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                            {isWorking ? record.placeOfVisit : '-'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 dark:text-gray-400">
+                                            {isWorking ? (
+                                                record.purposeOfVisit
+                                            ) : (
+                                                <span className="font-semibold text-orange-600 dark:text-orange-400">
+                                                    {record.workingStatus}: {record.reasonNotWorking}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                            {isWorking ? record.workingHours : '0'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 dark:text-gray-400">
+                                            {isWorking ? record.outcomes : '-'}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 ) : (
@@ -262,7 +281,6 @@ const ReportPage: React.FC = () => {
             </div>
 
             {/* HIDDEN PRINTABLE SECTION: Optimized for A4 Landscape with Telugu Font */}
-            {/* Using position: fixed instead of display: none to help html2canvas render correctly */}
             <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -100 }}>
                 <div ref={printRef} className="p-8 bg-white telugu-font" style={{ width: '1120px', color: '#000000' }}>
                     <div className="text-center mb-8">
@@ -293,16 +311,30 @@ const ReportPage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredData.map((record, index) => (
-                                <tr key={index}>
-                                    <td className="border border-black px-3 py-2 text-center" style={{ color: '#000000' }}>{record.date}</td>
-                                    <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>{record.placeOfVisit}</td>
-                                    <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>{record.purposeOfVisit}</td>
-                                    <td className="border border-black px-3 py-2 text-center" style={{ color: '#000000' }}>{record.workingHours}</td>
-                                    <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>{record.outcomes}</td>
-                                </tr>
-                            ))}
-                            {/* Fill empty rows to maintain layout if few records */}
+                            {filteredData.map((record, index) => {
+                                const isWorking = record.workingStatus === 'Working';
+                                return (
+                                    <tr key={index}>
+                                        <td className="border border-black px-3 py-2 text-center" style={{ color: '#000000' }}>{record.date}</td>
+                                        <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>
+                                            {isWorking ? record.placeOfVisit : '-'}
+                                        </td>
+                                        <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>
+                                            {isWorking ? (
+                                                record.purposeOfVisit
+                                            ) : (
+                                                <strong>{record.workingStatus}: {record.reasonNotWorking}</strong>
+                                            )}
+                                        </td>
+                                        <td className="border border-black px-3 py-2 text-center" style={{ color: '#000000' }}>
+                                            {isWorking ? record.workingHours : '0'}
+                                        </td>
+                                        <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>
+                                            {isWorking ? record.outcomes : '-'}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                             {filteredData.length < 5 && Array.from({ length: 5 - filteredData.length }).map((_, i) => (
                                 <tr key={`empty-${i}`} style={{ height: '40px' }}>
                                     <td className="border border-black px-3 py-2"></td>

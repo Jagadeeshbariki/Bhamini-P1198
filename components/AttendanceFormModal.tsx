@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { AuthUser } from '../types';
 
@@ -52,8 +53,7 @@ import type { AuthUser } from '../types';
 // 9. Paste that URL into the `GOOGLE_APPS_SCRIPT_URL` constant below.
 
 // FIX: Explicitly type the constant as a string to prevent TypeScript from inferring a too-specific literal type.
-// This allows the configuration check below to compile without error.
-const GOOGLE_APPS_SCRIPT_URL: string = 'https://script.google.com/macros/s/AKfycby4omIqQ9ANnowOT75v9b-7LJmrZ1_Fb1iZGfSNRVo8TbkmsuGv4Mf9h36MMwVPkjaiVw/exec'; // <-- PASTE YOUR UNIQUE URL HERE
+const GOOGLE_APPS_SCRIPT_URL: string = 'https://script.google.com/macros/s/AKfycby4omIqQ9ANnowOT75v9b-7LJmrZ1_Fb1iZGfSNRVo8TbkmsuGv4Mf9h36MMwVPkjaiVw/exec';
 
 interface AttendanceFormModalProps {
     user: AuthUser;
@@ -72,7 +72,8 @@ const AttendanceFormModal: React.FC<AttendanceFormModalProps> = ({ user, date, o
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
-    const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+    // Changed format from M/D/YYYY to D/M/YYYY
+    const formattedDate = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -101,7 +102,6 @@ const AttendanceFormModal: React.FC<AttendanceFormModalProps> = ({ user, date, o
                 method: 'POST',
                 mode: 'cors',
                 headers: { 
-                    // Use text/plain to avoid CORS preflight request issues with Google Apps Script
                     'Content-Type': 'text/plain' 
                 },
                 body: JSON.stringify(formData),

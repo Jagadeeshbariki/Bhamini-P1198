@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { generateCalendarDays } from '../utils/calendar';
@@ -15,7 +16,7 @@ const MarkAttendancePage: React.FC = () => {
 
     const today = useMemo(() => {
         const d = new Date();
-        d.setHours(0, 0, 0, 0); // Normalize to the beginning of the day for accurate comparison
+        d.setHours(0, 0, 0, 0); 
         return d;
     }, []);
 
@@ -90,12 +91,12 @@ const MarkAttendancePage: React.FC = () => {
             parsedData.forEach(row => {
                 if (row['SELECT YOUR NAME'] && row['SELECT YOUR NAME'].trim() === user.username) {
                     if (row['CHOOSE DATE']) {
-                        // Date format is M/D/YYYY
+                        // Date format is D/M/YYYY
                         const parts = row['CHOOSE DATE'].trim().split('/');
                         if (parts.length === 3) {
                              const year = parts[2];
-                             const month = String(parts[0]).padStart(2, '0');
-                             const day = String(parts[1]).padStart(2, '0');
+                             const month = String(parts[1]).padStart(2, '0'); // Month is index 1
+                             const day = String(parts[0]).padStart(2, '0');   // Day is index 0
                              const formattedDate = `${year}-${month}-${day}`;
                             dates.add(formattedDate);
                         }
@@ -123,7 +124,6 @@ const MarkAttendancePage: React.FC = () => {
     };
 
     const handleDayClick = (day: Date) => {
-        // Prevent action for future dates
         if (day > today) {
             return;
         }
@@ -138,8 +138,6 @@ const MarkAttendancePage: React.FC = () => {
     };
     
     const handleFormSuccess = (submittedDate: Date) => {
-        // Optimistically update the UI to provide immediate feedback,
-        // bypassing the Google Sheet's publishing latency.
         const dayKey = `${submittedDate.getFullYear()}-${String(submittedDate.getMonth() + 1).padStart(2, '0')}-${String(submittedDate.getDate()).padStart(2, '0')}`;
         
         setMarkedDates(prevDates => {
