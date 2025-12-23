@@ -9,7 +9,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sectionId }) => {
     // IMPORTANT: Replace this with your actual Looker Studio report URL.
     // The sectionId is appended as a parameter to show how you might filter the report.
     // You'll need to configure your Looker Studio report to accept this parameter.
-    const dashboardBaseUrl = "https://lookerstudio.google.com/embed/reporting/0b55850a-e374-4685-9cea-f7b2c0b02b54/page/p_3g5l4i1jwc";
+    const dashboardBaseUrl = "https://lookerstudio.google.com/embed/reporting/c0a112e0-1985-4160-9580-34ee38ab9c36/page/l5bjF";
     
     // This is a simple way to pass the section ID. Your report might need a different format.
     const embedUrl = `${dashboardBaseUrl}?params={"ds0.section_id":"${sectionId}"}`;
