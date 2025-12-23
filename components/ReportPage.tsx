@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { GOOGLE_SHEET_CSV_URL } from '../config';
 
 interface AttendanceRecord {
@@ -23,6 +22,7 @@ const ReportPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const printRef = useRef<HTMLDivElement>(null);
 
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toLocaleString('default', { month: 'short' }));
     const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
@@ -84,21 +84,13 @@ const ReportPage: React.FC = () => {
             setLoading(true);
             setError(null);
             try {
-                const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&_=${new Date().getTime()}`); // Prevent caching
+                const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&_=${new Date().getTime()}`);
                 if (!response.ok) {
-                    throw new Error(`Network response was not ok. Status: ${response.status}. Ensure the Google Sheet is published correctly.`);
+                    throw new Error(`Network response was not ok. Status: ${response.status}.`);
                 }
                 const csvText = await response.text();
                 const parsedData = parseCSV(csvText);
                 
-                const requiredColumns = ['Timestamp', 'SELECT YOUR NAME', 'CHOOSE DATE', 'WORKING/LEAVE/HOLIDAY', 'WRITE THE REASON FOR NOT WORKING', 'PLACE OF VISIT', 'PURPOSE OF VISIT', 'WORKING HOURS', 'OUTCOME'];
-                const headers = parsedData.length > 0 ? Object.keys(parsedData[0]) : [];
-                const missingColumns = requiredColumns.filter(col => !headers.includes(col));
-
-                if (missingColumns.length > 0) {
-                     throw new Error(`The published Google Sheet is missing required columns: ${missingColumns.join(', ')}. Please check your sheet's headers.`);
-                }
-
                 const mappedData: AttendanceRecord[] = parsedData.map((row: any) => ({
                     timestamp: row['Timestamp'],
                     name: row['SELECT YOUR NAME'],
@@ -112,8 +104,8 @@ const ReportPage: React.FC = () => {
                 }));
                 setAttendanceData(mappedData);
             } catch (err) {
-                console.error("Failed to fetch or parse attendance data:", err);
-                setError(err instanceof Error ? err.message : 'An unknown error occurred while fetching data.');
+                console.error("Failed to fetch attendance data:", err);
+                setError(err instanceof Error ? err.message : 'An unknown error occurred.');
             } finally {
                 setLoading(false);
             }
@@ -129,20 +121,18 @@ const ReportPage: React.FC = () => {
     useEffect(() => {
         if (user && attendanceData.length > 0) {
             const userRecords = attendanceData.filter(record => record.name === user.username);
-            
             const monthIndex = months.indexOf(selectedMonth);
 
             if (monthIndex !== -1) {
                 const filtered = userRecords.filter(record => {
                     const parts = record.date.split('/');
                     if (parts.length === 3) {
-                       const recordMonth = parseInt(parts[0], 10) - 1; // Month is 0-indexed
+                       const recordMonth = parseInt(parts[0], 10) - 1;
                        const recordYear = parseInt(parts[2], 10);
                        return recordMonth === monthIndex && recordYear.toString() === selectedYear;
                     }
                     return false;
                 }).sort((a, b) => {
-                    // M/D/YYYY format needs careful parsing
                     const datePartsA = a.date.split('/');
                     const datePartsB = b.date.split('/');
                     const dateA = new Date(+datePartsA[2], +datePartsA[0] - 1, +datePartsA[1]).getTime();
@@ -157,50 +147,33 @@ const ReportPage: React.FC = () => {
     }, [user, attendanceData, selectedMonth, selectedYear, months]);
     
     const downloadPDF = async () => {
-        if (!user) return;
+        if (!user || !printRef.current) return;
         setIsGenerating(true);
         setError(null);
 
         try {
-            const doc = new jsPDF({ orientation: 'landscape' });
-
-            const pageWidth = doc.internal.pageSize.getWidth();
-            doc.setFontSize(12);
-            doc.text('LEAD TECHNICAL AGENCY – WASSAN', pageWidth / 2, 15, { align: 'center' });
-            doc.text('Project Name: HDFC Parivarthan', pageWidth / 2, 22, { align: 'center' });
-            doc.setFontSize(14);
-            doc.text('WORK DONE REPORT', pageWidth / 2, 29, { align: 'center' });
-
-            doc.setFontSize(10);
-            doc.text(`Month : ${selectedMonth}-${selectedYear}`, 14, 40);
-            doc.text(`Budget Head: HDFC Parivarthan`, pageWidth - 14, 40, { align: 'right' });
-            doc.text(`Name of the Person : ${user.username.toUpperCase()}`, 14, 47);
-            doc.text(`Working GP :`, 14, 54);
-
-            const tableColumn = ["Date", "Place Of Visit", "Purpose Of Visit", "Working Hours", "Outcomes"];
-            const tableRows = filteredData.map(item => [
-                item.date,
-                item.placeOfVisit,
-                item.purposeOfVisit,
-                item.workingHours,
-                item.outcomes
-            ]);
-
-            autoTable(doc, {
-                startY: 60,
-                head: [tableColumn],
-                body: tableRows,
-                theme: 'grid',
-                headStyles: {
-                    fillColor: [22, 160, 133],
-                    textColor: 255,
+            // @ts-ignore - html2pdf is globally available via CDN
+            const worker = window.html2pdf();
+            
+            const opt = {
+                margin: [10, 5, 10, 5],
+                filename: `Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { 
+                    scale: 2, 
+                    useCORS: true,
+                    logging: false,
+                    letterRendering: true,
+                    scrollX: 0,
+                    scrollY: 0
                 },
-            });
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+            };
 
-            doc.save(`Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`);
+            await worker.from(printRef.current).set(opt).save();
         } catch (e) {
             console.error("PDF generation failed:", e);
-            setError("PDF generation failed. An unexpected error occurred.");
+            setError("PDF generation failed. Please try again.");
         } finally {
             setIsGenerating(false);
         }
@@ -210,7 +183,7 @@ const ReportPage: React.FC = () => {
         return <div className="text-center p-8">Loading attendance data...</div>;
     }
 
-    if (error && !isGenerating) { // Don't show data fetch error if a PDF error occurs
+    if (error && !isGenerating) {
         return <div className="text-center p-8 text-red-500 bg-red-100 dark:bg-red-900 border border-red-500 rounded-lg">{error}</div>;
     }
 
@@ -252,21 +225,21 @@ const ReportPage: React.FC = () => {
                 disabled={filteredData.length === 0 || isGenerating}
                 className="w-full md:w-auto bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors mb-6 flex items-center justify-center"
             >
-                 {isGenerating ? 'Generating...' : 'Download Report as PDF'}
+                 {isGenerating ? 'Generating PDF...' : 'Download Report as PDF'}
             </button>
             {error && isGenerating && <div className="text-center my-2 p-2 text-red-500 bg-red-100 dark:bg-red-900 border border-red-500 rounded-lg">{error}</div>}
 
 
             <div className="overflow-x-auto">
                 {filteredData.length > 0 ? (
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 telugu-font">
                         <thead className="bg-gray-50 dark:bg-gray-700">
                             <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Place Of Visit</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Purpose Of Visit</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Working Hours</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Outcomes</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Place Of Visit</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Purpose Of Visit</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Hours</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Outcomes</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -286,6 +259,73 @@ const ReportPage: React.FC = () => {
                         No records found for {user.username} for {selectedMonth} {selectedYear}.
                     </div>
                 )}
+            </div>
+
+            {/* HIDDEN PRINTABLE SECTION: Optimized for A4 Landscape with Telugu Font */}
+            {/* Using position: fixed instead of display: none to help html2canvas render correctly */}
+            <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -100 }}>
+                <div ref={printRef} className="p-8 bg-white telugu-font" style={{ width: '1120px', color: '#000000' }}>
+                    <div className="text-center mb-8">
+                        <h1 className="text-2xl font-bold uppercase mb-1" style={{ color: '#000000' }}>LEAD TECHNICAL AGENCY – WASSAN</h1>
+                        <h2 className="text-xl font-semibold mb-1" style={{ color: '#000000' }}>Project Name: HDFC Parivarthan</h2>
+                        <h3 className="text-3xl font-black border-b-4 border-black inline-block pb-1 px-8 mt-4" style={{ color: '#000000' }}>WORK DONE REPORT</h3>
+                    </div>
+
+                    <div className="flex justify-between mb-8 text-base font-bold" style={{ color: '#000000' }}>
+                        <div>
+                            <p>Month : {selectedMonth} - {selectedYear}</p>
+                            <p className="mt-2">Name of the Person : {user.username.toUpperCase()}</p>
+                            <p className="mt-2">Working GP : ___________________________</p>
+                        </div>
+                        <div className="text-right">
+                            <p>Budget Head: HDFC Parivarthan</p>
+                        </div>
+                    </div>
+
+                    <table className="w-full border-collapse border-2 border-black text-sm" style={{ color: '#000000' }}>
+                        <thead>
+                            <tr style={{ backgroundColor: '#f3f4f6' }}>
+                                <th className="border-2 border-black px-3 py-2 text-center w-28 font-bold">Date</th>
+                                <th className="border-2 border-black px-3 py-2 text-center w-48 font-bold">Place Of Visit</th>
+                                <th className="border-2 border-black px-3 py-2 text-center font-bold">Purpose Of Visit</th>
+                                <th className="border-2 border-black px-3 py-2 text-center w-24 font-bold">Hours</th>
+                                <th className="border-2 border-black px-3 py-2 text-center font-bold">Outcomes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredData.map((record, index) => (
+                                <tr key={index}>
+                                    <td className="border border-black px-3 py-2 text-center" style={{ color: '#000000' }}>{record.date}</td>
+                                    <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>{record.placeOfVisit}</td>
+                                    <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>{record.purposeOfVisit}</td>
+                                    <td className="border border-black px-3 py-2 text-center" style={{ color: '#000000' }}>{record.workingHours}</td>
+                                    <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>{record.outcomes}</td>
+                                </tr>
+                            ))}
+                            {/* Fill empty rows to maintain layout if few records */}
+                            {filteredData.length < 5 && Array.from({ length: 5 - filteredData.length }).map((_, i) => (
+                                <tr key={`empty-${i}`} style={{ height: '40px' }}>
+                                    <td className="border border-black px-3 py-2"></td>
+                                    <td className="border border-black px-3 py-2"></td>
+                                    <td className="border border-black px-3 py-2"></td>
+                                    <td className="border border-black px-3 py-2"></td>
+                                    <td className="border border-black px-3 py-2"></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+
+                    <div className="mt-24 flex justify-between px-12 italic font-bold" style={{ color: '#000000' }}>
+                        <div className="text-center">
+                            <div className="w-48 border-b border-black mb-2"></div>
+                            <p>Signature of the Staff</p>
+                        </div>
+                        <div className="text-center">
+                            <div className="w-48 border-b border-black mb-2"></div>
+                            <p>Signature of the Coordinator</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
