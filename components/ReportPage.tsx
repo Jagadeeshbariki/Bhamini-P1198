@@ -36,15 +36,15 @@ const ReportPage: React.FC = () => {
         return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     }, []);
 
-    // Calculate the report period strings for display
     const reportPeriodLabel = useMemo(() => {
         const monthIndex = months.indexOf(selectedMonth);
         const year = parseInt(selectedYear);
+        if (monthIndex === -1) return '';
         
         const startDate = new Date(year, monthIndex - 1, 26);
         const endDate = new Date(year, monthIndex, 25);
         
-        const fmt = (d: Date) => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+        const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
         return `${fmt(startDate)} to ${fmt(endDate)}`;
     }, [selectedMonth, selectedYear, months]);
 
@@ -58,7 +58,6 @@ const ReportPage: React.FC = () => {
             let value = '';
             for (let j = 0; j < line.length; j++) {
                 const char = line[j];
-    
                 if (char === '"') {
                     inQuote = !inQuote;
                 } else if (char === ',' && !inQuote) {
@@ -72,14 +71,12 @@ const ReportPage: React.FC = () => {
             return values;
         };
 
-        const headers = parseLine(lines[0]);
+        const headers = parseLine(lines[0]).map(h => h.trim());
         const data = [];
     
         for (let i = 1; i < lines.length; i++) {
             if (!lines[i]) continue;
-    
             const values = parseLine(lines[i]);
-    
             if (values.length === headers.length) {
                 const entry: Record<string, string> = {};
                 headers.forEach((header, index) => {
@@ -104,15 +101,15 @@ const ReportPage: React.FC = () => {
                 const parsedData = parseCSV(csvText);
                 
                 const mappedData: AttendanceRecord[] = parsedData.map((row: any) => ({
-                    timestamp: row['Timestamp'],
-                    name: row['SELECT YOUR NAME'],
-                    date: row['CHOOSE DATE'],
-                    workingStatus: row['WORKING/LEAVE/HOLIDAY'],
-                    reasonNotWorking: row['WRITE THE REASON FOR NOT WORKING'],
-                    placeOfVisit: row['PLACE OF VISIT'],
-                    purposeOfVisit: row['PURPOSE OF VISIT'],
-                    workingHours: row['WORKING HOURS'],
-                    outcomes: row['OUTCOME'],
+                    timestamp: row['Timestamp'] || '',
+                    name: row['SELECT YOUR NAME'] || '',
+                    date: row['CHOOSE DATE'] || '',
+                    workingStatus: row['WORKING/LEAVE/HOLIDAY'] || '',
+                    reasonNotWorking: row['WRITE THE REASON FOR NOT WORKING'] || '',
+                    placeOfVisit: row['PLACE OF VISIT'] || '',
+                    purposeOfVisit: row['PURPOSE OF VISIT'] || '',
+                    workingHours: row['WORKING HOURS'] || '',
+                    outcomes: row['OUTCOME'] || '',
                 }));
                 setAttendanceData(mappedData);
             } catch (err) {
@@ -132,32 +129,30 @@ const ReportPage: React.FC = () => {
 
     useEffect(() => {
         if (user && attendanceData.length > 0) {
-            const userRecords = attendanceData.filter(record => record.name === user.username);
+            const userNameTrimmed = user.username.trim();
+            const userRecords = attendanceData.filter(record => record.name.trim() === userNameTrimmed);
             const monthIndex = months.indexOf(selectedMonth);
             const year = parseInt(selectedYear);
 
             if (monthIndex !== -1) {
-                // New logic: 26th of prev month to 25th of current month
-                const startDate = new Date(year, monthIndex - 1, 26, 0, 0, 0);
-                const endDate = new Date(year, monthIndex, 25, 23, 59, 59);
+                const startDate = new Date(year, monthIndex - 1, 26, 0, 0, 0).getTime();
+                const endDate = new Date(year, monthIndex, 25, 23, 59, 59).getTime();
 
                 const filtered = userRecords.filter(record => {
                     const parts = record.date.split('/');
                     if (parts.length === 3) {
-                       // Date format is D/M/YYYY
-                       const day = parseInt(parts[0], 10);
-                       const month = parseInt(parts[1], 10) - 1;
-                       const recYear = parseInt(parts[2], 10);
-                       const recordDate = new Date(recYear, month, day);
-                       
+                       const day = parseInt(parts[0].trim(), 10);
+                       const month = parseInt(parts[1].trim(), 10) - 1;
+                       const recYear = parseInt(parts[2].trim(), 10);
+                       const recordDate = new Date(recYear, month, day).getTime();
                        return recordDate >= startDate && recordDate <= endDate;
                     }
                     return false;
                 }).sort((a, b) => {
-                    const datePartsA = a.date.split('/');
-                    const datePartsB = b.date.split('/');
-                    const dateA = new Date(+datePartsA[2], +datePartsA[1] - 1, +datePartsA[0]).getTime();
-                    const dateB = new Date(+datePartsB[2], +datePartsB[1] - 1, +datePartsB[0]).getTime();
+                    const partsA = a.date.split('/');
+                    const partsB = b.date.split('/');
+                    const dateA = new Date(+partsA[2], +partsA[1] - 1, +partsA[0]).getTime();
+                    const dateB = new Date(+partsB[2], +partsB[1] - 1, +partsB[0]).getTime();
                     return dateA - dateB;
                 });
                 setFilteredData(filtered);
@@ -173,21 +168,18 @@ const ReportPage: React.FC = () => {
         setError(null);
 
         try {
-            // @ts-ignore - html2pdf is globally available via CDN
+            // @ts-ignore
             const worker = window.html2pdf();
-            
             const opt = {
-                margin: [10, 10, 10, 10], // Increased side margins to prevent clipping
+                margin: [10, 5, 10, 5], // T, L, B, R
                 filename: `Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
+                image: { type: 'jpeg', quality: 1.0 },
                 html2canvas: { 
-                    scale: 2, 
+                    scale: 3, 
                     useCORS: true,
                     logging: false,
                     letterRendering: true,
-                    scrollX: 0,
-                    scrollY: 0,
-                    windowWidth: 1200 // Ensure sufficient width for calculation
+                    windowWidth: 1050 // Narrower window width for stable rendering
                 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
             };
@@ -201,23 +193,15 @@ const ReportPage: React.FC = () => {
         }
     };
 
-    if (loading) {
-        return <div className="text-center p-8">Loading attendance data...</div>;
-    }
-
-    if (error && !isGenerating) {
-        return <div className="text-center p-8 text-red-500 bg-red-100 dark:bg-red-900 border border-red-500 rounded-lg">{error}</div>;
-    }
-
-    if (!user) {
-        return <div className="text-center p-8">Please log in to view attendance.</div>;
-    }
+    if (loading) return <div className="text-center p-8">Loading attendance data...</div>;
+    if (error && !isGenerating) return <div className="text-center p-8 text-red-500 bg-red-100 dark:bg-red-900 border border-red-500 rounded-lg">{error}</div>;
+    if (!user) return <div className="text-center p-8">Please log in to view attendance.</div>;
     
     return (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
             <h1 className="text-3xl font-bold mb-2 text-gray-800 dark:text-gray-200">Attendance Report</h1>
             <p className="text-gray-600 dark:text-gray-400 mb-6 text-sm">
-                Showing data from 26th of previous month to 25th of selected month.
+                Range: 26th of previous month to 25th of selected month.
             </p>
             
             <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -256,8 +240,6 @@ const ReportPage: React.FC = () => {
             >
                  {isGenerating ? 'Generating PDF...' : 'Download Report as PDF'}
             </button>
-            {error && isGenerating && <div className="text-center my-2 p-2 text-red-500 bg-red-100 dark:bg-red-900 border border-red-500 rounded-lg">{error}</div>}
-
 
             <div className="overflow-x-auto">
                 {filteredData.length > 0 ? (
@@ -265,10 +247,10 @@ const ReportPage: React.FC = () => {
                         <thead className="bg-gray-50 dark:bg-gray-700">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Place Of Visit</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Purpose Of Visit</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Place</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Purpose</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Hours</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Outcomes</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Outcome</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -277,114 +259,97 @@ const ReportPage: React.FC = () => {
                                 return (
                                     <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{record.date}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                            {isWorking ? record.placeOfVisit : '-'}
+                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{isWorking ? record.placeOfVisit : '-'}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                            {isWorking ? record.purposeOfVisit : <span className="font-semibold text-orange-600">{record.workingStatus}: {record.reasonNotWorking}</span>}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 dark:text-gray-400">
-                                            {isWorking ? (
-                                                record.purposeOfVisit
-                                            ) : (
-                                                <span className="font-semibold text-orange-600 dark:text-orange-400">
-                                                    {record.workingStatus}: {record.reasonNotWorking}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                            {isWorking ? record.workingHours : '0'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 dark:text-gray-400">
-                                            {isWorking ? record.outcomes : '-'}
-                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{isWorking ? record.workingHours : '0'}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{isWorking ? record.outcomes : '-'}</td>
                                     </tr>
                                 );
                             })}
                         </tbody>
                     </table>
                 ) : (
-                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        No records found for {user.username} for the period ending {selectedMonth} {selectedYear}.
-                    </div>
+                    <div className="text-center py-8 text-gray-500">No records found for the selected period.</div>
                 )}
             </div>
 
-            {/* HIDDEN PRINTABLE SECTION: Optimized for A4 Landscape */}
+            {/* PRINT SECTION - HIDDEN IN UI */}
             <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -100 }}>
-                {/* Fixed width for landscape container, adding box-sizing and padding to prevent border cut-off */}
-                <div ref={printRef} className="p-10 bg-white telugu-font" style={{ width: '1080px', color: '#000000', boxSizing: 'border-box' }}>
-                    <div className="text-center mb-8">
-                        <h1 className="text-2xl font-bold uppercase mb-1" style={{ color: '#000000' }}>LEAD TECHNICAL AGENCY – WASSAN</h1>
-                        <h2 className="text-xl font-semibold mb-1" style={{ color: '#000000' }}>Project Name: HDFC Parivarthan</h2>
-                        <h3 className="text-3xl font-black border-b-4 border-black inline-block pb-1 px-8 mt-4" style={{ color: '#000000' }}>WORK DONE REPORT</h3>
+                {/* 
+                    Fixed width 1000px with generous right padding (60px) to prevent any clipping.
+                    Forcing color #000000 on everything.
+                */}
+                <div ref={printRef} className="bg-white telugu-font" style={{ width: '1000px', padding: '30px 60px 30px 30px', color: '#000000', boxSizing: 'border-box' }}>
+                    <div className="text-center mb-6" style={{ color: '#000000' }}>
+                        <h1 className="text-2xl font-bold uppercase" style={{ color: '#000000' }}>LEAD TECHNICAL AGENCY – WASSAN</h1>
+                        <h2 className="text-xl font-semibold" style={{ color: '#000000' }}>Project Name: HDFC Parivarthan</h2>
+                        <h3 className="text-3xl font-black border-b-4 border-black inline-block pb-1 px-12 mt-4" style={{ color: '#000000' }}>WORK DONE REPORT</h3>
                     </div>
 
-                    <div className="flex justify-between mb-8 text-base font-bold" style={{ color: '#000000' }}>
-                        <div>
+                    <div className="flex justify-between items-start mb-6 text-base font-bold w-full" style={{ color: '#000000' }}>
+                        <div className="space-y-1">
                             <p>Month : {selectedMonth} - {selectedYear}</p>
-                            <p className="mt-2 text-blue-800">Period: {reportPeriodLabel}</p>
-                            <p className="mt-2">Name of the Person : {user.username.toUpperCase()}</p>
-                            <p className="mt-2">Working GP : ___________________________</p>
+                            <p>Period: {reportPeriodLabel}</p>
+                            <p>Name : {user.username.toUpperCase()}</p>
+                            <p>Working GP : ___________________________</p>
                         </div>
-                        <div className="text-right">
-                            <p>Budget Head: HDFC Parivarthan</p>
+                        <div className="text-right whitespace-nowrap">
+                            <p>Budget Head: HDFC PARIVARTAN</p>
                         </div>
                     </div>
 
-                    {/* Using explicit width and table-fixed to help with border rendering. Ensure w-[calc(100%-2px)] to avoid overlap clipping. */}
-                    <table className="w-full border-collapse border-2 border-black text-sm table-fixed" style={{ color: '#000000', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ backgroundColor: '#f3f4f6' }}>
-                                <th className="border-2 border-black px-3 py-2 text-center w-28 font-bold">Date</th>
-                                <th className="border-2 border-black px-3 py-2 text-center w-48 font-bold">Place Of Visit</th>
-                                <th className="border-2 border-black px-3 py-2 text-center font-bold">Purpose Of Visit</th>
-                                <th className="border-2 border-black px-3 py-2 text-center w-24 font-bold">Hours</th>
-                                <th className="border-2 border-black px-3 py-2 text-center font-bold">Outcomes</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredData.map((record, index) => {
-                                const isWorking = record.workingStatus === 'Working';
-                                return (
-                                    <tr key={index}>
-                                        <td className="border-2 border-black px-3 py-2 text-center" style={{ color: '#000000' }}>{record.date}</td>
-                                        <td className="border-2 border-black px-3 py-2" style={{ color: '#000000' }}>
-                                            {isWorking ? record.placeOfVisit : '-'}
-                                        </td>
-                                        <td className="border-2 border-black px-3 py-2" style={{ color: '#000000' }}>
-                                            {isWorking ? (
-                                                record.purposeOfVisit
-                                            ) : (
-                                                <strong>{record.workingStatus}: {record.reasonNotWorking}</strong>
-                                            )}
-                                        </td>
-                                        <td className="border-2 border-black px-3 py-2 text-center" style={{ color: '#000000' }}>
-                                            {isWorking ? record.workingHours : '0'}
-                                        </td>
-                                        <td className="border-2 border-black px-3 py-2" style={{ color: '#000000' }}>
-                                            {isWorking ? record.outcomes : '-'}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                            {/* Fill empty rows to maintain layout if few records */}
-                            {filteredData.length < 5 && Array.from({ length: 10 - filteredData.length }).map((_, i) => (
-                                <tr key={`empty-${i}`} style={{ height: '45px' }}>
-                                    <td className="border-2 border-black px-3 py-2"></td>
-                                    <td className="border-2 border-black px-3 py-2"></td>
-                                    <td className="border-2 border-black px-3 py-2"></td>
-                                    <td className="border-2 border-black px-3 py-2"></td>
-                                    <td className="border-2 border-black px-3 py-2"></td>
+                    <div style={{ color: '#000000' }}>
+                        <table className="w-full border-collapse text-[10.5pt]" style={{ color: '#000000', border: '2pt solid #000000' }}>
+                            <thead>
+                                <tr style={{ backgroundColor: '#f0f0f0' }}>
+                                    <th className="border-[1.5pt] border-black px-3 py-2 text-center w-[120px] font-bold">Date</th>
+                                    <th className="border-[1.5pt] border-black px-3 py-2 text-center w-[180px] font-bold">Place Of Visit</th>
+                                    <th className="border-[1.5pt] border-black px-3 py-2 text-center font-bold">Purpose Of Visit</th>
+                                    <th className="border-[1.5pt] border-black px-3 py-2 text-center w-[80px] font-bold">Hours</th>
+                                    <th className="border-[1.5pt] border-black px-3 py-2 text-center font-bold">Outcomes</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {filteredData.map((record, index) => {
+                                    const isWorking = record.workingStatus === 'Working';
+                                    return (
+                                        <tr key={index}>
+                                            <td className="border-[1.2pt] border-black px-3 py-2 text-center">{record.date}</td>
+                                            <td className="border-[1.2pt] border-black px-3 py-2">{isWorking ? record.placeOfVisit : '-'}</td>
+                                            <td className="border-[1.2pt] border-black px-3 py-2">
+                                                {isWorking ? (
+                                                    record.purposeOfVisit
+                                                ) : (
+                                                    <span className="font-bold">{record.workingStatus}: {record.reasonNotWorking}</span>
+                                                )}
+                                            </td>
+                                            <td className="border-[1.2pt] border-black px-3 py-2 text-center">{isWorking ? record.workingHours : '0'}</td>
+                                            <td className="border-[1.2pt] border-black px-3 py-2">{isWorking ? record.outcomes : '-'}</td>
+                                        </tr>
+                                    );
+                                })}
+                                {filteredData.length < 12 && Array.from({ length: 12 - filteredData.length }).map((_, i) => (
+                                    <tr key={`empty-${i}`} style={{ height: '40px' }}>
+                                        <td className="border-[1.2pt] border-black px-3 py-2"></td>
+                                        <td className="border-[1.2pt] border-black px-3 py-2"></td>
+                                        <td className="border-[1.2pt] border-black px-3 py-2"></td>
+                                        <td className="border-[1.2pt] border-black px-3 py-2"></td>
+                                        <td className="border-[1.2pt] border-black px-3 py-2"></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
 
-                    <div className="mt-24 flex justify-between px-12 italic font-bold" style={{ color: '#000000' }}>
+                    <div className="mt-24 flex justify-between px-16 italic font-bold text-base" style={{ color: '#000000' }}>
                         <div className="text-center">
-                            <div className="w-48 border-b-2 border-black mb-2"></div>
+                            <div className="w-56 border-b-2 border-black mb-3"></div>
                             <p>Signature of the Staff</p>
                         </div>
                         <div className="text-center">
-                            <div className="w-48 border-b-2 border-black mb-2"></div>
+                            <div className="w-56 border-b-2 border-black mb-3"></div>
                             <p>Signature of the Coordinator</p>
                         </div>
                     </div>
