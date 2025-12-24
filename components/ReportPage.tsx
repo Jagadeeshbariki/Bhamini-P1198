@@ -36,6 +36,18 @@ const ReportPage: React.FC = () => {
         return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     }, []);
 
+    // Calculate the report period strings for display
+    const reportPeriodLabel = useMemo(() => {
+        const monthIndex = months.indexOf(selectedMonth);
+        const year = parseInt(selectedYear);
+        
+        const startDate = new Date(year, monthIndex - 1, 26);
+        const endDate = new Date(year, monthIndex, 25);
+        
+        const fmt = (d: Date) => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+        return `${fmt(startDate)} to ${fmt(endDate)}`;
+    }, [selectedMonth, selectedYear, months]);
+
     const parseCSV = (csv: string): Record<string, string>[] => {
         const lines = csv.split(/\r\n|\n/);
         if (lines.length < 1) return [];
@@ -122,21 +134,28 @@ const ReportPage: React.FC = () => {
         if (user && attendanceData.length > 0) {
             const userRecords = attendanceData.filter(record => record.name === user.username);
             const monthIndex = months.indexOf(selectedMonth);
+            const year = parseInt(selectedYear);
 
             if (monthIndex !== -1) {
+                // New logic: 26th of prev month to 25th of current month
+                const startDate = new Date(year, monthIndex - 1, 26, 0, 0, 0);
+                const endDate = new Date(year, monthIndex, 25, 23, 59, 59);
+
                 const filtered = userRecords.filter(record => {
                     const parts = record.date.split('/');
                     if (parts.length === 3) {
                        // Date format is D/M/YYYY
-                       const recordMonth = parseInt(parts[1], 10) - 1; // Month is index 1
-                       const recordYear = parseInt(parts[2], 10);
-                       return recordMonth === monthIndex && recordYear.toString() === selectedYear;
+                       const day = parseInt(parts[0], 10);
+                       const month = parseInt(parts[1], 10) - 1;
+                       const recYear = parseInt(parts[2], 10);
+                       const recordDate = new Date(recYear, month, day);
+                       
+                       return recordDate >= startDate && recordDate <= endDate;
                     }
                     return false;
                 }).sort((a, b) => {
                     const datePartsA = a.date.split('/');
                     const datePartsB = b.date.split('/');
-                    // Format: D/M/YYYY -> Year, Month-1, Day
                     const dateA = new Date(+datePartsA[2], +datePartsA[1] - 1, +datePartsA[0]).getTime();
                     const dateB = new Date(+datePartsB[2], +datePartsB[1] - 1, +datePartsB[0]).getTime();
                     return dateA - dateB;
@@ -158,7 +177,7 @@ const ReportPage: React.FC = () => {
             const worker = window.html2pdf();
             
             const opt = {
-                margin: [10, 5, 10, 5],
+                margin: [10, 10, 10, 10], // Increased side margins to prevent clipping
                 filename: `Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { 
@@ -167,7 +186,8 @@ const ReportPage: React.FC = () => {
                     logging: false,
                     letterRendering: true,
                     scrollX: 0,
-                    scrollY: 0
+                    scrollY: 0,
+                    windowWidth: 1200 // Ensure sufficient width for calculation
                 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
             };
@@ -195,11 +215,14 @@ const ReportPage: React.FC = () => {
     
     return (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
-            <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-200">Attendance Report</h1>
+            <h1 className="text-3xl font-bold mb-2 text-gray-800 dark:text-gray-200">Attendance Report</h1>
+            <p className="text-gray-600 dark:text-gray-400 mb-6 text-sm">
+                Showing data from 26th of previous month to 25th of selected month.
+            </p>
             
             <div className="flex flex-col md:flex-row gap-4 mb-6">
                 <div className="flex-1">
-                    <label htmlFor="month-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Month</label>
+                    <label htmlFor="month-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Month</label>
                     <select
                         id="month-select"
                         value={selectedMonth}
@@ -210,7 +233,7 @@ const ReportPage: React.FC = () => {
                     </select>
                 </div>
                 <div className="flex-1">
-                    <label htmlFor="year-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Year</label>
+                    <label htmlFor="year-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Year</label>
                     <select
                         id="year-select"
                         value={selectedYear}
@@ -220,6 +243,10 @@ const ReportPage: React.FC = () => {
                         {years.map(year => <option key={year} value={year}>{year}</option>)}
                     </select>
                 </div>
+            </div>
+
+            <div className="mb-4 text-blue-700 dark:text-blue-300 font-semibold bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                Period: {reportPeriodLabel}
             </div>
 
             <button
@@ -275,14 +302,15 @@ const ReportPage: React.FC = () => {
                     </table>
                 ) : (
                     <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        No records found for {user.username} for {selectedMonth} {selectedYear}.
+                        No records found for {user.username} for the period ending {selectedMonth} {selectedYear}.
                     </div>
                 )}
             </div>
 
-            {/* HIDDEN PRINTABLE SECTION: Optimized for A4 Landscape with Telugu Font */}
+            {/* HIDDEN PRINTABLE SECTION: Optimized for A4 Landscape */}
             <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -100 }}>
-                <div ref={printRef} className="p-8 bg-white telugu-font" style={{ width: '1120px', color: '#000000' }}>
+                {/* Fixed width for landscape container, adding box-sizing and padding to prevent border cut-off */}
+                <div ref={printRef} className="p-10 bg-white telugu-font" style={{ width: '1080px', color: '#000000', boxSizing: 'border-box' }}>
                     <div className="text-center mb-8">
                         <h1 className="text-2xl font-bold uppercase mb-1" style={{ color: '#000000' }}>LEAD TECHNICAL AGENCY – WASSAN</h1>
                         <h2 className="text-xl font-semibold mb-1" style={{ color: '#000000' }}>Project Name: HDFC Parivarthan</h2>
@@ -292,6 +320,7 @@ const ReportPage: React.FC = () => {
                     <div className="flex justify-between mb-8 text-base font-bold" style={{ color: '#000000' }}>
                         <div>
                             <p>Month : {selectedMonth} - {selectedYear}</p>
+                            <p className="mt-2 text-blue-800">Period: {reportPeriodLabel}</p>
                             <p className="mt-2">Name of the Person : {user.username.toUpperCase()}</p>
                             <p className="mt-2">Working GP : ___________________________</p>
                         </div>
@@ -300,7 +329,8 @@ const ReportPage: React.FC = () => {
                         </div>
                     </div>
 
-                    <table className="w-full border-collapse border-2 border-black text-sm" style={{ color: '#000000' }}>
+                    {/* Using explicit width and table-fixed to help with border rendering. Ensure w-[calc(100%-2px)] to avoid overlap clipping. */}
+                    <table className="w-full border-collapse border-2 border-black text-sm table-fixed" style={{ color: '#000000', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ backgroundColor: '#f3f4f6' }}>
                                 <th className="border-2 border-black px-3 py-2 text-center w-28 font-bold">Date</th>
@@ -315,33 +345,34 @@ const ReportPage: React.FC = () => {
                                 const isWorking = record.workingStatus === 'Working';
                                 return (
                                     <tr key={index}>
-                                        <td className="border border-black px-3 py-2 text-center" style={{ color: '#000000' }}>{record.date}</td>
-                                        <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>
+                                        <td className="border-2 border-black px-3 py-2 text-center" style={{ color: '#000000' }}>{record.date}</td>
+                                        <td className="border-2 border-black px-3 py-2" style={{ color: '#000000' }}>
                                             {isWorking ? record.placeOfVisit : '-'}
                                         </td>
-                                        <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>
+                                        <td className="border-2 border-black px-3 py-2" style={{ color: '#000000' }}>
                                             {isWorking ? (
                                                 record.purposeOfVisit
                                             ) : (
                                                 <strong>{record.workingStatus}: {record.reasonNotWorking}</strong>
                                             )}
                                         </td>
-                                        <td className="border border-black px-3 py-2 text-center" style={{ color: '#000000' }}>
+                                        <td className="border-2 border-black px-3 py-2 text-center" style={{ color: '#000000' }}>
                                             {isWorking ? record.workingHours : '0'}
                                         </td>
-                                        <td className="border border-black px-3 py-2" style={{ color: '#000000' }}>
+                                        <td className="border-2 border-black px-3 py-2" style={{ color: '#000000' }}>
                                             {isWorking ? record.outcomes : '-'}
                                         </td>
                                     </tr>
                                 );
                             })}
-                            {filteredData.length < 5 && Array.from({ length: 5 - filteredData.length }).map((_, i) => (
-                                <tr key={`empty-${i}`} style={{ height: '40px' }}>
-                                    <td className="border border-black px-3 py-2"></td>
-                                    <td className="border border-black px-3 py-2"></td>
-                                    <td className="border border-black px-3 py-2"></td>
-                                    <td className="border border-black px-3 py-2"></td>
-                                    <td className="border border-black px-3 py-2"></td>
+                            {/* Fill empty rows to maintain layout if few records */}
+                            {filteredData.length < 5 && Array.from({ length: 10 - filteredData.length }).map((_, i) => (
+                                <tr key={`empty-${i}`} style={{ height: '45px' }}>
+                                    <td className="border-2 border-black px-3 py-2"></td>
+                                    <td className="border-2 border-black px-3 py-2"></td>
+                                    <td className="border-2 border-black px-3 py-2"></td>
+                                    <td className="border-2 border-black px-3 py-2"></td>
+                                    <td className="border-2 border-black px-3 py-2"></td>
                                 </tr>
                             ))}
                         </tbody>
@@ -349,11 +380,11 @@ const ReportPage: React.FC = () => {
 
                     <div className="mt-24 flex justify-between px-12 italic font-bold" style={{ color: '#000000' }}>
                         <div className="text-center">
-                            <div className="w-48 border-b border-black mb-2"></div>
+                            <div className="w-48 border-b-2 border-black mb-2"></div>
                             <p>Signature of the Staff</p>
                         </div>
                         <div className="text-center">
-                            <div className="w-48 border-b border-black mb-2"></div>
+                            <div className="w-48 border-b-2 border-black mb-2"></div>
                             <p>Signature of the Coordinator</p>
                         </div>
                     </div>
