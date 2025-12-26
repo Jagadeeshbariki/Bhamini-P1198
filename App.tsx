@@ -8,24 +8,29 @@ import ActivityPage from './components/ActivityPage';
 import LoginPage from './components/LoginPage';
 import ReportPage from './components/ReportPage';
 import MarkAttendancePage from './components/MarkAttendancePage';
+import AdminPage from './components/AdminPage';
 
-type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance';
+type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>('home');
     const { user, logout } = useAuth();
     const [lastProtectedPage, setLastProtectedPage] = useState<Page>('activity');
 
-
     useEffect(() => {
-        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance'];
+        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin'];
         if (!user && protectedPages.includes(page)) {
             setLastProtectedPage(page);
             setPage('login');
         }
+        
+        // Prevent non-admins from accessing admin page
+        if (user && page === 'admin' && !user.isAdmin) {
+            setPage('home');
+        }
     }, [user, page]);
 
-    const handleNavigate = (targetPage: 'home' | 'activity' | 'attendance-report' | 'mark-attendance') => {
+    const handleNavigate = (targetPage: Page) => {
         setPage(targetPage);
     };
 
@@ -48,6 +53,8 @@ const AppContent: React.FC = () => {
                 return <ReportPage />;
             case 'mark-attendance':
                 return <MarkAttendancePage />;
+            case 'admin':
+                return <AdminPage />;
             case 'login':
                 return <LoginPage onLoginSuccess={handleLoginSuccess} />;
             default:

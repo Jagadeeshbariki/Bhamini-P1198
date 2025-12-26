@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import InstallPWAButton from './InstallPWAButton';
 
 interface HeaderProps {
-    onNavigate: (page: 'home' | 'activity' | 'attendance-report' | 'mark-attendance') => void;
+    onNavigate: (page: any) => void;
     onLogout: () => void;
 }
 
@@ -12,7 +12,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
     const { user } = useAuth();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-    const NavLink: React.FC<{ page: 'home' | 'activity' | 'attendance-report' | 'mark-attendance'; children: React.ReactNode }> = ({ page, children }) => (
+    const NavLink: React.FC<{ page: string; children: React.ReactNode }> = ({ page, children }) => (
         <button
             onClick={() => {
                 onNavigate(page);
@@ -42,6 +42,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                             <NavLink page="activity">Activity</NavLink>
                             {user && <NavLink page="mark-attendance">Mark Attendance</NavLink>}
                             {user && <NavLink page="attendance-report">Attendance Report</NavLink>}
+                            {user?.isAdmin && <NavLink page="admin">Admin</NavLink>}
                             <InstallPWAButton />
                             {user && (
                                 <button
@@ -78,6 +79,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                         <NavLink page="activity">Activity</NavLink>
                         {user && <NavLink page="mark-attendance">Mark Attendance</NavLink>}
                         {user && <NavLink page="attendance-report">Attendance Report</NavLink>}
+                        {user?.isAdmin && <NavLink page="admin">Admin</NavLink>}
                         <div className="px-1 py-1">
                              <InstallPWAButton />
                         </div>
