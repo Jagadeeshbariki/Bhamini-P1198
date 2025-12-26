@@ -12,6 +12,7 @@ const DEFAULT_USERS = [
     { username: 'Manikumar', password: 'Manikumar@P1198', isAdmin: false },
     { username: 'Jeddiskung', password: 'Jeddiskung@P1198', isAdmin: false },
     { username: 'Sampath', password: 'Sampath@P1198', isAdmin: false },
+    { username: 'Simhachalam', password: 'Simhachalam@P1198', isAdmin: false }
 ];
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
