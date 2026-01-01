@@ -18,7 +18,7 @@ interface AttendanceRecord {
 }
 
 interface MarkAttendancePageProps {
-    onNavigate?: (page: 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin') => void;
+    onNavigate?: (page: 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker') => void;
 }
 
 const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) => {
@@ -29,7 +29,6 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
     const [error, setError] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-    const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null);
 
     const today = useMemo(() => {
         const d = new Date();
@@ -74,6 +73,8 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
             const parsedData = parseCSV(csvText);
 
             const recordMap = new Map<string, AttendanceRecord>();
+            
+            // 1. Load remote data
             parsedData.forEach(row => {
                 if (row['SELECT YOUR NAME'] && row['SELECT YOUR NAME'].trim() === user.username) {
                     const dateStr = row['CHOOSE DATE'] || '';
@@ -99,6 +100,16 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
                     }
                 }
             });
+
+            // 2. Overlay local pending submissions for instant feedback
+            const localKey = `bhamini_local_${user.username}`;
+            const localSubmissions = JSON.parse(localStorage.getItem(localKey) || '{}');
+            Object.keys(localSubmissions).forEach(dateStr => {
+                const parts = dateStr.split('/');
+                const key = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+                recordMap.set(key, localSubmissions[dateStr]);
+            });
+
             setMarkedRecords(recordMap);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An unknown error occurred.');
@@ -115,24 +126,27 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
         if (day > today) return;
 
         const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-        const existingRecord = markedRecords.get(dayKey);
+        const isMarked = markedRecords.has(dayKey);
+
+        // User wants to block edit in calendar.
+        // If already marked, do nothing. Direct user to Report page via UI hint.
+        if (isMarked) return;
 
         setSelectedDate(day);
-        setEditRecord(existingRecord || null);
         setIsModalOpen(true);
     };
     
     const handleFormSuccess = () => {
         fetchMarkedDates();
-        // Optional: onNavigate?('activity');
     };
 
     return (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                 <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Attendance Tracker</h1>
-                <div className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 p-2 rounded-lg border border-blue-100 dark:border-blue-800">
-                    💡 Click a "Done" date to edit your entry
+                <div className="text-xs bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 p-2 rounded-lg border border-orange-100 dark:border-orange-800 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Already Saved? Go to <b>Reports</b> to edit entries.</span>
                 </div>
             </div>
             
@@ -146,8 +160,13 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
                 </button>
             </div>
             
-            {loading && <div className="text-center py-4 animate-pulse">Syncing with Cloud...</div>}
-            {error && <div className="text-center text-red-500 bg-red-50 p-2 rounded mb-4">{error}</div>}
+            {loading && (
+                <div className="flex justify-center items-center py-4 text-blue-600 gap-2">
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-sm font-bold animate-pulse">Syncing...</span>
+                </div>
+            )}
+            {error && <div className="text-center text-red-500 bg-red-50 p-2 rounded mb-4 font-bold text-xs">{error}</div>}
 
             <div className="grid grid-cols-7 gap-2 text-center">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
@@ -167,7 +186,7 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
                             className={`p-2 h-16 w-full rounded-xl transition-all flex flex-col justify-center items-center border-2
                                 ${!isCurrentMonth ? 'opacity-20' : ''}
                                 ${isMarked 
-                                    ? 'bg-green-50 dark:bg-green-900/20 border-green-500/30 text-green-700 dark:text-green-300 hover:scale-105 active:scale-95' 
+                                    ? 'bg-green-50 dark:bg-green-900/20 border-green-500/30 text-green-700 dark:text-green-300 cursor-default opacity-80' 
                                     : isFutureDate 
                                         ? 'border-transparent text-gray-300 dark:text-gray-700 cursor-not-allowed' 
                                         : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-blue-500 hover:shadow-lg active:scale-95'
@@ -175,7 +194,7 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
                             `}
                         >
                             <span className="font-bold text-lg">{day.getDate()}</span>
-                            {isMarked && <span className="text-[10px] font-black uppercase tracking-tighter">Done</span>}
+                            {isMarked && <span className="text-[10px] font-black uppercase tracking-tighter">Saved</span>}
                         </button>
                     );
                 })}
@@ -185,7 +204,6 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
                 <AttendanceFormModal 
                     user={user} 
                     date={selectedDate} 
-                    initialData={editRecord || undefined}
                     onClose={() => setIsModalOpen(false)}
                     onSubmitSuccess={handleFormSuccess}
                 />

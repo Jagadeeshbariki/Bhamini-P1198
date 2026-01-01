@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { AuthUser, AuthContextType, Session } from '../types';
 
@@ -13,7 +14,8 @@ const HARDCODED_ACCOUNTS: Record<string, string> = {
   'Simhachalam': 'Simhachalam@P1198',
   'Sampath': 'Sampath@P1198',
   'sampanth': 'sampanth@P1198',
-  'Ganapathi': 'Ganapathi@P1198'
+  'Ganapathi': 'Ganapathi@P1198',
+  'Patra':'Patra@P1198'
 };
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -49,8 +51,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (HARDCODED_ACCOUNTS[trimmedEmail] && HARDCODED_ACCOUNTS[trimmedEmail] === trimmedPassword) {
       const authUser: AuthUser = {
         username: trimmedEmail,
-        // Only Jagadeesh has Admin privileges
-        isAdmin: trimmedEmail === 'Jagadeesh',
+        // Both Jagadeesh and Patra have Admin privileges
+        isAdmin: trimmedEmail === 'Jagadeesh' || trimmedEmail === 'Patra',
         token: undefined
       };
       const session: Session = { user: authUser, expiry: Date.now() + SESSION_DURATION };

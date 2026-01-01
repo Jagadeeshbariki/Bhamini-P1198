@@ -42,6 +42,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                             <NavLink page="activity">Activity</NavLink>
                             {user && <NavLink page="mark-attendance">Mark Attendance</NavLink>}
                             {user && <NavLink page="attendance-report">Attendance Report</NavLink>}
+                            {user?.isAdmin && <NavLink page="budget-tracker">Budget Tracker</NavLink>}
                             {user?.isAdmin && <NavLink page="admin">Admin</NavLink>}
                             <InstallPWAButton />
                             {user && (
@@ -79,6 +80,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                         <NavLink page="activity">Activity</NavLink>
                         {user && <NavLink page="mark-attendance">Mark Attendance</NavLink>}
                         {user && <NavLink page="attendance-report">Attendance Report</NavLink>}
+                        {user?.isAdmin && <NavLink page="budget-tracker">Budget Tracker</NavLink>}
                         {user?.isAdmin && <NavLink page="admin">Admin</NavLink>}
                         <div className="px-1 py-1">
                              <InstallPWAButton />

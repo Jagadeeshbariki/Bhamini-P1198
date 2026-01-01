@@ -17,7 +17,7 @@ interface AttendanceFormModalProps {
     date: Date;
     initialData?: any; // Record to edit
     onClose: () => void;
-    onSubmitSuccess: (submittedDate: Date) => void;
+    onSubmitSuccess: (submittedData: any) => void;
 }
 
 const AttendanceFormModal: React.FC<AttendanceFormModalProps> = ({ user, date, initialData, onClose, onSubmitSuccess }) => {
@@ -56,14 +56,27 @@ const AttendanceFormModal: React.FC<AttendanceFormModalProps> = ({ user, date, i
                 body: JSON.stringify(formData),
             });
             
+            // Note: Google Apps Script returns 200 even for some internal errors, 
+            // but we check the response content if possible.
             if (response.ok) {
-                onSubmitSuccess(date);
+                // Save to local storage for instant feedback (Optimistic Update)
+                const localKey = `bhamini_local_${user.username}`;
+                const localData = JSON.parse(localStorage.getItem(localKey) || '{}');
+                localData[formattedDate] = {
+                    ...formData,
+                    outcomes: formData.outcome, // Mapping 'outcome' to 'outcomes' for consistency
+                    timestamp: new Date().toISOString()
+                };
+                localStorage.setItem(localKey, JSON.stringify(localData));
+
+                onSubmitSuccess(formData);
                 onClose();
             } else {
                  throw new Error(`Submission failed with status ${response.status}`);
             }
         } catch (err) {
-            setError(`Network error. Ensure your script is deployed as 'Anyone' can access.`);
+            setError(`Connection error. If this persists, please check your internet.`);
+            console.error(err);
         } finally {
             setIsSubmitting(false);
         }

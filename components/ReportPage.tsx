@@ -60,7 +60,7 @@ const ReportPage: React.FC = () => {
             if (lines.length < 1) return;
             const headers = parseLine(lines[0]);
             
-            const mapped = lines.slice(1).map(line => {
+            const remoteMapped = lines.slice(1).map(line => {
                 const vals = parseLine(line);
                 const row: any = {};
                 headers.forEach((h, i) => row[h] = vals[i]);
@@ -76,13 +76,32 @@ const ReportPage: React.FC = () => {
                     outcomes: row['OUTCOME'] || '',
                 };
             });
-            setAttendanceData(mapped);
+
+            // Merge with local data for immediate feedback
+            if (user) {
+                const localKey = `bhamini_local_${user.username}`;
+                const localSubmissions = JSON.parse(localStorage.getItem(localKey) || '{}');
+                const mergedMap = new Map<string, AttendanceRecord>();
+                
+                remoteMapped.forEach(r => {
+                    if (r.name.trim() === user.username.trim()) mergedMap.set(r.date, r);
+                });
+
+                Object.keys(localSubmissions).forEach(d => {
+                    mergedMap.set(d, localSubmissions[d]);
+                });
+
+                setAttendanceData(Array.from(mergedMap.values()));
+            } else {
+                setAttendanceData(remoteMapped);
+            }
+
         } catch (err) {
             setError('Failed to sync data.');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [user]);
 
     useEffect(() => { if (user) fetchData(); }, [user, fetchData]);
 
@@ -132,7 +151,7 @@ const ReportPage: React.FC = () => {
         }
     };
 
-    if (loading) return <div className="text-center p-20 animate-pulse text-blue-600 font-bold">Syncing report data...</div>;
+    if (loading) return <div className="text-center p-20 animate-pulse text-blue-600 font-bold">Checking local & remote records...</div>;
 
     return (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700">
@@ -151,7 +170,7 @@ const ReportPage: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row gap-4 mb-2">
                 <button
                     onClick={downloadPDF}
                     disabled={filteredData.length === 0 || isGenerating}
@@ -160,6 +179,12 @@ const ReportPage: React.FC = () => {
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
                     {isGenerating ? 'Generating...' : 'Export Official PDF'}
                 </button>
+            </div>
+            
+            <div className="bg-blue-50 dark:bg-blue-900/10 p-2 rounded-lg mb-6 border border-blue-100 dark:border-blue-800">
+                <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold text-center italic">
+                    Local sync enabled: Your submissions appear here instantly.
+                </p>
             </div>
 
             <div className="overflow-x-auto rounded-2xl border border-gray-100 dark:border-gray-700">
@@ -226,22 +251,22 @@ const ReportPage: React.FC = () => {
                             WORK DONE REPORT
                         </div>
                         
-                        {/* Refined Metadata Spacing and Layout */}
+                        {/* Refined Metadata Spacing and Layout - Strictly Black */}
                         <div className="border-b border-black py-2 px-4 font-bold flex text-black">
-                            <span style={{ width: '240px' }}>Month:</span>
+                            <span style={{ width: '320px' }}>Month:</span>
                             <span className="flex-grow">{selectedMonth} {selectedYear}</span>
                         </div>
                         <div className="border-b border-black py-2 px-4 font-bold flex text-black">
-                            <span style={{ width: '240px' }}>Name of the Person:</span>
+                            <span style={{ width: '320px' }}>Name of the Person:</span>
                             <span className="flex-grow uppercase">{user?.username}</span>
                         </div>
                         <div className="border-b border-black py-2 px-4 font-bold flex text-black">
-                            <span style={{ width: '240px' }}>Working GP:</span>
+                            <span style={{ width: '320px' }}>Working GP:</span>
                             <span className="flex-grow">{filteredData[0]?.placeOfVisit || 'Field Operations'}</span>
                         </div>
                     </div>
 
-                    {/* Table Block */}
+                    {/* Table Block - Strictly Black */}
                     <table className="w-full border-collapse border border-black mt-0 text-sm text-black">
                         <thead>
                             <tr className="bg-white font-bold text-center text-black">
@@ -256,18 +281,18 @@ const ReportPage: React.FC = () => {
                         <tbody>
                             {filteredData.length > 0 ? filteredData.map((r, i) => (
                                 <tr key={i} className="align-top text-black">
-                                    <td className="border border-black px-1 py-3 text-center font-semibold">{i + 1}</td>
-                                    <td className="border border-black px-2 py-3 text-center whitespace-nowrap font-semibold">{r.date}</td>
-                                    <td className="border border-black px-2 py-3">
+                                    <td className="border border-black px-1 py-3 text-center font-semibold text-black">{i + 1}</td>
+                                    <td className="border border-black px-2 py-3 text-center whitespace-nowrap font-semibold text-black">{r.date}</td>
+                                    <td className="border border-black px-2 py-3 text-black">
                                         {r.workingStatus === 'Working' ? r.placeOfVisit : r.workingStatus}
                                     </td>
-                                    <td className="border border-black px-2 py-3 leading-snug">
+                                    <td className="border border-black px-2 py-3 leading-snug text-black">
                                         {r.workingStatus === 'Working' ? r.purposeOfVisit : `REASON: ${r.reasonNotWorking}`}
                                     </td>
-                                    <td className="border border-black px-1 py-3 text-center font-bold">
+                                    <td className="border border-black px-1 py-3 text-center font-bold text-black">
                                         {r.workingStatus === 'Working' ? r.workingHours : '0'}
                                     </td>
-                                    <td className="border border-black px-2 py-3 text-xs italic">
+                                    <td className="border border-black px-2 py-3 text-xs italic text-black">
                                         {r.outcomes}
                                     </td>
                                 </tr>
@@ -282,8 +307,8 @@ const ReportPage: React.FC = () => {
                             {/* Summary Row */}
                             {filteredData.length > 0 && (
                                 <tr className="font-bold bg-gray-50 text-black">
-                                    <td colSpan={4} className="border border-black px-4 py-2 text-right uppercase">Total Monthly Hours:</td>
-                                    <td className="border border-black px-1 py-2 text-center underline">
+                                    <td colSpan={4} className="border border-black px-4 py-2 text-right uppercase text-black">Total Monthly Hours:</td>
+                                    <td className="border border-black px-1 py-2 text-center underline text-black">
                                         {filteredData.reduce((acc, curr) => acc + (parseFloat(curr.workingHours) || 0), 0).toFixed(1)}
                                     </td>
                                     <td className="border border-black px-2 py-2"></td>

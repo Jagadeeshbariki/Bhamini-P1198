@@ -9,47 +9,37 @@ import LoginPage from './components/LoginPage';
 import ReportPage from './components/ReportPage';
 import MarkAttendancePage from './components/MarkAttendancePage';
 import AdminPage from './components/AdminPage';
+import BudgetTrackerPage from './components/BudgetTrackerPage';
 import { APP_VERSION } from './config';
 
-type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin';
+type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>('home');
     const { user, logout } = useAuth();
     const [lastProtectedPage, setLastProtectedPage] = useState<Page>('activity');
 
-    // AUTO-CLEAR OLD SESSIONS ON VERSION UPDATE
-    // This solves the "old device" issue by ensuring the browser state matches the current code version.
     useEffect(() => {
         const storedVersion = localStorage.getItem('app_version');
         if (storedVersion !== APP_VERSION) {
             console.log(`Update detected: ${storedVersion || 'initial'} -> ${APP_VERSION}. Clearing cache...`);
-            
-            // Clear all local storage
             localStorage.clear();
-            
-            // Set the new version so we don't clear again until the next update
             localStorage.setItem('app_version', APP_VERSION);
-            
-            // If the user was logged in, reset the auth state
-            if (user) {
-                logout();
-            }
-            
-            // Hard reload to ensure all service workers and caches are refreshed
+            if (user) logout();
             window.location.reload();
         }
     }, [user, logout]);
 
     useEffect(() => {
-        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin'];
+        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker'];
         if (!user && protectedPages.includes(page)) {
             setLastProtectedPage(page);
             setPage('login');
         }
         
-        // Prevent non-admins from accessing admin page
-        if (user && page === 'admin' && !user.isAdmin) {
+        // Prevent non-admins from accessing admin-only pages
+        const adminPages: Page[] = ['admin', 'budget-tracker'];
+        if (user && adminPages.includes(page) && !user.isAdmin) {
             setPage('home');
         }
     }, [user, page]);
@@ -79,6 +69,8 @@ const AppContent: React.FC = () => {
                 return <MarkAttendancePage onNavigate={handleNavigate} />;
             case 'admin':
                 return <AdminPage />;
+            case 'budget-tracker':
+                return <BudgetTrackerPage />;
             case 'login':
                 return <LoginPage onLoginSuccess={handleLoginSuccess} />;
             default:
