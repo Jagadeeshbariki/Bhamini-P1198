@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { GOOGLE_SHEET_CSV_URL } from '../config';
+import AttendanceFormModal from './AttendanceFormModal';
 
 interface AttendanceRecord {
     timestamp: string;
@@ -22,6 +23,7 @@ const ReportPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [editingRecord, setEditingRecord] = useState<{date: Date, data: AttendanceRecord} | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
 
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toLocaleString('default', { month: 'short' }));
@@ -32,75 +34,37 @@ const ReportPage: React.FC = () => {
         return Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
     }, []);
 
-    const months = useMemo(() => {
-        return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    }, []);
+    const months = useMemo(() => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], []);
 
-    const reportPeriodLabel = useMemo(() => {
-        const monthIndex = months.indexOf(selectedMonth);
-        const year = parseInt(selectedYear);
-        if (monthIndex === -1) return '';
-        
-        const startDate = new Date(year, monthIndex - 1, 26);
-        const endDate = new Date(year, monthIndex, 25);
-        
-        const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-        return `${fmt(startDate)} to ${fmt(endDate)}`;
-    }, [selectedMonth, selectedYear, months]);
-
-    const parseCSV = (csv: string): Record<string, string>[] => {
-        const lines = csv.split(/\r\n|\n/);
-        if (lines.length < 1) return [];
-    
-        const parseLine = (line: string): string[] => {
-            const values = [];
-            let inQuote = false;
-            let value = '';
-            for (let j = 0; j < line.length; j++) {
-                const char = line[j];
-                if (char === '"') {
-                    inQuote = !inQuote;
-                } else if (char === ',' && !inQuote) {
-                    values.push(value.trim());
-                    value = '';
-                } else {
-                    value += char;
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&_=${new Date().getTime()}`);
+            if (!response.ok) throw new Error(`Network error (${response.status})`);
+            const csvText = await response.text();
+            
+            const parseLine = (line: string): string[] => {
+                const values = [];
+                let inQuote = false, val = '';
+                for (let j = 0; j < line.length; j++) {
+                    if (line[j] === '"') inQuote = !inQuote;
+                    else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
+                    else val += line[j];
                 }
-            }
-            values.push(value.trim());
-            return values;
-        };
+                values.push(val.trim());
+                return values;
+            };
 
-        const headers = parseLine(lines[0]).map(h => h.trim());
-        const data = [];
-    
-        for (let i = 1; i < lines.length; i++) {
-            if (!lines[i]) continue;
-            const values = parseLine(lines[i]);
-            if (values.length === headers.length) {
-                const entry: Record<string, string> = {};
-                headers.forEach((header, index) => {
-                    entry[header] = values[index];
-                });
-                data.push(entry);
-            }
-        }
-        return data;
-    };
-    
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&_=${new Date().getTime()}`);
-                if (!response.ok) {
-                    throw new Error(`Network response was not ok. Status: ${response.status}.`);
-                }
-                const csvText = await response.text();
-                const parsedData = parseCSV(csvText);
-                
-                const mappedData: AttendanceRecord[] = parsedData.map((row: any) => ({
+            const lines = csvText.split(/\r\n|\n/).filter(l => l);
+            if (lines.length < 1) return;
+            const headers = parseLine(lines[0]);
+            
+            const mapped = lines.slice(1).map(line => {
+                const vals = parseLine(line);
+                const row: any = {};
+                headers.forEach((h, i) => row[h] = vals[i]);
+                return {
                     timestamp: row['Timestamp'] || '',
                     name: row['SELECT YOUR NAME'] || '',
                     date: row['CHOOSE DATE'] || '',
@@ -110,248 +74,238 @@ const ReportPage: React.FC = () => {
                     purposeOfVisit: row['PURPOSE OF VISIT'] || '',
                     workingHours: row['WORKING HOURS'] || '',
                     outcomes: row['OUTCOME'] || '',
-                }));
-                setAttendanceData(mappedData);
-            } catch (err) {
-                console.error("Failed to fetch attendance data:", err);
-                setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        if (user) {
-            fetchData();
-        } else {
+                };
+            });
+            setAttendanceData(mapped);
+        } catch (err) {
+            setError('Failed to sync data.');
+        } finally {
             setLoading(false);
         }
-    }, [user]);
+    }, []);
+
+    useEffect(() => { if (user) fetchData(); }, [user, fetchData]);
 
     useEffect(() => {
         if (user && attendanceData.length > 0) {
-            const userNameTrimmed = user.username.trim();
-            const userRecords = attendanceData.filter(record => record.name.trim() === userNameTrimmed);
-            const monthIndex = months.indexOf(selectedMonth);
-            const year = parseInt(selectedYear);
+            const userName = user.username.trim();
+            const monthIdx = months.indexOf(selectedMonth);
+            const yearNum = parseInt(selectedYear);
 
-            if (monthIndex !== -1) {
-                const startDate = new Date(year, monthIndex - 1, 26, 0, 0, 0).getTime();
-                const endDate = new Date(year, monthIndex, 25, 23, 59, 59).getTime();
+            const start = new Date(yearNum, monthIdx - 1, 26, 0, 0, 0).getTime();
+            const end = new Date(yearNum, monthIdx, 25, 23, 59, 59).getTime();
 
-                const filtered = userRecords.filter(record => {
-                    const parts = record.date.split('/');
-                    if (parts.length === 3) {
-                       const day = parseInt(parts[0].trim(), 10);
-                       const month = parseInt(parts[1].trim(), 10) - 1;
-                       const recYear = parseInt(parts[2].trim(), 10);
-                       const recordDate = new Date(recYear, month, day).getTime();
-                       return recordDate >= startDate && recordDate <= endDate;
-                    }
-                    return false;
-                }).sort((a, b) => {
-                    const partsA = a.date.split('/');
-                    const partsB = b.date.split('/');
-                    const dateA = new Date(+partsA[2], +partsA[1] - 1, +partsA[0]).getTime();
-                    const dateB = new Date(+partsB[2], +partsB[1] - 1, +partsB[0]).getTime();
-                    return dateA - dateB;
-                });
-                setFilteredData(filtered);
-            } else {
-                setFilteredData([]);
-            }
+            const filtered = attendanceData.filter(r => {
+                if (r.name.trim() !== userName) return false;
+                const p = r.date.split('/');
+                if (p.length !== 3) return false;
+                const rd = new Date(+p[2], +p[1]-1, +p[0]).getTime();
+                return rd >= start && rd <= end;
+            }).sort((a, b) => {
+                const pa = a.date.split('/'), pb = b.date.split('/');
+                return new Date(+pa[2], +pa[1]-1, +pa[0]).getTime() - new Date(+pb[2], +pb[1]-1, +pb[0]).getTime();
+            });
+            setFilteredData(filtered);
         }
     }, [user, attendanceData, selectedMonth, selectedYear, months]);
-    
+
+    const handleEdit = (record: AttendanceRecord) => {
+        const p = record.date.split('/');
+        const d = new Date(+p[2], +p[1]-1, +p[0]);
+        setEditingRecord({ date: d, data: record });
+    };
+
     const downloadPDF = async () => {
         if (!user || !printRef.current) return;
         setIsGenerating(true);
-        setError(null);
-
         try {
             // @ts-ignore
             const worker = window.html2pdf();
-            const opt = {
-                margin: [10, 5, 10, 5], // T, L, B, R
+            await worker.from(printRef.current).set({
+                margin: [5, 5, 5, 5],
                 filename: `Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`,
-                image: { type: 'jpeg', quality: 1.0 },
-                html2canvas: { 
-                    scale: 3, 
-                    useCORS: true,
-                    logging: false,
-                    letterRendering: true,
-                    windowWidth: 1050 // Narrower window width for stable rendering
-                },
+                html2canvas: { scale: 2, useCORS: true },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-            };
-
-            await worker.from(printRef.current).set(opt).save();
-        } catch (e) {
-            console.error("PDF generation failed:", e);
-            setError("PDF generation failed. Please try again.");
+            }).save();
         } finally {
             setIsGenerating(false);
         }
     };
 
-    if (loading) return <div className="text-center p-8">Loading attendance data...</div>;
-    if (error && !isGenerating) return <div className="text-center p-8 text-red-500 bg-red-100 dark:bg-red-900 border border-red-500 rounded-lg">{error}</div>;
-    if (!user) return <div className="text-center p-8">Please log in to view attendance.</div>;
-    
+    if (loading) return <div className="text-center p-20 animate-pulse text-blue-600 font-bold">Syncing report data...</div>;
+
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
-            <h1 className="text-3xl font-bold mb-2 text-gray-800 dark:text-gray-200">Attendance Report</h1>
-            <p className="text-gray-600 dark:text-gray-400 mb-6 text-sm">
-                Range: 26th of previous month to 25th of selected month.
-            </p>
-            
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-                <div className="flex-1">
-                    <label htmlFor="month-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Month</label>
-                    <select
-                        id="month-select"
-                        value={selectedMonth}
-                        onChange={(e) => setSelectedMonth(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                    >
-                        {months.map(month => <option key={month} value={month}>{month}</option>)}
-                    </select>
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                <div>
+                    <h1 className="text-3xl font-black text-gray-800 dark:text-white">Reporting</h1>
+                    <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-1">Monthly Work Statement</p>
                 </div>
-                <div className="flex-1">
-                    <label htmlFor="year-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Year</label>
-                    <select
-                        id="year-select"
-                        value={selectedYear}
-                        onChange={(e) => setSelectedYear(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                    >
-                        {years.map(year => <option key={year} value={year}>{year}</option>)}
+                <div className="flex gap-2">
+                    <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-gray-50 dark:bg-gray-700 px-4 py-2 rounded-xl font-bold border-none ring-1 ring-gray-200 dark:ring-gray-600">
+                        {months.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="bg-gray-50 dark:bg-gray-700 px-4 py-2 rounded-xl font-bold border-none ring-1 ring-gray-200 dark:ring-gray-600">
+                        {years.map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
                 </div>
             </div>
 
-            <div className="mb-4 text-blue-700 dark:text-blue-300 font-semibold bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
-                Period: {reportPeriodLabel}
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <button
+                    onClick={downloadPDF}
+                    disabled={filteredData.length === 0 || isGenerating}
+                    className="flex-1 bg-blue-600 text-white font-black py-3 px-6 rounded-2xl shadow-lg shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
+                    {isGenerating ? 'Generating...' : 'Export Official PDF'}
+                </button>
             </div>
 
-            <button
-                onClick={downloadPDF}
-                disabled={filteredData.length === 0 || isGenerating}
-                className="w-full md:w-auto bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors mb-6 flex items-center justify-center"
-            >
-                 {isGenerating ? 'Generating PDF...' : 'Download Report as PDF'}
-            </button>
+            <div className="overflow-x-auto rounded-2xl border border-gray-100 dark:border-gray-700">
+                <table className="w-full text-left border-collapse telugu-font">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                        <tr>
+                            <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400">Date</th>
+                            <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400">Activity / Place</th>
+                            <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400">Hrs</th>
+                            <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                        {filteredData.map((record, index) => (
+                            <tr key={index} className="group hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors text-gray-800 dark:text-gray-200">
+                                <td className="px-4 py-4 font-bold text-sm whitespace-nowrap">{record.date}</td>
+                                <td className="px-4 py-4 text-sm">
+                                    <div className="font-bold">{record.workingStatus === 'Working' ? record.placeOfVisit : record.workingStatus}</div>
+                                    <div className="text-xs text-gray-500 line-clamp-1">{record.workingStatus === 'Working' ? record.purposeOfVisit : record.reasonNotWorking}</div>
+                                </td>
+                                <td className="px-4 py-4 font-black text-blue-600 text-sm">{record.workingStatus === 'Working' ? record.workingHours : '-'}</td>
+                                <td className="px-4 py-4 text-right">
+                                    <button 
+                                        onClick={() => handleEdit(record)}
+                                        className="text-gray-400 hover:text-blue-600 p-2 rounded-lg transition-colors"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                {filteredData.length === 0 && <div className="p-20 text-center text-gray-400 italic">No records found for the selected 26th-25th period.</div>}
+            </div>
 
-            <div className="overflow-x-auto">
-                {filteredData.length > 0 ? (
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 telugu-font">
-                        <thead className="bg-gray-50 dark:bg-gray-700">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Place</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Purpose</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Hours</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Outcome</th>
+            {editingRecord && user && (
+                <AttendanceFormModal 
+                    user={user} 
+                    date={editingRecord.date} 
+                    initialData={editingRecord.data}
+                    onClose={() => setEditingRecord(null)}
+                    onSubmitSuccess={() => { fetchData(); setEditingRecord(null); }}
+                />
+            )}
+
+            {/* Hidden Official PDF Template Section */}
+            <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+                <div ref={printRef} className="bg-white text-black telugu-font" style={{ width: '1080px', padding: '20px', color: '#000000' }}>
+                    
+                    {/* Header Block Matching Image - LEAD TECHNICAL AGENCY */}
+                    <div className="w-full border-t-4 border-blue-700 pt-1 mb-0">
+                        <div className="border border-black text-center py-1 font-bold text-xl uppercase tracking-wider text-black">
+                            LEAD TECHNICAL AGENCY – WASSAN
+                        </div>
+                    </div>
+                    
+                    <div className="border-x border-black text-black">
+                        {/* Centered Project Name, Removed label */}
+                        <div className="border-b border-black py-2 px-4 font-bold text-center uppercase text-black">
+                            HDFC PARIVARTAN PROJECT - Bhamini P1198
+                        </div>
+                        <div className="border-b border-black text-center py-1 font-bold bg-gray-50 uppercase text-black">
+                            WORK DONE REPORT
+                        </div>
+                        
+                        {/* Refined Metadata Spacing and Layout */}
+                        <div className="border-b border-black py-2 px-4 font-bold flex text-black">
+                            <span style={{ width: '240px' }}>Month:</span>
+                            <span className="flex-grow">{selectedMonth} {selectedYear}</span>
+                        </div>
+                        <div className="border-b border-black py-2 px-4 font-bold flex text-black">
+                            <span style={{ width: '240px' }}>Name of the Person:</span>
+                            <span className="flex-grow uppercase">{user?.username}</span>
+                        </div>
+                        <div className="border-b border-black py-2 px-4 font-bold flex text-black">
+                            <span style={{ width: '240px' }}>Working GP:</span>
+                            <span className="flex-grow">{filteredData[0]?.placeOfVisit || 'Field Operations'}</span>
+                        </div>
+                    </div>
+
+                    {/* Table Block */}
+                    <table className="w-full border-collapse border border-black mt-0 text-sm text-black">
+                        <thead>
+                            <tr className="bg-white font-bold text-center text-black">
+                                <th className="border border-black px-1 py-2 w-12">S. No</th>
+                                <th className="border border-black px-2 py-2 w-32">Date</th>
+                                <th className="border border-black px-2 py-2 w-48">Place of Visit</th>
+                                <th className="border border-black px-2 py-2">Purpose of visit/Work done</th>
+                                <th className="border border-black px-1 py-2 w-28">No of Hours Working</th>
+                                <th className="border border-black px-2 py-2 w-48">Outcome from work</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                            {filteredData.map((record, index) => {
-                                const isWorking = record.workingStatus === 'Working';
-                                return (
-                                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{record.date}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{isWorking ? record.placeOfVisit : '-'}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                            {isWorking ? record.purposeOfVisit : <span className="font-semibold text-orange-600">{record.workingStatus}: {record.reasonNotWorking}</span>}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{isWorking ? record.workingHours : '0'}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{isWorking ? record.outcomes : '-'}</td>
-                                    </tr>
-                                );
-                            })}
+                        <tbody>
+                            {filteredData.length > 0 ? filteredData.map((r, i) => (
+                                <tr key={i} className="align-top text-black">
+                                    <td className="border border-black px-1 py-3 text-center font-semibold">{i + 1}</td>
+                                    <td className="border border-black px-2 py-3 text-center whitespace-nowrap font-semibold">{r.date}</td>
+                                    <td className="border border-black px-2 py-3">
+                                        {r.workingStatus === 'Working' ? r.placeOfVisit : r.workingStatus}
+                                    </td>
+                                    <td className="border border-black px-2 py-3 leading-snug">
+                                        {r.workingStatus === 'Working' ? r.purposeOfVisit : `REASON: ${r.reasonNotWorking}`}
+                                    </td>
+                                    <td className="border border-black px-1 py-3 text-center font-bold">
+                                        {r.workingStatus === 'Working' ? r.workingHours : '0'}
+                                    </td>
+                                    <td className="border border-black px-2 py-3 text-xs italic">
+                                        {r.outcomes}
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr>
+                                    <td colSpan={6} className="border border-black p-10 text-center italic text-black">
+                                        No data entries recorded for this reporting period.
+                                    </td>
+                                </tr>
+                            )}
+                            
+                            {/* Summary Row */}
+                            {filteredData.length > 0 && (
+                                <tr className="font-bold bg-gray-50 text-black">
+                                    <td colSpan={4} className="border border-black px-4 py-2 text-right uppercase">Total Monthly Hours:</td>
+                                    <td className="border border-black px-1 py-2 text-center underline">
+                                        {filteredData.reduce((acc, curr) => acc + (parseFloat(curr.workingHours) || 0), 0).toFixed(1)}
+                                    </td>
+                                    <td className="border border-black px-2 py-2"></td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
-                ) : (
-                    <div className="text-center py-8 text-gray-500">No records found for the selected period.</div>
-                )}
-            </div>
 
-            {/* PRINT SECTION - HIDDEN IN UI */}
-            <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -100 }}>
-                {/* 
-                    Fixed width 1000px with generous right padding (60px) to prevent any clipping.
-                    Forcing color #000000 on everything.
-                */}
-                <div ref={printRef} className="bg-white telugu-font" style={{ width: '1000px', padding: '30px 60px 30px 30px', color: '#000000', boxSizing: 'border-box' }}>
-                    <div className="text-center mb-6" style={{ color: '#000000' }}>
-                        <h1 className="text-2xl font-bold uppercase" style={{ color: '#000000' }}>LEAD TECHNICAL AGENCY – WASSAN</h1>
-                        <h2 className="text-xl font-semibold" style={{ color: '#000000' }}>Project Name: HDFC Parivarthan</h2>
-                        <h3 className="text-3xl font-black border-b-4 border-black inline-block pb-1 px-12 mt-4" style={{ color: '#000000' }}>WORK DONE REPORT</h3>
-                    </div>
-
-                    <div className="flex justify-between items-start mb-6 text-base font-bold w-full" style={{ color: '#000000' }}>
-                        <div className="space-y-1">
-                            <p>Month : {selectedMonth} - {selectedYear}</p>
-                            <p>Period: {reportPeriodLabel}</p>
-                            <p>Name : {user.username.toUpperCase()}</p>
-                            <p>Working GP : ___________________________</p>
-                        </div>
-                        <div className="text-right whitespace-nowrap">
-                            <p>Budget Head: HDFC PARIVARTAN</p>
-                        </div>
-                    </div>
-
-                    <div style={{ color: '#000000' }}>
-                        <table className="w-full border-collapse text-[10.5pt]" style={{ color: '#000000', border: '2pt solid #000000' }}>
-                            <thead>
-                                <tr style={{ backgroundColor: '#f0f0f0' }}>
-                                    <th className="border-[1.5pt] border-black px-3 py-2 text-center w-[120px] font-bold">Date</th>
-                                    <th className="border-[1.5pt] border-black px-3 py-2 text-center w-[180px] font-bold">Place Of Visit</th>
-                                    <th className="border-[1.5pt] border-black px-3 py-2 text-center font-bold">Purpose Of Visit</th>
-                                    <th className="border-[1.5pt] border-black px-3 py-2 text-center w-[80px] font-bold">Hours</th>
-                                    <th className="border-[1.5pt] border-black px-3 py-2 text-center font-bold">Outcomes</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredData.map((record, index) => {
-                                    const isWorking = record.workingStatus === 'Working';
-                                    return (
-                                        <tr key={index}>
-                                            <td className="border-[1.2pt] border-black px-3 py-2 text-center">{record.date}</td>
-                                            <td className="border-[1.2pt] border-black px-3 py-2">{isWorking ? record.placeOfVisit : '-'}</td>
-                                            <td className="border-[1.2pt] border-black px-3 py-2">
-                                                {isWorking ? (
-                                                    record.purposeOfVisit
-                                                ) : (
-                                                    <span className="font-bold">{record.workingStatus}: {record.reasonNotWorking}</span>
-                                                )}
-                                            </td>
-                                            <td className="border-[1.2pt] border-black px-3 py-2 text-center">{isWorking ? record.workingHours : '0'}</td>
-                                            <td className="border-[1.2pt] border-black px-3 py-2">{isWorking ? record.outcomes : '-'}</td>
-                                        </tr>
-                                    );
-                                })}
-                                {filteredData.length < 12 && Array.from({ length: 12 - filteredData.length }).map((_, i) => (
-                                    <tr key={`empty-${i}`} style={{ height: '40px' }}>
-                                        <td className="border-[1.2pt] border-black px-3 py-2"></td>
-                                        <td className="border-[1.2pt] border-black px-3 py-2"></td>
-                                        <td className="border-[1.2pt] border-black px-3 py-2"></td>
-                                        <td className="border-[1.2pt] border-black px-3 py-2"></td>
-                                        <td className="border-[1.2pt] border-black px-3 py-2"></td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div className="mt-24 flex justify-between px-16 italic font-bold text-base" style={{ color: '#000000' }}>
+                    {/* Footer / Signatures - Only Staff and Coordinator */}
+                    <div className="mt-20 flex justify-around px-10 font-bold text-sm uppercase text-black">
                         <div className="text-center">
-                            <div className="w-56 border-b-2 border-black mb-3"></div>
-                            <p>Signature of the Staff</p>
+                            <div className="w-64 border-t border-black mb-2"></div>
+                            <span>SIGNATURE OF THE STAFF</span>
                         </div>
                         <div className="text-center">
-                            <div className="w-56 border-b-2 border-black mb-3"></div>
-                            <p>Signature of the Coordinator</p>
+                            <div className="w-64 border-t border-black mb-2"></div>
+                            <span>VERIFIED BY COORDINATOR</span>
                         </div>
+                    </div>
+                    
+                    <div className="mt-12 text-[10px] text-black text-center italic opacity-60">
+                        Generated via Bhamini P1198 Field System • {new Date().toLocaleString()}
                     </div>
                 </div>
             </div>
