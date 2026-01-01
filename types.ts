@@ -1,7 +1,9 @@
 
 export interface AuthUser {
   username: string;
+  email?: string;
   isAdmin?: boolean;
+  token?: string;
 }
 
 export interface Session {
@@ -11,8 +13,15 @@ export interface Session {
 
 export interface AuthContextType {
   user: AuthUser | null;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  addUser: (username: string, password: string) => void;
-  getAllUsers: () => { username: string }[];
+  getAllUsers: () => Promise<{ username: string }[]>;
+  registerUser: (username: string, email: string, password: string, isAdmin: boolean) => Promise<boolean>;
+}
+
+export interface BackendImage {
+  _id?: string;
+  url: string;
+  type?: 'slider' | 'gallery';
+  title?: string;
 }

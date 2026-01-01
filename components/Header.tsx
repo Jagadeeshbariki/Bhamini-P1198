@@ -28,7 +28,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
         <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-50">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16">
-                    <div className="flex items-center">
+                    <div className="flex items-center space-x-4">
                         <button
                             onClick={() => onNavigate('home')}
                             className="font-bold text-xl text-blue-600 dark:text-blue-400 focus:outline-none"
@@ -47,7 +47,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                             {user && (
                                 <button
                                     onClick={onLogout}
-                                    className="bg-red-500 text-white hover:bg-red-600 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                                    className="bg-red-500 text-white hover:bg-red-600 px-3 py-2 rounded-md text-sm font-medium transition-colors shadow-sm"
                                 >
                                     Logout
                                 </button>
@@ -73,7 +73,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                 </div>
             </div>
             {isMenuOpen && (
-                <div className="md:hidden">
+                <div className="md:hidden border-t dark:border-gray-700">
                     <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
                         <NavLink page="home">Home</NavLink>
                         <NavLink page="activity">Activity</NavLink>

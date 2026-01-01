@@ -12,7 +12,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activityId }) => {
         const baseReport = "https://lookerstudio.google.com/embed/reporting/c0a112e0-1985-4160-9580-34ee38ab9c36/page/";
         
         const pageMapping: Record<string, string> = {
-            'summary': 'l5bjF',        // Page ID for Summary
+            'hari': 'l5bjF',           // Page ID for Hari (Summary)
             'agriculture': 'p_abc123', // Replace with actual Page ID for Agriculture
             'education': 'p_def456',   // Replace with actual Page ID for Education
             'healthcare': 'p_ghi789',  // Replace with actual Page ID for Health
@@ -21,7 +21,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activityId }) => {
             'infrastructure': 'p_pqr678' // Replace with actual Page ID for Infrastructure
         };
 
-        const pageId = pageMapping[id] || 'l5bjF'; // Default to summary
+        const pageId = pageMapping[id] || 'l5bjF'; // Default to Hari
         
         // You can also append global filters via parameters if your report is configured for it
         // e.g., ?params={"ds0.category_id":"${id}"}

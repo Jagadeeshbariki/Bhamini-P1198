@@ -9,7 +9,7 @@ export interface ActivityType {
 }
 
 const ACTIVITIES: ActivityType[] = [
-    { id: 'summary', name: 'Baseline', description: 'You Will Get the House Hold Head Name and IDs Here' },
+    { id: 'hari', name: 'Hari', description: 'Field Data Tracking: Household Head Name and IDs Details' },
     { id: 'agriculture', name: 'Agriculture & Livelihoods', description: 'Tracking crop yields, farmer training, and income.' },
     { id: 'education', name: 'Education & Skills', description: 'School enrollment, digital literacy, and vocational training.' },
     { id: 'healthcare', name: 'Healthcare & Nutrition', description: 'Maternal health, immunization, and nutrition camps.' },

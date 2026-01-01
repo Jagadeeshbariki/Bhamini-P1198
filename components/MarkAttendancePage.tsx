@@ -5,7 +5,11 @@ import { generateCalendarDays } from '../utils/calendar';
 import AttendanceFormModal from './AttendanceFormModal';
 import { GOOGLE_SHEET_CSV_URL } from '../config';
 
-const MarkAttendancePage: React.FC = () => {
+interface MarkAttendancePageProps {
+    onNavigate?: (page: 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin') => void;
+}
+
+const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) => {
     const { user } = useAuth();
     const [currentDate, setCurrentDate] = useState(new Date());
     const [markedDates, setMarkedDates] = useState<Set<string>>(new Set());
@@ -91,12 +95,11 @@ const MarkAttendancePage: React.FC = () => {
             parsedData.forEach(row => {
                 if (row['SELECT YOUR NAME'] && row['SELECT YOUR NAME'].trim() === user.username) {
                     if (row['CHOOSE DATE']) {
-                        // Date format is D/M/YYYY
                         const parts = row['CHOOSE DATE'].trim().split('/');
                         if (parts.length === 3) {
                              const year = parts[2];
-                             const month = String(parts[1]).padStart(2, '0'); // Month is index 1
-                             const day = String(parts[0]).padStart(2, '0');   // Day is index 0
+                             const month = String(parts[1]).padStart(2, '0');
+                             const day = String(parts[0]).padStart(2, '0');
                              const formattedDate = `${year}-${month}-${day}`;
                             dates.add(formattedDate);
                         }
@@ -145,6 +148,11 @@ const MarkAttendancePage: React.FC = () => {
             newDates.add(dayKey);
             return newDates;
         });
+
+        // After successful action, go to Hari (Activity Page) as requested
+        if (onNavigate) {
+            onNavigate('activity');
+        }
     };
 
     return (

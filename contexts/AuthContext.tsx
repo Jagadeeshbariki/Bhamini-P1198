@@ -1,95 +1,59 @@
-
 import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { AuthUser, AuthContextType, Session } from '../types';
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
-const SESSION_DURATION = 12 * 60 * 60 * 1000; // 12 hours
+const SESSION_DURATION = 12 * 60 * 60 * 1000;
 
-const DEFAULT_USERS = [
-    { username: 'Jagadeesh', password: 'Jagadeesh@P1198', isAdmin: true },
-    { username: 'admin', password: 'password', isAdmin: false },
-    { username: 'Manikumar', password: 'Manikumar@P1198', isAdmin: false },
-    { username: 'Jeddiskung', password: 'Jeddiskung@P1198', isAdmin: false },
-    { username: 'Sampath', password: 'Sampath@P1198', isAdmin: false },
-    { username: 'Simhachalam', password: 'Simhachalam@P1198', isAdmin: false },
-    { username: 'Ganapathi', password: 'Ganapathi@P1198', isAdmin: false }
-];
+// Authorized staff accounts
+const HARDCODED_ACCOUNTS: Record<string, string> = {
+  'Jagadeesh': 'Jagadeesh@P1198',
+  'Manikumar': 'Manikumar@P1198',
+  'Jeddiskung': 'Jeddiskung@P1198',
+  'Simhachalam': 'Simhachalam@P1198',
+  'Sampath': 'Sampath@P1198',
+  'sampanth': 'sampanth@P1198',
+  'Ganapathi': 'Ganapathi@P1198'
+};
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
 
   useEffect(() => {
-    // Initialize users from localStorage or defaults
-    const storedUsers = localStorage.getItem('bhamini_users');
-    let currentUsersList = [];
-    
-    if (storedUsers) {
-      currentUsersList = JSON.parse(storedUsers);
-      
-      // Migration/Enforcement: Ensure ONLY Jagadeesh is admin in the stored list
-      let modified = false;
-      currentUsersList = currentUsersList.map((u: any) => {
-        if (u.username === 'Jagadeesh' && !u.isAdmin) {
-          modified = true;
-          return { ...u, isAdmin: true };
-        }
-        if (u.username !== 'Jagadeesh' && u.isAdmin) {
-          modified = true;
-          return { ...u, isAdmin: false };
-        }
-        return u;
-      });
-      
-      if (modified) {
-        localStorage.setItem('bhamini_users', JSON.stringify(currentUsersList));
-      }
-      setAllUsers(currentUsersList);
-    } else {
-      localStorage.setItem('bhamini_users', JSON.stringify(DEFAULT_USERS));
-      setAllUsers(DEFAULT_USERS);
-      currentUsersList = DEFAULT_USERS;
-    }
-
-    try {
-      const sessionString = localStorage.getItem('bhamini_session');
-      if (sessionString) {
+    const sessionString = localStorage.getItem('bhamini_session');
+    if (sessionString) {
+      try {
         const session: Session = JSON.parse(sessionString);
-        if (session.expiry > Date.now()) {
-          // Re-verify admin status from the master user list in case it changed
-          const masterUser = currentUsersList.find((u: any) => u.username === session.user.username);
-          const verifiedUser: AuthUser = {
-            ...session.user,
-            isAdmin: masterUser ? masterUser.isAdmin : false
-          };
-          setUser(verifiedUser);
+        // Verify session is not expired AND the user still exists in our current code list
+        if (session.expiry > Date.now() && HARDCODED_ACCOUNTS[session.user.username]) {
+          setUser(session.user);
         } else {
+          // Clear stale or invalid sessions
           localStorage.removeItem('bhamini_session');
+          setUser(null);
         }
+      } catch (e) {
+        localStorage.removeItem('bhamini_session');
+        setUser(null);
       }
-    } catch (error) {
-      console.error('Failed to parse session from localStorage', error);
-      localStorage.removeItem('bhamini_session');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }, []);
 
-  const login = useCallback(async (username: string, password: string): Promise<boolean> => {
-    const currentUsers = JSON.parse(localStorage.getItem('bhamini_users') || JSON.stringify(DEFAULT_USERS));
-    const foundUser = currentUsers.find((u: any) => u.username === username && u.password === password);
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
 
-    if (foundUser) {
-      const authUser: AuthUser = { 
-        username: foundUser.username, 
-        isAdmin: foundUser.isAdmin 
+    // Purely client-side authentication
+    if (HARDCODED_ACCOUNTS[trimmedEmail] && HARDCODED_ACCOUNTS[trimmedEmail] === trimmedPassword) {
+      const authUser: AuthUser = {
+        username: trimmedEmail,
+        // Only Jagadeesh has Admin privileges
+        isAdmin: trimmedEmail === 'Jagadeesh',
+        token: undefined
       };
-      const session: Session = {
-        user: authUser,
-        expiry: Date.now() + SESSION_DURATION,
-      };
+      const session: Session = { user: authUser, expiry: Date.now() + SESSION_DURATION };
       localStorage.setItem('bhamini_session', JSON.stringify(session));
       setUser(authUser);
       return true;
@@ -102,21 +66,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(null);
   }, []);
 
-  const addUser = useCallback((username: string, password: string) => {
-    const currentUsers = JSON.parse(localStorage.getItem('bhamini_users') || JSON.stringify(DEFAULT_USERS));
-    if (currentUsers.some((u: any) => u.username === username)) return;
-    
-    // Explicitly set isAdmin: false for all new users added via the panel
-    const newUserList = [...currentUsers, { username, password, isAdmin: false }];
-    localStorage.setItem('bhamini_users', JSON.stringify(newUserList));
-    setAllUsers(newUserList);
+  const registerUser = useCallback(async (): Promise<boolean> => {
+    console.warn("User registration is disabled in frontend-only mode.");
+    return false;
   }, []);
 
-  const getAllUsers = useCallback(() => {
-    return allUsers.map(u => ({ username: u.username }));
-  }, [allUsers]);
+  const getAllUsers = useCallback(async () => {
+    // Returns the current list of users from the code
+    return Object.keys(HARDCODED_ACCOUNTS).map(u => ({ username: u }));
+  }, []);
 
-  const value = { user, login, logout, addUser, getAllUsers };
+  const value = { user, login, logout, getAllUsers, registerUser };
 
   return (
     <AuthContext.Provider value={value}>
