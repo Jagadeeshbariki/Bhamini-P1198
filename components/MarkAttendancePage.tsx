@@ -62,6 +62,12 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
         });
     };
 
+    const getTimestampMs = (ts: string) => {
+        if (!ts) return 0;
+        const d = new Date(ts);
+        return isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+
     const fetchMarkedDates = useCallback(async () => {
         if (!user) return;
         setLoading(true);
@@ -74,9 +80,9 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
 
             const recordMap = new Map<string, AttendanceRecord>();
             
-            // 1. Load remote data
+            // 1. Load remote data with timestamp-based deduplication
             parsedData.forEach(row => {
-                if (row['SELECT YOUR NAME'] && row['SELECT YOUR NAME'].trim() === user.username) {
+                if (row['SELECT YOUR NAME'] && row['SELECT YOUR NAME'].trim().toLowerCase() === user.username.toLowerCase()) {
                     const dateStr = row['CHOOSE DATE'] || '';
                     const parts = dateStr.trim().split('/');
                     if (parts.length === 3) {
@@ -96,7 +102,11 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
                             workingHours: row['WORKING HOURS'] || '',
                             outcomes: row['OUTCOME'] || '',
                          };
-                         recordMap.set(key, record);
+                         
+                         const existing = recordMap.get(key);
+                         if (!existing || getTimestampMs(record.timestamp) >= getTimestampMs(existing.timestamp)) {
+                            recordMap.set(key, record);
+                         }
                     }
                 }
             });
@@ -107,7 +117,12 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
             Object.keys(localSubmissions).forEach(dateStr => {
                 const parts = dateStr.split('/');
                 const key = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
-                recordMap.set(key, localSubmissions[dateStr]);
+                const localRec = localSubmissions[dateStr];
+                
+                const existing = recordMap.get(key);
+                if (!existing || getTimestampMs(localRec.timestamp) >= getTimestampMs(existing.timestamp)) {
+                    recordMap.set(key, localRec);
+                }
             });
 
             setMarkedRecords(recordMap);
@@ -128,8 +143,7 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
         const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
         const isMarked = markedRecords.has(dayKey);
 
-        // User wants to block edit in calendar.
-        // If already marked, do nothing. Direct user to Report page via UI hint.
+        // If already marked, block editing here (as per previous requirement)
         if (isMarked) return;
 
         setSelectedDate(day);
@@ -143,7 +157,19 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
     return (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Attendance Tracker</h1>
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Attendance Tracker</h1>
+                    <div className="flex gap-4 mt-2">
+                        <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase">Working</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase">Holiday / Sunday</span>
+                        </div>
+                    </div>
+                </div>
                 <div className="text-xs bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 p-2 rounded-lg border border-orange-100 dark:border-orange-800 flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     <span>Already Saved? Go to <b>Reports</b> to edit entries.</span>
@@ -169,14 +195,40 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
             {error && <div className="text-center text-red-500 bg-red-50 p-2 rounded mb-4 font-bold text-xs">{error}</div>}
 
             <div className="grid grid-cols-7 gap-2 text-center">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className="font-black text-[10px] uppercase tracking-widest text-gray-400 py-2">{day}</div>
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                    <div key={day} className={`font-black text-[10px] uppercase tracking-widest py-2 ${idx === 0 ? 'text-red-500' : 'text-gray-400'}`}>{day}</div>
                 ))}
                 {calendarDays.map((day, index) => {
                     const isCurrentMonth = day.getMonth() === currentDate.getMonth();
                     const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-                    const isMarked = markedRecords.has(dayKey);
+                    const record = markedRecords.get(dayKey);
+                    const isMarked = !!record;
                     const isFutureDate = day > today;
+                    const isSunday = day.getDay() === 0;
+
+                    // Determine colors based on status
+                    let buttonClasses = 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-blue-500 hover:shadow-lg active:scale-95';
+                    let label = '';
+                    let labelClasses = 'text-[10px] font-black uppercase tracking-tighter';
+
+                    if (isMarked) {
+                        const isNonWorking = record.workingStatus === 'Holiday' || record.workingStatus === 'Leave' || isSunday;
+                        if (isNonWorking && record.workingStatus !== 'Working') {
+                            // Non-working (Holiday or Leave) explicitly chosen
+                            buttonClasses = 'bg-red-50 dark:bg-red-900/20 border-red-500/30 text-red-700 dark:text-red-300 cursor-default opacity-80';
+                            label = record.workingStatus;
+                        } else {
+                            // Working status or default Sunday (if not marked otherwise)
+                            buttonClasses = 'bg-green-50 dark:bg-green-900/20 border-green-500/30 text-green-700 dark:text-green-300 cursor-default opacity-80';
+                            label = 'Saved';
+                        }
+                    } else {
+                        if (isFutureDate) {
+                            buttonClasses = 'border-transparent text-gray-300 dark:text-gray-700 cursor-not-allowed';
+                        } else if (isSunday) {
+                            buttonClasses = 'bg-red-50/30 dark:bg-red-900/10 border-red-100 dark:border-red-900/30 text-red-500/60 hover:border-red-500 active:scale-95';
+                        }
+                    }
 
                     return (
                         <button
@@ -185,16 +237,11 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
                             disabled={isFutureDate}
                             className={`p-2 h-16 w-full rounded-xl transition-all flex flex-col justify-center items-center border-2
                                 ${!isCurrentMonth ? 'opacity-20' : ''}
-                                ${isMarked 
-                                    ? 'bg-green-50 dark:bg-green-900/20 border-green-500/30 text-green-700 dark:text-green-300 cursor-default opacity-80' 
-                                    : isFutureDate 
-                                        ? 'border-transparent text-gray-300 dark:text-gray-700 cursor-not-allowed' 
-                                        : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-blue-500 hover:shadow-lg active:scale-95'
-                                }
+                                ${buttonClasses}
                             `}
                         >
                             <span className="font-bold text-lg">{day.getDate()}</span>
-                            {isMarked && <span className="text-[10px] font-black uppercase tracking-tighter">Saved</span>}
+                            {label && <span className={labelClasses}>{label}</span>}
                         </button>
                     );
                 })}

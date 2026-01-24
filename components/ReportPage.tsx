@@ -36,6 +36,18 @@ const ReportPage: React.FC = () => {
 
     const months = useMemo(() => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], []);
 
+    const normalizeDateStr = (dateStr: string) => {
+        const p = dateStr.split('/');
+        if (p.length !== 3) return dateStr;
+        return `${p[0].padStart(2, '0')}/${p[1].padStart(2, '0')}/${p[2]}`;
+    };
+
+    const getTimestampMs = (ts: string) => {
+        if (!ts) return 0;
+        const d = new Date(ts);
+        return isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+
     const fetchData = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -60,13 +72,13 @@ const ReportPage: React.FC = () => {
             if (lines.length < 1) return;
             const headers = parseLine(lines[0]);
             
-            const remoteMapped = lines.slice(1).map(line => {
+            const remoteMapped: AttendanceRecord[] = lines.slice(1).map(line => {
                 const vals = parseLine(line);
                 const row: any = {};
                 headers.forEach((h, i) => row[h] = vals[i]);
                 return {
                     timestamp: row['Timestamp'] || '',
-                    name: row['SELECT YOUR NAME'] || '',
+                    name: (row['SELECT YOUR NAME'] || '').trim(),
                     date: row['CHOOSE DATE'] || '',
                     workingStatus: row['WORKING/LEAVE/HOLIDAY'] || '',
                     reasonNotWorking: row['WRITE THE REASON FOR NOT WORKING'] || '',
@@ -77,21 +89,31 @@ const ReportPage: React.FC = () => {
                 };
             });
 
-            // Merge with local data for immediate feedback
             if (user) {
                 const localKey = `bhamini_local_${user.username}`;
                 const localSubmissions = JSON.parse(localStorage.getItem(localKey) || '{}');
-                const mergedMap = new Map<string, AttendanceRecord>();
+                const uniqueDatesMap = new Map<string, AttendanceRecord>();
                 
                 remoteMapped.forEach(r => {
-                    if (r.name.trim() === user.username.trim()) mergedMap.set(r.date, r);
+                    if (r.name.toLowerCase() === user.username.toLowerCase()) {
+                        const normalized = normalizeDateStr(r.date);
+                        const existing = uniqueDatesMap.get(normalized);
+                        if (!existing || getTimestampMs(r.timestamp) >= getTimestampMs(existing.timestamp)) {
+                            uniqueDatesMap.set(normalized, r);
+                        }
+                    }
                 });
 
                 Object.keys(localSubmissions).forEach(d => {
-                    mergedMap.set(d, localSubmissions[d]);
+                    const localRec = localSubmissions[d];
+                    const normalized = normalizeDateStr(d);
+                    const existing = uniqueDatesMap.get(normalized);
+                    if (!existing || getTimestampMs(localRec.timestamp) >= getTimestampMs(existing.timestamp)) {
+                        uniqueDatesMap.set(normalized, localRec);
+                    }
                 });
 
-                setAttendanceData(Array.from(mergedMap.values()));
+                setAttendanceData(Array.from(uniqueDatesMap.values()));
             } else {
                 setAttendanceData(remoteMapped);
             }
@@ -107,7 +129,7 @@ const ReportPage: React.FC = () => {
 
     useEffect(() => {
         if (user && attendanceData.length > 0) {
-            const userName = user.username.trim();
+            const userName = user.username.trim().toLowerCase();
             const monthIdx = months.indexOf(selectedMonth);
             const yearNum = parseInt(selectedYear);
 
@@ -115,7 +137,7 @@ const ReportPage: React.FC = () => {
             const end = new Date(yearNum, monthIdx, 25, 23, 59, 59).getTime();
 
             const filtered = attendanceData.filter(r => {
-                if (r.name.trim() !== userName) return false;
+                if (r.name.trim().toLowerCase() !== userName) return false;
                 const p = r.date.split('/');
                 if (p.length !== 3) return false;
                 const rd = new Date(+p[2], +p[1]-1, +p[0]).getTime();
@@ -125,6 +147,8 @@ const ReportPage: React.FC = () => {
                 return new Date(+pa[2], +pa[1]-1, +pa[0]).getTime() - new Date(+pb[2], +pb[1]-1, +pb[0]).getTime();
             });
             setFilteredData(filtered);
+        } else if (attendanceData.length === 0) {
+            setFilteredData([]);
         }
     }, [user, attendanceData, selectedMonth, selectedYear, months]);
 
@@ -141,10 +165,11 @@ const ReportPage: React.FC = () => {
             // @ts-ignore
             const worker = window.html2pdf();
             await worker.from(printRef.current).set({
-                margin: [5, 5, 5, 5],
+                margin: [10, 5, 10, 5],
                 filename: `Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`,
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+                html2canvas: { scale: 1.5, useCORS: true, letterRendering: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
             }).save();
         } finally {
             setIsGenerating(false);
@@ -183,7 +208,7 @@ const ReportPage: React.FC = () => {
             
             <div className="bg-blue-50 dark:bg-blue-900/10 p-2 rounded-lg mb-6 border border-blue-100 dark:border-blue-800">
                 <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold text-center italic">
-                    Local sync enabled: Your submissions appear here instantly.
+                    Deduplication Active: Only your latest entry for each date is displayed.
                 </p>
             </div>
 
@@ -193,7 +218,6 @@ const ReportPage: React.FC = () => {
                         <tr>
                             <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400">Date</th>
                             <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400">Activity / Place</th>
-                            <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400">Hrs</th>
                             <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400 text-right">Actions</th>
                         </tr>
                     </thead>
@@ -205,7 +229,6 @@ const ReportPage: React.FC = () => {
                                     <div className="font-bold">{record.workingStatus === 'Working' ? record.placeOfVisit : record.workingStatus}</div>
                                     <div className="text-xs text-gray-500 line-clamp-1">{record.workingStatus === 'Working' ? record.purposeOfVisit : record.reasonNotWorking}</div>
                                 </td>
-                                <td className="px-4 py-4 font-black text-blue-600 text-sm">{record.workingStatus === 'Working' ? record.workingHours : '-'}</td>
                                 <td className="px-4 py-4 text-right">
                                     <button 
                                         onClick={() => handleEdit(record)}
@@ -233,81 +256,79 @@ const ReportPage: React.FC = () => {
 
             {/* Hidden Official PDF Template Section */}
             <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-                <div ref={printRef} className="bg-white text-black telugu-font" style={{ width: '1080px', padding: '20px', color: '#000000' }}>
+                <div ref={printRef} className="bg-white text-black telugu-font" style={{ width: '1080px', padding: '10px 20px', color: '#000000' }}>
                     
                     {/* Header Block Matching Image - LEAD TECHNICAL AGENCY */}
-                    <div className="w-full border-t-4 border-blue-700 pt-1 mb-0">
-                        <div className="border border-black text-center py-1 font-bold text-xl uppercase tracking-wider text-black">
+                    <div className="w-full border-t-4 border-blue-800 pt-1 mb-0">
+                        <div className="border border-black text-center py-2 font-black text-2xl uppercase tracking-widest text-black">
                             LEAD TECHNICAL AGENCY – WASSAN
                         </div>
                     </div>
                     
                     <div className="border-x border-black text-black">
-                        {/* Centered Project Name, Removed label */}
-                        <div className="border-b border-black py-2 px-4 font-bold text-center uppercase text-black">
+                        <div className="border-b border-black py-2 px-4 font-black text-center uppercase text-black text-lg">
                             HDFC PARIVARTAN PROJECT - Bhamini P1198
                         </div>
-                        <div className="border-b border-black text-center py-1 font-bold bg-gray-50 uppercase text-black">
+                        <div className="border-b border-black text-center py-1 font-black bg-gray-100 uppercase text-black text-md">
                             WORK DONE REPORT
                         </div>
                         
-                        {/* Refined Metadata Spacing and Layout - Strictly Black */}
-                        <div className="border-b border-black py-2 px-4 font-bold flex text-black">
-                            <span style={{ width: '320px' }}>Month:</span>
+                        <div className="border-b border-black py-1 px-4 font-bold flex text-black text-sm">
+                            <span style={{ width: '250px' }}>Month:</span>
                             <span className="flex-grow">{selectedMonth} {selectedYear}</span>
                         </div>
-                        <div className="border-b border-black py-2 px-4 font-bold flex text-black">
-                            <span style={{ width: '320px' }}>Name of the Person:</span>
+                        <div className="border-b border-black py-1 px-4 font-bold flex text-black text-sm">
+                            <span style={{ width: '250px' }}>Name of the Person:</span>
                             <span className="flex-grow uppercase">{user?.username}</span>
                         </div>
-                        <div className="border-b border-black py-2 px-4 font-bold flex text-black">
-                            <span style={{ width: '320px' }}>Working GP:</span>
+                        <div className="border-b border-black py-1 px-4 font-bold flex text-black text-sm">
+                            <span style={{ width: '250px' }}>Working GP:</span>
                             <span className="flex-grow">{filteredData[0]?.placeOfVisit || 'Field Operations'}</span>
                         </div>
                     </div>
 
-                    {/* Table Block - Strictly Black */}
-                    <table className="w-full border-collapse border border-black mt-0 text-sm text-black">
+                    {/* Table Block - Optimized for 2 Pages (approx 16 rows per page) */}
+                    <table className="w-full border-collapse border border-black mt-0 text-xs text-black">
                         <thead>
-                            <tr className="bg-white font-bold text-center text-black">
-                                <th className="border border-black px-1 py-2 w-12">S. No</th>
-                                <th className="border border-black px-2 py-2 w-32">Date</th>
-                                <th className="border border-black px-2 py-2 w-48">Place of Visit</th>
+                            <tr className="bg-gray-100 font-black text-center text-black uppercase">
+                                <th className="border border-black px-1 py-2 w-10">S.No</th>
+                                <th className="border border-black px-2 py-2 w-28">Date</th>
+                                <th className="border border-black px-2 py-2 w-44">Place of Visit</th>
                                 <th className="border border-black px-2 py-2">Purpose of visit/Work done</th>
-                                <th className="border border-black px-1 py-2 w-28">No of Hours Working</th>
-                                <th className="border border-black px-2 py-2 w-48">Outcome from work</th>
+                                <th className="border border-black px-1 py-2 w-20">Hours</th>
+                                <th className="border border-black px-2 py-2 w-44">Outcome</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredData.length > 0 ? filteredData.map((r, i) => (
-                                <tr key={i} className="align-top text-black">
-                                    <td className="border border-black px-1 py-3 text-center font-semibold text-black">{i + 1}</td>
-                                    <td className="border border-black px-2 py-3 text-center whitespace-nowrap font-semibold text-black">{r.date}</td>
-                                    <td className="border border-black px-2 py-3 text-black">
+                                <tr key={i} className="align-top text-black" style={{ pageBreakInside: 'avoid' }}>
+                                    <td className="border border-black px-1 py-2 text-center font-bold text-black">{i + 1}</td>
+                                    <td className="border border-black px-2 py-2 text-center whitespace-nowrap font-bold text-black">{r.date}</td>
+                                    <td className="border border-black px-2 py-2 text-black">
                                         {r.workingStatus === 'Working' ? r.placeOfVisit : r.workingStatus}
                                     </td>
-                                    <td className="border border-black px-2 py-3 leading-snug text-black">
+                                    <td className="border border-black px-2 py-2 leading-tight text-black" style={{ fontSize: '11px' }}>
                                         {r.workingStatus === 'Working' ? r.purposeOfVisit : `REASON: ${r.reasonNotWorking}`}
                                     </td>
-                                    <td className="border border-black px-1 py-3 text-center font-bold text-black">
+                                    <td className="border border-black px-1 py-2 text-center font-black text-black">
                                         {r.workingStatus === 'Working' ? r.workingHours : '0'}
                                     </td>
-                                    <td className="border border-black px-2 py-3 text-xs italic text-black">
+                                    <td className="border border-black px-2 py-2 text-[10px] italic text-black">
                                         {r.outcomes}
                                     </td>
                                 </tr>
                             )) : (
                                 <tr>
                                     <td colSpan={6} className="border border-black p-10 text-center italic text-black">
-                                        No data entries recorded for this reporting period.
+                                        No data entries recorded.
                                     </td>
                                 </tr>
                             )}
                             
                             {/* Summary Row */}
                             {filteredData.length > 0 && (
-                                <tr className="font-bold bg-gray-50 text-black">
-                                    <td colSpan={4} className="border border-black px-4 py-2 text-right uppercase text-black">Total Monthly Hours:</td>
+                                <tr className="font-black bg-gray-100 text-black uppercase" style={{ pageBreakInside: 'avoid' }}>
+                                    <td colSpan={4} className="border border-black px-4 py-2 text-right text-black">Total Monthly Hours:</td>
                                     <td className="border border-black px-1 py-2 text-center underline text-black">
                                         {filteredData.reduce((acc, curr) => acc + (parseFloat(curr.workingHours) || 0), 0).toFixed(1)}
                                     </td>
@@ -317,20 +338,20 @@ const ReportPage: React.FC = () => {
                         </tbody>
                     </table>
 
-                    {/* Footer / Signatures - Only Staff and Coordinator */}
-                    <div className="mt-20 flex justify-around px-10 font-bold text-sm uppercase text-black">
+                    {/* Footer / Signatures - Pushed to end with room */}
+                    <div className="mt-12 flex justify-around px-10 font-black text-xs uppercase text-black" style={{ pageBreakInside: 'avoid' }}>
                         <div className="text-center">
-                            <div className="w-64 border-t border-black mb-2"></div>
+                            <div className="w-64 border-t-2 border-black mb-2"></div>
                             <span>SIGNATURE OF THE STAFF</span>
                         </div>
                         <div className="text-center">
-                            <div className="w-64 border-t border-black mb-2"></div>
+                            <div className="w-64 border-t-2 border-black mb-2"></div>
                             <span>VERIFIED BY COORDINATOR</span>
                         </div>
                     </div>
                     
-                    <div className="mt-12 text-[10px] text-black text-center italic opacity-60">
-                        Generated via Bhamini P1198 Field System • {new Date().toLocaleString()}
+                    <div className="mt-6 text-[9px] text-black text-center italic opacity-70">
+                        Bhamini P1198 Field System • Generated: {new Date().toLocaleString()}
                     </div>
                 </div>
             </div>
