@@ -15,7 +15,8 @@ const HARDCODED_ACCOUNTS: Record<string, string> = {
   'Sampath': 'Sampath@P1198',
   'sampanth': 'sampanth@P1198',
   'Ganapathi': 'Ganapathi@P1198',
-  'Patra':'Patra@P1198'
+  'Patra':'Patra@P1198',
+  'Rajababu':'Rajababu@P1198'
 };
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
