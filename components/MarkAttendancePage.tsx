@@ -30,7 +30,7 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
-    const today = useMemo(() => {
+    const todayDate = useMemo(() => {
         const d = new Date();
         d.setHours(0, 0, 0, 0); 
         return d;
@@ -68,60 +68,69 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
         return isNaN(d.getTime()) ? 0 : d.getTime();
     };
 
+    const normalizeDateToKey = (dateStr: string) => {
+        if (!dateStr) return '';
+        const parts = dateStr.trim().split('/');
+        if (parts.length === 3) {
+            const d = parts[0].padStart(2, '0');
+            const m = parts[1].padStart(2, '0');
+            const y = parts[2];
+            return `${y}-${m}-${d}`;
+        }
+        return '';
+    };
+
     const fetchMarkedDates = useCallback(async () => {
         if (!user) return;
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&_=${new Date().getTime()}`);
+            const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&cache_bust=${Date.now()}`);
             if (!response.ok) throw new Error('Failed to fetch attendance data.');
             const csvText = await response.text();
             const parsedData = parseCSV(csvText);
 
             const recordMap = new Map<string, AttendanceRecord>();
+            const currentUsernameLower = user.username.trim().toLowerCase();
             
-            // 1. Load remote data with timestamp-based deduplication
             parsedData.forEach(row => {
-                if (row['SELECT YOUR NAME'] && row['SELECT YOUR NAME'].trim().toLowerCase() === user.username.toLowerCase()) {
-                    const dateStr = row['CHOOSE DATE'] || '';
-                    const parts = dateStr.trim().split('/');
-                    if (parts.length === 3) {
-                         const y = parts[2];
-                         const m = String(parts[1]).padStart(2, '0');
-                         const d = String(parts[0]).padStart(2, '0');
-                         const key = `${y}-${m}-${d}`;
-                         
-                         const record: AttendanceRecord = {
+                const rowName = (row['SELECT YOUR NAME'] || row['Name'] || '').trim().toLowerCase();
+                if (rowName === currentUsernameLower) {
+                    const dateStr = row['CHOOSE DATE'] || row['Date'] || '';
+                    const key = normalizeDateToKey(dateStr);
+                    
+                    if (key) {
+                        const record: AttendanceRecord = {
                             timestamp: row['Timestamp'] || '',
-                            name: row['SELECT YOUR NAME'] || '',
+                            name: rowName,
                             date: dateStr,
-                            workingStatus: row['WORKING/LEAVE/HOLIDAY'] || '',
+                            workingStatus: row['WORKING/LEAVE/HOLIDAY'] || 'Working',
                             reasonNotWorking: row['WRITE THE REASON FOR NOT WORKING'] || '',
                             placeOfVisit: row['PLACE OF VISIT'] || '',
                             purposeOfVisit: row['PURPOSE OF VISIT'] || '',
-                            workingHours: row['WORKING HOURS'] || '',
+                            workingHours: row['WORKING HOURS'] || '0',
                             outcomes: row['OUTCOME'] || '',
-                         };
+                        };
                          
-                         const existing = recordMap.get(key);
-                         if (!existing || getTimestampMs(record.timestamp) >= getTimestampMs(existing.timestamp)) {
+                        const existing = recordMap.get(key);
+                        if (!existing || getTimestampMs(record.timestamp) >= getTimestampMs(existing.timestamp)) {
                             recordMap.set(key, record);
-                         }
+                        }
                     }
                 }
             });
 
-            // 2. Overlay local pending submissions for instant feedback
+            // Local storage overlay
             const localKey = `bhamini_local_${user.username}`;
             const localSubmissions = JSON.parse(localStorage.getItem(localKey) || '{}');
             Object.keys(localSubmissions).forEach(dateStr => {
-                const parts = dateStr.split('/');
-                const key = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
-                const localRec = localSubmissions[dateStr];
-                
-                const existing = recordMap.get(key);
-                if (!existing || getTimestampMs(localRec.timestamp) >= getTimestampMs(existing.timestamp)) {
-                    recordMap.set(key, localRec);
+                const key = normalizeDateToKey(dateStr);
+                if (key) {
+                    const localRec = localSubmissions[dateStr];
+                    const existing = recordMap.get(key);
+                    if (!existing || getTimestampMs(localRec.timestamp) >= getTimestampMs(existing.timestamp)) {
+                        recordMap.set(key, localRec);
+                    }
                 }
             });
 
@@ -138,110 +147,98 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
     }, [fetchMarkedDates]);
 
     const handleDayClick = (day: Date) => {
-        if (day > today) return;
-
-        const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-        const isMarked = markedRecords.has(dayKey);
-
-        // If already marked, block editing here (as per previous requirement)
-        if (isMarked) return;
-
+        if (day > todayDate) return;
+        const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+        if (markedRecords.has(key)) return;
         setSelectedDate(day);
         setIsModalOpen(true);
     };
-    
-    const handleFormSuccess = () => {
-        fetchMarkedDates();
+
+    const navigateMonth = (direction: number) => {
+        setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1));
     };
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Attendance Tracker</h1>
-                    <div className="flex gap-4 mt-2">
-                        <div className="flex items-center gap-1">
-                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase">Working</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase">Holiday / Sunday</span>
-                        </div>
-                    </div>
+                    <h1 className="text-3xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-3">
+                        <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        Mark Attendance
+                    </h1>
                 </div>
-                <div className="text-xs bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 p-2 rounded-lg border border-orange-100 dark:border-orange-800 flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <span>Already Saved? Go to <b>Reports</b> to edit entries.</span>
-                </div>
-            </div>
-            
-            <div className="flex items-center justify-between mb-4 bg-gray-50 dark:bg-gray-700/50 p-2 rounded-xl">
-                <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 rounded-lg hover:bg-white dark:hover:bg-gray-600 transition shadow-sm">
-                    &lt;
-                </button>
-                <h2 className="text-xl font-bold">{monthName} {year}</h2>
-                <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-2 rounded-lg hover:bg-white dark:hover:bg-gray-600 transition shadow-sm">
-                    &gt;
+                <button 
+                    onClick={() => setCurrentDate(new Date())}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-all active:scale-95"
+                >
+                    Today
                 </button>
             </div>
             
-            {loading && (
-                <div className="flex justify-center items-center py-4 text-blue-600 gap-2">
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-sm font-bold animate-pulse">Syncing...</span>
+            <div className="flex items-center justify-between mb-6 bg-gray-50 dark:bg-gray-900/50 p-2 rounded-2xl border border-gray-200 dark:border-gray-700">
+                <button 
+                    onClick={() => navigateMonth(-1)} 
+                    className="p-4 rounded-xl hover:bg-white dark:hover:bg-gray-600 transition shadow-md text-gray-600 dark:text-gray-300 active:scale-90"
+                >
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.5" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <div className="text-center">
+                    <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight">{monthName}</h2>
+                    <p className="text-xs font-black text-blue-600">{year}</p>
                 </div>
-            )}
-            {error && <div className="text-center text-red-500 bg-red-50 p-2 rounded mb-4 font-bold text-xs">{error}</div>}
+                <button 
+                    onClick={() => navigateMonth(1)} 
+                    className="p-4 rounded-xl hover:bg-white dark:hover:bg-gray-600 transition shadow-md text-gray-600 dark:text-gray-300 active:scale-90"
+                >
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.5" d="M9 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+            
+            {loading && <div className="text-center py-4 text-blue-600 font-bold animate-pulse uppercase tracking-widest text-xs">Syncing...</div>}
 
-            <div className="grid grid-cols-7 gap-2 text-center">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
-                    <div key={day} className={`font-black text-[10px] uppercase tracking-widest py-2 ${idx === 0 ? 'text-red-500' : 'text-gray-400'}`}>{day}</div>
+            <div className="grid grid-cols-7 gap-2 text-center mb-4">
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
+                    <div key={day} className={`font-black text-sm uppercase py-2 ${idx === 0 ? 'text-red-500' : 'text-gray-400'}`}>{day}</div>
                 ))}
                 {calendarDays.map((day, index) => {
                     const isCurrentMonth = day.getMonth() === currentDate.getMonth();
                     const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
                     const record = markedRecords.get(dayKey);
                     const isMarked = !!record;
-                    const isFutureDate = day > today;
                     const isSunday = day.getDay() === 0;
+                    const isFuture = day > todayDate;
 
-                    // Determine colors based on status
-                    let buttonClasses = 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-blue-500 hover:shadow-lg active:scale-95';
+                    let classes = 'h-24 w-full rounded-2xl flex flex-col justify-center items-center border-2 transition-all ';
                     let label = '';
-                    let labelClasses = 'text-[10px] font-black uppercase tracking-tighter';
 
-                    if (isMarked) {
-                        const isNonWorking = record.workingStatus === 'Holiday' || record.workingStatus === 'Leave' || isSunday;
-                        if (isNonWorking && record.workingStatus !== 'Working') {
-                            // Non-working (Holiday or Leave) explicitly chosen
-                            buttonClasses = 'bg-red-50 dark:bg-red-900/20 border-red-500/30 text-red-700 dark:text-red-300 cursor-default opacity-80';
-                            label = record.workingStatus;
+                    if (!isCurrentMonth) {
+                        classes += 'opacity-10 grayscale border-transparent pointer-events-none ';
+                    } else if (isMarked) {
+                        if (record.workingStatus === 'Working') {
+                            classes += 'bg-green-600 border-green-700 text-white shadow-lg cursor-default ';
+                            label = 'Working';
                         } else {
-                            // Working status or default Sunday (if not marked otherwise)
-                            buttonClasses = 'bg-green-50 dark:bg-green-900/20 border-green-500/30 text-green-700 dark:text-green-300 cursor-default opacity-80';
-                            label = 'Saved';
+                            classes += 'bg-red-600 border-red-700 text-white shadow-lg cursor-default ';
+                            label = record.workingStatus;
                         }
+                    } else if (isSunday) {
+                        classes += 'bg-red-600 border-red-700 text-white hover:scale-105 active:scale-95 ';
+                        label = 'Sunday';
+                    } else if (isFuture) {
+                        classes += 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700 text-gray-300 cursor-not-allowed ';
                     } else {
-                        if (isFutureDate) {
-                            buttonClasses = 'border-transparent text-gray-300 dark:text-gray-700 cursor-not-allowed';
-                        } else if (isSunday) {
-                            buttonClasses = 'bg-red-50/30 dark:bg-red-900/10 border-red-100 dark:border-red-900/30 text-red-500/60 hover:border-red-500 active:scale-95';
-                        }
+                        classes += 'bg-white dark:bg-gray-700 border-gray-100 dark:border-gray-600 text-gray-800 dark:text-gray-100 hover:border-blue-500 hover:scale-105 active:scale-95 ';
                     }
 
                     return (
                         <button
                             key={index}
+                            disabled={!isCurrentMonth || isFuture || isMarked}
                             onClick={() => handleDayClick(day)}
-                            disabled={isFutureDate}
-                            className={`p-2 h-16 w-full rounded-xl transition-all flex flex-col justify-center items-center border-2
-                                ${!isCurrentMonth ? 'opacity-20' : ''}
-                                ${buttonClasses}
-                            `}
+                            className={classes}
                         >
-                            <span className="font-bold text-lg">{day.getDate()}</span>
-                            {label && <span className={labelClasses}>{label}</span>}
+                            <span className="font-black text-2xl">{day.getDate()}</span>
+                            {label && <span className="text-[10px] font-black uppercase mt-1">{label}</span>}
                         </button>
                     );
                 })}
@@ -252,7 +249,7 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
                     user={user} 
                     date={selectedDate} 
                     onClose={() => setIsModalOpen(false)}
-                    onSubmitSuccess={handleFormSuccess}
+                    onSubmitSuccess={fetchMarkedDates}
                 />
             )}
         </div>
