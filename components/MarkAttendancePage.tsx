@@ -18,7 +18,7 @@ interface AttendanceRecord {
 }
 
 interface MarkAttendancePageProps {
-    onNavigate?: (page: 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker') => void;
+    onNavigate?: (page: any) => void;
 }
 
 const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) => {
@@ -40,56 +40,43 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
     const monthName = currentDate.toLocaleString('default', { month: 'long' });
     const year = currentDate.getFullYear();
 
+    const normalizeDateToKey = (dateStr: string) => {
+        if (!dateStr) return '';
+        const parts = dateStr.trim().split('/');
+        if (parts.length === 3) {
+            return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+        return '';
+    };
+
     const parseCSV = (csv: string): Record<string, string>[] => {
-        const lines = csv.split(/\r\n|\n/);
+        const lines = csv.split(/\r\n|\n/).filter(l => l);
         if (lines.length < 1) return [];
         const parseLine = (line: string): string[] => {
             const values = [];
-            let inQuote = false;
-            let value = '';
+            let inQuote = false, val = '';
             for (let j = 0; j < line.length; j++) {
                 if (line[j] === '"') inQuote = !inQuote;
-                else if (line[j] === ',' && !inQuote) { values.push(value.trim()); value = ''; }
-                else value += line[j];
+                else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
+                else val += line[j];
             }
-            values.push(value.trim());
+            values.push(val.trim());
             return values;
         };
         const headers = parseLine(lines[0]);
-        return lines.slice(1).filter(l => l).map(line => {
+        return lines.slice(1).map(line => {
             const vals = parseLine(line);
             return headers.reduce((obj, h, i) => ({ ...obj, [h]: vals[i] || '' }), {});
         });
     };
 
-    const getTimestampMs = (ts: string) => {
-        if (!ts) return 0;
-        const d = new Date(ts);
-        return isNaN(d.getTime()) ? 0 : d.getTime();
-    };
-
-    const normalizeDateToKey = (dateStr: string) => {
-        if (!dateStr) return '';
-        const parts = dateStr.trim().split('/');
-        if (parts.length === 3) {
-            const d = parts[0].padStart(2, '0');
-            const m = parts[1].padStart(2, '0');
-            const y = parts[2];
-            return `${y}-${m}-${d}`;
-        }
-        return '';
-    };
-
     const fetchMarkedDates = useCallback(async () => {
         if (!user) return;
         setLoading(true);
-        setError(null);
         try {
-            const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&cache_bust=${Date.now()}`);
-            if (!response.ok) throw new Error('Failed to fetch attendance data.');
+            const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&cb=${Date.now()}`);
             const csvText = await response.text();
             const parsedData = parseCSV(csvText);
-
             const recordMap = new Map<string, AttendanceRecord>();
             const currentUsernameLower = user.username.trim().toLowerCase();
             
@@ -98,7 +85,6 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
                 if (rowName === currentUsernameLower) {
                     const dateStr = row['CHOOSE DATE'] || row['Date'] || '';
                     const key = normalizeDateToKey(dateStr);
-                    
                     if (key) {
                         const record: AttendanceRecord = {
                             timestamp: row['Timestamp'] || '',
@@ -111,134 +97,110 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
                             workingHours: row['WORKING HOURS'] || '0',
                             outcomes: row['OUTCOME'] || '',
                         };
-                         
                         const existing = recordMap.get(key);
-                        if (!existing || getTimestampMs(record.timestamp) >= getTimestampMs(existing.timestamp)) {
+                        if (!existing || new Date(record.timestamp).getTime() >= new Date(existing.timestamp).getTime()) {
                             recordMap.set(key, record);
                         }
                     }
                 }
             });
-
-            // Local storage overlay
-            const localKey = `bhamini_local_${user.username}`;
-            const localSubmissions = JSON.parse(localStorage.getItem(localKey) || '{}');
-            Object.keys(localSubmissions).forEach(dateStr => {
-                const key = normalizeDateToKey(dateStr);
-                if (key) {
-                    const localRec = localSubmissions[dateStr];
-                    const existing = recordMap.get(key);
-                    if (!existing || getTimestampMs(localRec.timestamp) >= getTimestampMs(existing.timestamp)) {
-                        recordMap.set(key, localRec);
-                    }
-                }
-            });
-
             setMarkedRecords(recordMap);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+            setError('Failed to load data.');
         } finally {
             setLoading(false);
         }
     }, [user]);
 
-    useEffect(() => {
-        fetchMarkedDates();
-    }, [fetchMarkedDates]);
-
-    const handleDayClick = (day: Date) => {
-        if (day > todayDate) return;
-        const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-        if (markedRecords.has(key)) return;
-        setSelectedDate(day);
-        setIsModalOpen(true);
-    };
+    useEffect(() => { fetchMarkedDates(); }, [fetchMarkedDates]);
 
     const navigateMonth = (direction: number) => {
-        setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1));
+        const next = new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1);
+        setCurrentDate(next);
     };
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                <div>
-                    <h1 className="text-3xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-3">
-                        <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                        Mark Attendance
-                    </h1>
-                </div>
+        <div className="bg-white dark:bg-gray-800 p-4 md:p-8 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
+                <h1 className="text-3xl font-black text-gray-800 dark:text-white flex items-center gap-3">
+                    <span className="p-2 bg-blue-600 rounded-xl text-white">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    </span>
+                    Attendance Calendar
+                </h1>
                 <button 
                     onClick={() => setCurrentDate(new Date())}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-all active:scale-95"
+                    className="w-full md:w-auto px-8 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-2xl font-black text-xs uppercase border border-blue-100 dark:border-blue-800 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
                 >
-                    Today
+                    Back to Today
                 </button>
             </div>
             
-            <div className="flex items-center justify-between mb-6 bg-gray-50 dark:bg-gray-900/50 p-2 rounded-2xl border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-4 mb-8">
                 <button 
                     onClick={() => navigateMonth(-1)} 
-                    className="p-4 rounded-xl hover:bg-white dark:hover:bg-gray-600 transition shadow-md text-gray-600 dark:text-gray-300 active:scale-90"
+                    className="flex-1 flex items-center justify-center gap-2 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border-2 border-transparent hover:border-blue-500 transition-all active:scale-95 group"
                 >
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.5" d="M15 19l-7-7 7-7"/></svg>
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7"/></svg>
+                    <span className="hidden sm:inline font-black uppercase text-xs text-gray-400 group-hover:text-blue-600">Previous</span>
                 </button>
-                <div className="text-center">
-                    <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight">{monthName}</h2>
-                    <p className="text-xs font-black text-blue-600">{year}</p>
+                
+                <div className="flex-[2] text-center bg-white dark:bg-gray-800 p-2 rounded-2xl border-2 border-gray-100 dark:border-gray-700 shadow-inner">
+                    <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{monthName}</h2>
+                    <p className="text-[10px] font-black text-blue-600 mt-1 uppercase tracking-widest">{year}</p>
                 </div>
+
                 <button 
                     onClick={() => navigateMonth(1)} 
-                    className="p-4 rounded-xl hover:bg-white dark:hover:bg-gray-600 transition shadow-md text-gray-600 dark:text-gray-300 active:scale-90"
+                    className="flex-1 flex items-center justify-center gap-2 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border-2 border-transparent hover:border-blue-500 transition-all active:scale-95 group"
                 >
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.5" d="M9 5l7 7-7 7"/></svg>
+                    <span className="hidden sm:inline font-black uppercase text-xs text-gray-400 group-hover:text-blue-600">Next</span>
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"/></svg>
                 </button>
             </div>
-            
-            {loading && <div className="text-center py-4 text-blue-600 font-bold animate-pulse uppercase tracking-widest text-xs">Syncing...</div>}
 
-            <div className="grid grid-cols-7 gap-2 text-center mb-4">
-                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
-                    <div key={day} className={`font-black text-sm uppercase py-2 ${idx === 0 ? 'text-red-500' : 'text-gray-400'}`}>{day}</div>
+            <div className="grid grid-cols-7 gap-2 mb-4">
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                    <div key={i} className={`text-center font-black text-xs py-2 uppercase ${i === 0 ? 'text-red-500' : 'text-gray-400'}`}>{d}</div>
                 ))}
-                {calendarDays.map((day, index) => {
+                {calendarDays.map((day, i) => {
                     const isCurrentMonth = day.getMonth() === currentDate.getMonth();
                     const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
                     const record = markedRecords.get(dayKey);
-                    const isMarked = !!record;
                     const isSunday = day.getDay() === 0;
                     const isFuture = day > todayDate;
 
-                    let classes = 'h-24 w-full rounded-2xl flex flex-col justify-center items-center border-2 transition-all ';
+                    let btnClass = 'h-20 sm:h-24 w-full rounded-2xl flex flex-col items-center justify-center border-2 transition-all ';
                     let label = '';
 
                     if (!isCurrentMonth) {
-                        classes += 'opacity-10 grayscale border-transparent pointer-events-none ';
-                    } else if (isMarked) {
+                        btnClass += 'opacity-10 grayscale border-transparent pointer-events-none ';
+                    } else if (record) {
                         if (record.workingStatus === 'Working') {
-                            classes += 'bg-green-600 border-green-700 text-white shadow-lg cursor-default ';
+                            btnClass += 'bg-green-600 border-green-700 text-white shadow-lg ';
                             label = 'Working';
                         } else {
-                            classes += 'bg-red-600 border-red-700 text-white shadow-lg cursor-default ';
+                            btnClass += 'bg-red-600 border-red-700 text-white shadow-lg ';
                             label = record.workingStatus;
                         }
                     } else if (isSunday) {
-                        classes += 'bg-red-600 border-red-700 text-white hover:scale-105 active:scale-95 ';
+                        btnClass += 'bg-red-600 border-red-700 text-white ';
                         label = 'Sunday';
                     } else if (isFuture) {
-                        classes += 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700 text-gray-300 cursor-not-allowed ';
+                        btnClass += 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700 text-gray-300 ';
                     } else {
-                        classes += 'bg-white dark:bg-gray-700 border-gray-100 dark:border-gray-600 text-gray-800 dark:text-gray-100 hover:border-blue-500 hover:scale-105 active:scale-95 ';
+                        btnClass += 'bg-white dark:bg-gray-700 border-gray-100 dark:border-gray-600 text-gray-800 dark:text-gray-100 hover:border-blue-500 hover:scale-105 active:scale-95 ';
                     }
 
                     return (
                         <button
-                            key={index}
-                            disabled={!isCurrentMonth || isFuture || isMarked}
-                            onClick={() => handleDayClick(day)}
-                            className={classes}
+                            key={i}
+                            disabled={!isCurrentMonth || isFuture || !!record}
+                            onClick={() => { setSelectedDate(day); setIsModalOpen(true); }}
+                            className={btnClass}
                         >
-                            <span className="font-black text-2xl">{day.getDate()}</span>
-                            {label && <span className="text-[10px] font-black uppercase mt-1">{label}</span>}
+                            <span className="font-black text-xl sm:text-2xl">{day.getDate()}</span>
+                            {label && <span className="text-[8px] font-black uppercase mt-1 truncate w-full px-1">{label}</span>}
                         </button>
                     );
                 })}
