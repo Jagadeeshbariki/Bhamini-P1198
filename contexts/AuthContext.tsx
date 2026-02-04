@@ -1,23 +1,11 @@
 
 import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { AuthUser, AuthContextType, Session } from '../types';
+import { GOOGLE_SHEET_USERS_URL } from '../config';
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
 const SESSION_DURATION = 12 * 60 * 60 * 1000;
-
-// Authorized staff accounts
-const HARDCODED_ACCOUNTS: Record<string, string> = {
-  'Jagadeesh': 'Jagadeesh@P1198',
-  'Manikumar': 'Manikumar@P1198',
-  'Jeddiskung': 'Jeddiskung@P1198',
-  'Simhachalam': 'Simhachalam@P1198',
-  'Sampath': 'Sampath@P1198',
-  'sampanth': 'sampanth@P1198',
-  'Ganapathi': 'Ganapathi@P1198',
-  'Patra':'Patra@P1198',
-  'Rajababu':'Rajababu@P1198'
-};
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -28,11 +16,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (sessionString) {
       try {
         const session: Session = JSON.parse(sessionString);
-        // Verify session is not expired AND the user still exists in our current code list
-        if (session.expiry > Date.now() && HARDCODED_ACCOUNTS[session.user.username]) {
+        if (session.expiry > Date.now()) {
           setUser(session.user);
         } else {
-          // Clear stale or invalid sessions
           localStorage.removeItem('bhamini_session');
           setUser(null);
         }
@@ -44,24 +30,97 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(false);
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    const trimmedEmail = email.trim();
-    const trimmedPassword = password.trim();
+  const parseCSV = (csv: string) => {
+    if (!csv || !csv.trim()) return [];
+    
+    // Split lines and filter out empty ones
+    const lines = csv.split(/\r?\n/).filter(line => line.trim().length > 0);
+    if (lines.length < 1) return [];
+    
+    const parseLine = (line: string) => {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      // Clean quotes from the beginning and end of values
+      return result.map(v => v.replace(/^"|"$/g, '').trim());
+    };
 
-    // Purely client-side authentication
-    if (HARDCODED_ACCOUNTS[trimmedEmail] && HARDCODED_ACCOUNTS[trimmedEmail] === trimmedPassword) {
-      const authUser: AuthUser = {
-        username: trimmedEmail,
-        // Both Jagadeesh and Patra have Admin privileges
-        isAdmin: trimmedEmail === 'Jagadeesh' || trimmedEmail === 'Patra',
-        token: undefined
-      };
-      const session: Session = { user: authUser, expiry: Date.now() + SESSION_DURATION };
-      localStorage.setItem('bhamini_session', JSON.stringify(session));
-      setUser(authUser);
-      return true;
+    const headers = parseLine(lines[0]).map(h => h.toUpperCase().replace(/\s+/g, ''));
+    
+    return lines.slice(1).map(line => {
+      const vals = parseLine(line);
+      const obj: any = {};
+      headers.forEach((h, i) => {
+        if (h) {
+          obj[h] = vals[i] || '';
+        }
+      });
+      return obj;
+    });
+  };
+
+  const login = useCallback(async (usernameInput: string, passwordInput: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${GOOGLE_SHEET_USERS_URL}&t=${Date.now()}`, {
+        method: 'GET',
+        cache: 'no-cache'
+      });
+
+      if (!response.ok) {
+        throw new Error(`Sheet access failed: ${response.status}`);
+      }
+
+      const csvText = await response.text();
+      const users = parseCSV(csvText);
+
+      // Diagnostic search with trimmed, case-exact username and password
+      const targetUser = usernameInput.trim();
+      const targetPass = passwordInput.trim();
+
+      const foundUser = users.find(u => 
+        u.USERNAME === targetUser && 
+        u.PASSWORD === targetPass
+      );
+
+      if (foundUser) {
+        const rawRole = (foundUser.ROLE || 'field').toLowerCase().trim();
+        const role = (['admin', 'project', 'field'].includes(rawRole) ? rawRole : 'field') as 'field' | 'project' | 'admin';
+        
+        const authUser: AuthUser = {
+          username: foundUser.USERNAME,
+          role: role,
+          isAdmin: role === 'admin'
+        };
+
+        const session: Session = { 
+          user: authUser, 
+          expiry: Date.now() + SESSION_DURATION 
+        };
+
+        localStorage.setItem('bhamini_session', JSON.stringify(session));
+        setUser(authUser);
+        console.log(`✅ Authentication successful for ${authUser.username} as ${authUser.role}`);
+        return true;
+      }
+      
+      console.warn("❌ Auth: No matching user found. Ensure USERNAME and PASSWORD match the spreadsheet exactly.");
+      return false;
+    } catch (err) {
+      console.error("❌ Auth: Connection error:", err);
+      return false;
     }
-    return false;
   }, []);
 
   const logout = useCallback(() => {
@@ -70,13 +129,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const registerUser = useCallback(async (): Promise<boolean> => {
-    console.warn("User registration is disabled in frontend-only mode.");
     return false;
   }, []);
 
   const getAllUsers = useCallback(async () => {
-    // Returns the current list of users from the code
-    return Object.keys(HARDCODED_ACCOUNTS).map(u => ({ username: u }));
+    try {
+      const response = await fetch(`${GOOGLE_SHEET_USERS_URL}&t=${Date.now()}`, {
+        cache: 'no-cache'
+      });
+      if (!response.ok) return [];
+      const csvText = await response.text();
+      const users = parseCSV(csvText);
+      return users.map(u => ({ 
+        username: u.USERNAME, 
+        role: (u.ROLE || 'field').toLowerCase().trim() 
+      }));
+    } catch {
+      return [];
+    }
   }, []);
 
   const value = { user, login, logout, getAllUsers, registerUser };

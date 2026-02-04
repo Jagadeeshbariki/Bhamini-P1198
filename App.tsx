@@ -10,19 +10,20 @@ import ReportPage from './components/ReportPage';
 import MarkAttendancePage from './components/MarkAttendancePage';
 import AdminPage from './components/AdminPage';
 import BudgetTrackerPage from './components/BudgetTrackerPage';
+import FieldMISPage from './components/FieldMISPage';
+import BaselinePage from './components/BaselinePage';
 import { APP_VERSION } from './config';
 
-type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker';
+type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>('home');
     const { user, logout } = useAuth();
-    const [lastProtectedPage, setLastProtectedPage] = useState<Page>('activity');
+    const [lastProtectedPage, setLastProtectedPage] = useState<Page>('home');
 
     useEffect(() => {
         const storedVersion = localStorage.getItem('app_version');
         if (storedVersion !== APP_VERSION) {
-            console.log(`Update detected: ${storedVersion || 'initial'} -> ${APP_VERSION}. Clearing cache...`);
             localStorage.clear();
             localStorage.setItem('app_version', APP_VERSION);
             if (user) logout();
@@ -31,16 +32,31 @@ const AppContent: React.FC = () => {
     }, [user, logout]);
 
     useEffect(() => {
-        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker'];
+        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline'];
+        
+        // Handle unauthenticated access to protected pages
         if (!user && protectedPages.includes(page)) {
             setLastProtectedPage(page);
             setPage('login');
+            return;
         }
-        
-        // Prevent non-admins from accessing admin-only pages
-        const adminPages: Page[] = ['admin', 'budget-tracker'];
-        if (user && adminPages.includes(page) && !user.isAdmin) {
-            setPage('home');
+
+        // Role-based Access Enforcement
+        if (user) {
+            const isField = user.role === 'field';
+            const isProject = user.role === 'project';
+            const isAdmin = user.role === 'admin';
+
+            if (isField) {
+                // Field staff: Allow Gallery, Attendance, Reports, MIS, Baseline
+                const restrictedPages: Page[] = ['activity', 'budget-tracker', 'admin'];
+                if (restrictedPages.includes(page)) setPage('home');
+            } else if (isProject) {
+                // Project staff: Allow Gallery, Dashboards, Budget, MIS, Baseline
+                const restrictedPages: Page[] = ['mark-attendance', 'attendance-report', 'admin'];
+                if (restrictedPages.includes(page)) setPage('home');
+            }
+            // Admin has no restrictions
         }
     }, [user, page]);
 
@@ -49,7 +65,11 @@ const AppContent: React.FC = () => {
     };
 
     const handleLoginSuccess = () => {
-        setPage(lastProtectedPage);
+        if (lastProtectedPage && lastProtectedPage !== 'login') {
+            setPage(lastProtectedPage);
+        } else {
+            setPage('home');
+        }
     };
 
     const handleLogout = () => {
@@ -71,6 +91,10 @@ const AppContent: React.FC = () => {
                 return <AdminPage />;
             case 'budget-tracker':
                 return <BudgetTrackerPage />;
+            case 'field-mis':
+                return <FieldMISPage />;
+            case 'baseline':
+                return <BaselinePage />;
             case 'login':
                 return <LoginPage onLoginSuccess={handleLoginSuccess} />;
             default:
@@ -79,15 +103,15 @@ const AppContent: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col">
+        <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors">
             <Header onNavigate={handleNavigate} onLogout={handleLogout} />
             <main className="flex-grow container mx-auto p-4 md:p-6 lg:p-8">
                 {renderPage()}
             </main>
-            <footer className="bg-white dark:bg-gray-800 shadow-md p-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            <footer className="bg-white dark:bg-gray-900 border-t dark:border-gray-800 p-6 text-center text-sm text-gray-500 dark:text-gray-400">
                 <div className="flex flex-col items-center gap-2">
-                    <p>© {new Date().getFullYear()} Bhamini-P1198. All rights reserved.</p>
-                    <p className="text-[10px] font-mono opacity-50 uppercase tracking-widest">Version {APP_VERSION}</p>
+                    <p>© {new Date().getFullYear()} Bhamini-P1198. CSR MIS Framework.</p>
+                    <p className="text-[10px] font-mono opacity-50 uppercase tracking-[0.3em]">System v{APP_VERSION}</p>
                 </div>
             </footer>
         </div>

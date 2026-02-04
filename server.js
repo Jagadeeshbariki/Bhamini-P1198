@@ -20,7 +20,7 @@ const UserSchema = new mongoose.Schema({
   username: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  isAdmin: { type: Boolean, default: false }
+  role: { type: String, enum: ['field', 'project', 'admin'], default: 'field' }
 });
 
 const ImageSchema = new mongoose.Schema({
@@ -60,7 +60,7 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, role } = req.body;
     if (!username || !email || !password) return res.status(400).json({ message: 'Missing fields' });
 
     const existingUser = await User.findOne({ email });
@@ -71,7 +71,7 @@ app.post('/api/auth/register', async (req, res) => {
         username, 
         email, 
         password: hashedPassword, 
-        isAdmin: username === 'Jagadeesh' || username === 'Patra'
+        role: role || 'field'
     });
     
     await newUser.save();
@@ -86,26 +86,22 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    const FALLBACK_ACCOUNTS = {
-        'Jagadeesh': 'Jagadeesh@P1198',
-        'Ganapathi': 'Ganapathi@P1198',
-        'Patra': 'Patra@P1198'
-    };
-
-    if (FALLBACK_ACCOUNTS[email] && FALLBACK_ACCOUNTS[email] === password) {
-        const isAdmin = email === 'Jagadeesh' || email === 'Patra';
-        const token = jwt.sign({ username: email, email, isAdmin }, JWT_SECRET, { expiresIn: '12h' });
-        return res.json({ token, user: { username: email, email, isAdmin } });
-    }
-
+    // Hardcoded fallback accounts REMOVED to prioritize Spreadsheet/DB sources.
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ message: 'User not found' });
 
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(400).json({ message: 'Invalid credentials' });
 
-    const token = jwt.sign({ id: user._id, username: user.username, email: user.email, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '12h' });
-    res.json({ token, user: { username: user.username, email: user.email, isAdmin: user.isAdmin } });
+    const token = jwt.sign({ 
+      id: user._id, 
+      username: user.username, 
+      email: user.email, 
+      role: user.role,
+      isAdmin: user.role === 'admin' 
+    }, JWT_SECRET, { expiresIn: '12h' });
+
+    res.json({ token, user: { username: user.username, email: user.email, role: user.role, isAdmin: user.role === 'admin' } });
   } catch (err) {
     res.status(500).json({ message: 'Internal Server Error' });
   }

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { GOOGLE_SHEET_CSV_URL, GOOGLE_APPS_SCRIPT_URL, GOOGLE_SHEET_PHOTOS_URL } from '../config';
+import { GOOGLE_SHEET_CSV_URL, GOOGLE_APPS_SCRIPT_URL, GOOGLE_SHEET_PHOTOS_URL, MIS_TARGETS_URL } from '../config';
 import { generateCalendarDays } from '../utils/calendar';
 
 interface AttendanceRecord {
@@ -23,14 +23,29 @@ interface PhotoRecord {
     timestamp: string;
 }
 
+interface MISTarget {
+    id: string;
+    name: string;
+    uom: string;
+}
+
 const AdminPage: React.FC = () => {
     const { user, getAllUsers } = useAuth();
-    const [view, setView] = useState<'attendance' | 'media'>('attendance');
+    const [view, setView] = useState<'attendance' | 'media' | 'mis'>('attendance');
     const [allAttendanceData, setAllAttendanceData] = useState<AttendanceRecord[]>([]);
     const [mediaRegistry, setMediaRegistry] = useState<PhotoRecord[]>([]);
+    const [misTargets, setMisTargets] = useState<MISTarget[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedUsername, setSelectedUsername] = useState<string>('');
     const [usersList, setUsersList] = useState<{username: string}[]>([]);
+
+    // MIS Manager State
+    const [selectedActivityId, setSelectedActivityId] = useState('');
+    const [achievementValue, setAchievementValue] = useState('');
+    const [achievementGP, setAchievementGP] = useState('');
+    const [achievementRemarks, setAchievementRemarks] = useState('');
+    const [isSubmittingMIS, setIsSubmittingMIS] = useState(false);
+    const [misStatus, setMisStatus] = useState<{success: boolean, message: string} | null>(null);
 
     // Media Manager State
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -147,11 +162,29 @@ const AdminPage: React.FC = () => {
         }
     }, []);
 
+    const fetchMISTargets = useCallback(async () => {
+        try {
+            const response = await fetch(`${MIS_TARGETS_URL}&_=${Date.now()}`);
+            if (!response.ok) return;
+            const csvText = await response.text();
+            const parsed = parseCSVToObjects(csvText);
+            const mapped: MISTarget[] = parsed.map(row => ({
+                id: row['ID'] || '',
+                name: row['NAME'] || '',
+                uom: row['UOM'] || ''
+            })).filter(t => t.id);
+            setMisTargets(mapped);
+            if (mapped.length > 0) setSelectedActivityId(mapped[0].id);
+        } catch (err) {
+            console.error('MIS Targets sync error:', err);
+        }
+    }, []);
+
     const fetchData = useCallback(async () => {
         setLoading(true);
-        await Promise.all([fetchAttendanceData(), fetchMediaRegistry(), loadUsers()]);
+        await Promise.all([fetchAttendanceData(), fetchMediaRegistry(), fetchMISTargets(), loadUsers()]);
         setLoading(false);
-    }, [fetchAttendanceData, fetchMediaRegistry, loadUsers]);
+    }, [fetchAttendanceData, fetchMediaRegistry, fetchMISTargets, loadUsers]);
 
     useEffect(() => {
         fetchData();
@@ -246,6 +279,45 @@ const AdminPage: React.FC = () => {
         }
     };
 
+    const handleAchievementSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedActivityId || !achievementValue) return;
+        
+        setIsSubmittingMIS(true);
+        setMisStatus(null);
+        
+        try {
+            const payload = {
+                action: "addAchievement",
+                id: selectedActivityId,
+                value: achievementValue,
+                gp: achievementGP,
+                remarks: achievementRemarks,
+                timestamp: new Date().toISOString()
+            };
+
+            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                setMisStatus({ success: true, message: "Achievement logged successfully!" });
+                setAchievementValue('');
+                setAchievementGP('');
+                setAchievementRemarks('');
+            } else {
+                throw new Error("Submission failed");
+            }
+        } catch (err: any) {
+            setMisStatus({ success: false, message: err.message });
+        } finally {
+            setIsSubmittingMIS(false);
+        }
+    };
+
     const filteredRecords = useMemo(() => {
         if (!selectedUsername) return [];
         const monthIdx = months.indexOf(selectedMonth);
@@ -293,23 +365,29 @@ const AdminPage: React.FC = () => {
                     <h1 className="text-3xl font-black text-gray-800 dark:text-white">Admin Console</h1>
                     <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-1">Management & Oversight</p>
                 </div>
-                <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl shadow-inner border border-gray-200 dark:border-gray-700">
+                <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl shadow-inner border border-gray-200 dark:border-gray-700 overflow-x-auto no-scrollbar">
                     <button 
                         onClick={() => setView('attendance')}
-                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${view === 'attendance' ? 'bg-white dark:bg-gray-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'attendance' ? 'bg-white dark:bg-gray-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                         Attendance
                     </button>
                     <button 
+                        onClick={() => setView('mis')}
+                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'mis' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        MIS Manager
+                    </button>
+                    <button 
                         onClick={() => setView('media')}
-                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${view === 'media' ? 'bg-white dark:bg-gray-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'media' ? 'bg-white dark:bg-gray-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                         Media Manager
                     </button>
                 </div>
             </div>
 
-            {view === 'attendance' ? (
+            {view === 'attendance' && (
                 <div className="space-y-6 animate-fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="flex flex-col gap-1">
@@ -417,7 +495,102 @@ const AdminPage: React.FC = () => {
                         </table>
                     </div>
                 </div>
-            ) : (
+            )}
+
+            {view === 'mis' && (
+                <div className="max-w-4xl mx-auto animate-fade-in">
+                    <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-lg shadow-indigo-200">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055zM20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Achievement Logger</h2>
+                                <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1">Submit Field Performance Data</p>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleAchievementSubmit} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-gray-400 px-1">Activity Code (ID)</label>
+                                    <select 
+                                        value={selectedActivityId}
+                                        onChange={e => setSelectedActivityId(e.target.value)}
+                                        className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold focus:ring-2 focus:ring-indigo-600 transition-all text-sm"
+                                        required
+                                    >
+                                        {misTargets.map(t => (
+                                            <option key={t.id} value={t.id}>{t.id} - {t.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-gray-400 px-1">Value (Actual Achieved)</label>
+                                    <div className="relative">
+                                        <input 
+                                            type="number" 
+                                            step="0.01"
+                                            value={achievementValue}
+                                            onChange={e => setAchievementValue(e.target.value)}
+                                            placeholder="Enter numeric value"
+                                            className="w-full bg-gray-50 dark:bg-gray-900 p-4 pr-12 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold focus:ring-2 focus:ring-indigo-600 transition-all text-sm"
+                                            required
+                                        />
+                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-400 uppercase">
+                                            {misTargets.find(t => t.id === selectedActivityId)?.uom || 'units'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Village / GP Name</label>
+                                <input 
+                                    type="text" 
+                                    value={achievementGP}
+                                    onChange={e => setAchievementGP(e.target.value)}
+                                    placeholder="Where was this achieved?"
+                                    className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold focus:ring-2 focus:ring-indigo-600 transition-all text-sm"
+                                    required
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Submission Remarks</label>
+                                <textarea 
+                                    value={achievementRemarks}
+                                    onChange={e => setAchievementRemarks(e.target.value)}
+                                    placeholder="Add context or notes for this update..."
+                                    rows={3}
+                                    className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold focus:ring-2 focus:ring-indigo-600 transition-all text-sm resize-none"
+                                />
+                            </div>
+
+                            <button 
+                                type="submit"
+                                disabled={isSubmittingMIS}
+                                className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-3 mt-4"
+                            >
+                                {isSubmittingMIS ? (
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Logging Progress...</span>
+                                    </div>
+                                ) : "Push Achievement to Master Sheet"}
+                            </button>
+
+                            {misStatus && (
+                                <div className={`p-4 rounded-2xl text-center text-xs font-bold animate-pulse ${misStatus.success ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-red-50 text-red-600 border border-red-100'}`}>
+                                    {misStatus.message}
+                                </div>
+                            )}
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {view === 'media' && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start animate-fade-in">
                     {/* Publication Form */}
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
@@ -608,6 +781,7 @@ const AdminPage: React.FC = () => {
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
                 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
+                .no-scrollbar::-webkit-scrollbar { display: none; }
             `}</style>
         </div>
     );
