@@ -1,6 +1,6 @@
 
 // Central configuration for the Bhamini-P1198 Application
-export const APP_VERSION = '1.8.0';
+export const APP_VERSION = '1.9.2';
 
 /**
  * PROJECT MASTER SPREADSHEET SETUP
@@ -28,7 +28,16 @@ export const MIS_ACHIEVEMENTS_URL = 'https://docs.google.com/spreadsheets/d/e/2P
  */
 export const BASELINE_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRChs5F_pm2wiyLm9ZWvacWEyp86OpEUORX8WxUvmeVhTlZ3Vs9YXNEbb7ZP2zew8DRjXRrrJRjHkZW/pub?gid=0&single=true&output=csv';
 
-// 6. SYSTEM ENDPOINT
+/**
+ * 6. OFFICE MAINTENANCE & BILLS
+ * Corrected to output=csv format
+ */
+export const MAINTENANCE_BILLS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2T6skNnpDlaFl8n93i0eO7zlF0bK-sdndW1-AIRRpWf-YJkYzXjiC8B1e5hFdZ2KqMsNTKN9NCmPG/pub?gid=1851901743&single=true&output=csv';
+
+/**
+ * 7. SYSTEM ENDPOINT
+ * REPLACE THIS with your deployed Google Apps Script Web App URL.
+ */
 export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby4omIqQ9ANnowOT75v9b-7LJmrZ1_Fb1iZGfSNRVo8TbkmsuGv4Mf9h36MMwVPkjaiVw/exec';
 
 // UI Fallbacks
