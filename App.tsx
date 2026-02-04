@@ -105,7 +105,7 @@ const AppContent: React.FC = () => {
 
     return (
         <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors">
-            <Header onNavigate={handleNavigate} onLogout={handleLogout} />
+            <Header currentPage={page} onNavigate={handleNavigate} onLogout={handleLogout} />
             <main className="flex-grow container mx-auto p-4 md:p-6 lg:p-8">
                 {renderPage()}
             </main>

@@ -3,29 +3,36 @@ import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
 interface HeaderProps {
+    currentPage: string;
     onNavigate: (page: any) => void;
     onLogout: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) => {
     const { user } = useAuth();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-    const NavLink: React.FC<{ page: string; children: React.ReactNode; primary?: boolean }> = ({ page, children, primary }) => (
-        <button
-            onClick={() => {
-                onNavigate(page);
-                setIsMenuOpen(false);
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                primary 
-                ? 'bg-indigo-600 text-white shadow-lg hover:bg-indigo-700' 
-                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600'
-            }`}
-        >
-            {children}
-        </button>
-    );
+    const NavLink: React.FC<{ page: string; children: React.ReactNode; primary?: boolean }> = ({ page: targetPage, children, primary }) => {
+        const isActive = currentPage === targetPage;
+        
+        return (
+            <button
+                onClick={() => {
+                    onNavigate(targetPage);
+                    setIsMenuOpen(false);
+                }}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+                    isActive 
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none scale-105' 
+                    : primary 
+                        ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900/40' 
+                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600'
+                }`}
+            >
+                {children}
+            </button>
+        );
+    };
 
     // Permission Logic based on User Roles
     const isFieldRole = user?.role === 'field' || user?.role === 'admin';
@@ -41,10 +48,10 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                             onClick={() => onNavigate('home')}
                             className="flex items-center gap-2 focus:outline-none group"
                         >
-                            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl transition-transform group-hover:rotate-12">
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-xl transition-all duration-500 ${currentPage === 'home' ? 'bg-indigo-600 rotate-12 scale-110' : 'bg-gray-400 dark:bg-gray-700 group-hover:bg-indigo-500 group-hover:rotate-12'}`}>
                                 <span className="font-black text-xl">B</span>
                             </div>
-                            <div className="flex flex-col">
+                            <div className="flex flex-col text-left">
                                 <span className="font-black text-lg tracking-tighter text-gray-900 dark:text-white leading-none">BHAMINI</span>
                                 <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">P1198 MIS</span>
                             </div>
@@ -55,7 +62,6 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                         <div className="flex items-center gap-2">
                             <NavLink page="home">Gallery</NavLink>
                             
-                            {/* Baseline & Target vs Achievement visible to everyone logged in */}
                             {user && (
                                 <>
                                     <NavLink page="baseline">Baseline Explorer</NavLink>
@@ -63,7 +69,6 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                                 </>
                             )}
 
-                            {/* Project Staff: Dashboard, Budget */}
                             {isProjectRole && (
                                 <>
                                     <NavLink page="activity">Dashboards</NavLink>
@@ -71,7 +76,6 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                                 </>
                             )}
 
-                            {/* Field Staff: Attendance & Reports */}
                             {isFieldRole && (
                                 <>
                                     <NavLink page="mark-attendance">Log Work</NavLink>
@@ -79,18 +83,17 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                                 </>
                             )}
 
-                            {/* Admin Section */}
                             {isAdmin && <NavLink page="admin">Admin Panel</NavLink>}
                             
                             <div className="h-6 w-px bg-gray-100 dark:bg-gray-800 mx-2"></div>
                             {user ? (
                                 <button
                                     onClick={onLogout}
-                                    className="p-2 text-gray-400 hover:text-red-500 transition-colors flex items-center gap-2"
+                                    className="p-2 text-gray-400 hover:text-red-500 transition-colors flex items-center gap-2 group"
                                     title="Logout"
                                 >
-                                    <span className="text-[9px] font-black uppercase">{user.username}</span>
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                                    <span className="text-[9px] font-black uppercase group-hover:text-red-500">{user.username}</span>
+                                    <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                                 </button>
                             ) : (
                                 <NavLink page="login">Sign In</NavLink>
@@ -101,7 +104,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                     <div className="flex items-center gap-4">
                         <button
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
-                            className="xl:hidden p-2 rounded-2xl bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
+                            className="xl:hidden p-2 rounded-2xl bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors hover:bg-gray-100"
                         >
                             <svg className="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
                                 {isMenuOpen ? (
@@ -117,8 +120,8 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
 
             {/* Mobile Menu */}
             {isMenuOpen && (
-                <div className="xl:hidden bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 animate-fade-in">
-                    <div className="px-4 py-6 space-y-3">
+                <div className="xl:hidden bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 animate-fade-in overflow-hidden">
+                    <div className="px-4 py-6 flex flex-col gap-2">
                         <NavLink page="home">Gallery</NavLink>
                         {user && (
                             <>
@@ -128,7 +131,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                         )}
                         {isProjectRole && (
                             <>
-                                <NavLink page="activity">Visual Dashboards</NavLink>
+                                <NavLink page="activity">Dashboards</NavLink>
                                 <NavLink page="budget-tracker">Budget Analysis</NavLink>
                             </>
                         )}
@@ -142,7 +145,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                         {user ? (
                             <button
                                 onClick={() => { onLogout(); setIsMenuOpen(false); }}
-                                className="w-full text-center py-4 text-xs font-black uppercase text-red-500 bg-red-50 dark:bg-red-900/10 rounded-2xl"
+                                className="w-full text-center py-4 text-xs font-black uppercase text-red-500 bg-red-50 dark:bg-red-900/10 rounded-2xl mt-4"
                             >
                                 Logout ({user.username})
                             </button>
