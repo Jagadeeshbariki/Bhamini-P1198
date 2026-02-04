@@ -17,6 +17,9 @@ interface HouseholdData {
     category: string;
     tribeName: string;
     phoneNumber: string;
+    aadharNumber: string;
+    totalFamilyMembers: string;
+    annualIncome: string;
 }
 
 const BaselinePage: React.FC = () => {
@@ -48,31 +51,66 @@ const BaselinePage: React.FC = () => {
         };
 
         const rawHeaders = parseLine(lines[0]);
+        
+        // Expanded fuzzy mapping for common spreadsheet column names
         const headersMap: Record<string, string> = {
             'FARMERID': 'farmerId',
+            'FID': 'farmerId',
             'SUBMISSIONDATE': 'submissionDate',
+            'DATE': 'submissionDate',
             'DISTRICT': 'district',
             'BLOCK': 'block',
             'CLUSTER': 'cluster',
             'GP': 'gp',
+            'GRAMPANCHAYAT': 'gp',
             'VILLAGE': 'village',
             'HHHEADNAME': 'hhHeadName',
+            'FARMERNAME': 'hhHeadName',
+            'NAME': 'hhHeadName',
             'FATHER/HUSBANDNAME': 'spouseName',
+            'GUARDIANNAME': 'spouseName',
+            'SPOUSENAME': 'spouseName',
             'AGE': 'age',
             'GENDER': 'gender',
+            'SEX': 'gender',
             'CATEGORY': 'category',
+            'CASTE': 'category',
             'TRIBE_NAME': 'tribeName',
-            'PHONENUMBER': 'phoneNumber'
+            'TRIBE': 'tribeName',
+            'PHONENUMBER': 'phoneNumber',
+            'MOBILE': 'phoneNumber',
+            'CONTACT': 'phoneNumber',
+            // Comprehensive Aadhaar mapping
+            'AADHARNUMBER': 'aadharNumber',
+            'AADHAR': 'aadharNumber',
+            'AADHARNO': 'aadharNumber',
+            'ADHAR': 'aadharNumber',
+            'ADHARNO': 'aadharNumber',
+            'ADHARNUMBER': 'aadharNumber',
+            'UID': 'aadharNumber',
+            'UIDNO': 'aadharNumber',
+            // Family details mapping
+            'TOTALFAMILYMEMBERS': 'totalFamilyMembers',
+            'FAMILYMEMBERS': 'totalFamilyMembers',
+            'FAMILYSIZE': 'totalFamilyMembers',
+            'HHSIZE': 'totalFamilyMembers',
+            'TOTALMEMBERS': 'totalFamilyMembers',
+            'TOTALMEMBERSINHH': 'totalFamilyMembers',
+            // Income mapping
+            'ANNUALINCOME': 'annualIncome',
+            'INCOME': 'annualIncome',
+            'HOUSEHOLDINCOME': 'annualIncome',
+            'YEARLYINCOME': 'annualIncome'
         };
 
-        const cleanHeaders = rawHeaders.map(h => h.toUpperCase().replace(/\s+/g, ''));
+        const cleanHeaders = rawHeaders.map(h => h.toUpperCase().replace(/[^A-Z]/g, ''));
 
         return lines.slice(1).map(line => {
             const vals = parseLine(line);
             const row: any = {};
             cleanHeaders.forEach((h, i) => {
                 const key = headersMap[h];
-                if (key) row[key] = vals[i] || '';
+                if (key) row[key] = (vals[i] || '').toString().trim();
             });
             return row as HouseholdData;
         });
@@ -111,13 +149,18 @@ const BaselinePage: React.FC = () => {
     }, [allData, selectedCluster, selectedGP]);
 
     const filteredData = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
         return allData.filter(d => {
             const matchesCluster = selectedCluster === 'All' || d.cluster === selectedCluster;
             const matchesGP = selectedGP === 'All' || d.gp === selectedGP;
             const matchesVillage = selectedVillage === 'All' || d.village === selectedVillage;
-            const matchesSearch = !searchQuery || 
-                (d.hhHeadName || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-                (d.farmerId || '').toLowerCase().includes(searchQuery.toLowerCase());
+            
+            // Refined search logic for Aadhaar and ID
+            const matchesSearch = !query || 
+                (d.hhHeadName || '').toLowerCase().includes(query) || 
+                (d.farmerId || '').toLowerCase().includes(query) ||
+                (d.aadharNumber || '').toLowerCase().includes(query);
+                
             return matchesCluster && matchesGP && matchesVillage && matchesSearch;
         });
     }, [allData, selectedCluster, selectedGP, selectedVillage, searchQuery]);
@@ -135,13 +178,13 @@ const BaselinePage: React.FC = () => {
             <div className="bg-white dark:bg-gray-800 p-5 md:p-8 rounded-[2rem] md:rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-700">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Baseline Explorer</h1>
-                        <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-[0.2em] mt-1">Household Registry</p>
+                        <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight text-indigo-600">Baseline Explorer</h1>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-1">Household Registry</p>
                     </div>
                     <div className="w-full md:w-80 relative group">
                         <input 
                             type="text" 
-                            placeholder="Search Name or Farmer ID..."
+                            placeholder="Name, ID or Aadhar Number..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-gray-900 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold focus:ring-2 focus:ring-indigo-600 shadow-inner text-sm transition-all"
@@ -186,7 +229,7 @@ const BaselinePage: React.FC = () => {
 
             {/* Content View: Desktop Table / Mobile Cards */}
             <div className="space-y-4">
-                {/* Desktop Hidden Table */}
+                {/* Desktop View Table */}
                 <div className="hidden md:block bg-white dark:bg-gray-800 rounded-3xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-xl">
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700">
@@ -203,7 +246,10 @@ const BaselinePage: React.FC = () => {
                                 <tr key={i} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-900/10 transition-colors group">
                                     <td className="px-6 py-5">
                                         <div className="font-black text-gray-900 dark:text-white text-sm group-hover:text-indigo-600 transition-colors">{row.hhHeadName}</div>
-                                        <div className="text-[10px] font-bold text-indigo-500 uppercase tracking-tight">{row.farmerId}</div>
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-tight">FID: {row.farmerId || 'N/A'}</span>
+                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">UID: {row.aadharNumber || 'MISSING'}</span>
+                                        </div>
                                     </td>
                                     <td className="px-6 py-5 text-sm font-bold text-gray-500">{row.spouseName || '---'}</td>
                                     <td className="px-6 py-5">
@@ -239,7 +285,10 @@ const BaselinePage: React.FC = () => {
                             <div className="flex justify-between items-start mb-4">
                                 <div>
                                     <h3 className="text-base font-black text-gray-900 dark:text-white leading-tight">{row.hhHeadName}</h3>
-                                    <span className="text-[10px] font-black text-indigo-500 uppercase">{row.farmerId}</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-black text-indigo-500 uppercase">{row.farmerId || 'No FID'}</span>
+                                        <span className="text-[9px] font-black text-gray-400 uppercase">UID: {row.aadharNumber || '---'}</span>
+                                    </div>
                                 </div>
                                 <div className="bg-indigo-50 dark:bg-indigo-900/20 p-2 rounded-xl text-indigo-600">
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"/></svg>
@@ -261,7 +310,7 @@ const BaselinePage: React.FC = () => {
 
                 {filteredData.length === 0 && (
                     <div className="p-20 text-center bg-white dark:bg-gray-800 rounded-3xl border border-dashed border-gray-200 text-gray-400 font-bold italic">
-                        No records match the filters.
+                        No records match your search criteria.
                     </div>
                 )}
             </div>
@@ -270,15 +319,18 @@ const BaselinePage: React.FC = () => {
             {selectedBeneficiary && (
                 <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" onClick={() => setSelectedBeneficiary(null)}>
                     <div 
-                        className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-t-[2.5rem] sm:rounded-[3rem] shadow-2xl p-6 sm:p-10 max-h-[90vh] overflow-y-auto transform transition-all animate-slide-up"
+                        className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-t-[2.5rem] sm:rounded-[3rem] shadow-2xl p-6 sm:p-10 max-h-[95vh] overflow-y-auto transform transition-all animate-slide-up"
                         onClick={e => e.stopPropagation()}
                     >
                         {/* Header */}
-                        <div className="flex justify-between items-start mb-8">
+                        <div className="flex justify-between items-start mb-8 sticky top-0 bg-white dark:bg-gray-900 z-10 pb-4 border-b border-gray-100 dark:border-gray-800">
                             <div className="space-y-1">
                                 <div className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest inline-block mb-2">Household Profile</div>
                                 <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight uppercase">{selectedBeneficiary.hhHeadName}</h2>
-                                <p className="text-sm font-bold text-indigo-500">ID: {selectedBeneficiary.farmerId}</p>
+                                <div className="flex flex-col gap-1">
+                                    <p className="text-sm font-bold text-indigo-500 tracking-tighter uppercase">Farmer ID: {selectedBeneficiary.farmerId || '---'}</p>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase">Aadhar (UID): {selectedBeneficiary.aadharNumber || 'NOT FOUND'}</p>
+                                </div>
                             </div>
                             <button 
                                 onClick={() => setSelectedBeneficiary(null)}
@@ -289,9 +341,13 @@ const BaselinePage: React.FC = () => {
                         </div>
 
                         {/* Detailed Data Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-10">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
+                            <DetailItem label="Full Name" value={selectedBeneficiary.hhHeadName} highlight />
+                            <DetailItem label="Aadhar / UID" value={selectedBeneficiary.aadharNumber} highlight />
                             <DetailItem label="Father / Husband Name" value={selectedBeneficiary.spouseName} />
                             <DetailItem label="Age & Gender" value={`${selectedBeneficiary.age} Years • ${selectedBeneficiary.gender}`} />
+                            <DetailItem label="Total Family Members" value={selectedBeneficiary.totalFamilyMembers || '---'} highlight />
+                            <DetailItem label="Annual Income" value={selectedBeneficiary.annualIncome ? `₹${selectedBeneficiary.annualIncome}` : '---'} highlight />
                             <DetailItem label="Category" value={selectedBeneficiary.category} />
                             <DetailItem label="Tribe Name" value={selectedBeneficiary.tribeName} />
                             <DetailItem label="Village" value={selectedBeneficiary.village} />
@@ -327,10 +383,10 @@ const BaselinePage: React.FC = () => {
     );
 };
 
-const DetailItem: React.FC<{ label: string; value: string; isContact?: boolean }> = ({ label, value, isContact }) => (
-    <div className="space-y-1.5 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-700 transition-colors hover:border-indigo-200">
+const DetailItem: React.FC<{ label: string; value: string; isContact?: boolean; highlight?: boolean }> = ({ label, value, isContact, highlight }) => (
+    <div className={`space-y-1.5 p-4 rounded-2xl border transition-colors ${highlight ? 'bg-indigo-50 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800' : 'bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-700 hover:border-indigo-200'}`}>
         <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">{label}</p>
-        <p className={`text-sm font-bold ${isContact ? 'text-emerald-600' : 'text-gray-800 dark:text-gray-200'}`}>
+        <p className={`text-sm font-bold ${isContact ? 'text-emerald-600' : highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-800 dark:text-gray-200'}`}>
             {value || '---'}
         </p>
     </div>
