@@ -12,6 +12,7 @@ import AdminPage from './components/AdminPage';
 import BudgetTrackerPage from './components/BudgetTrackerPage';
 import FieldMISPage from './components/FieldMISPage';
 import BaselinePage from './components/BaselinePage';
+import AutoInstallBanner from './components/AutoInstallBanner';
 import { APP_VERSION } from './config';
 
 type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline';
@@ -114,6 +115,9 @@ const AppContent: React.FC = () => {
                     <p className="text-[10px] font-mono opacity-50 uppercase tracking-[0.3em]">System v{APP_VERSION}</p>
                 </div>
             </footer>
+            
+            {/* Automatic Install Notification */}
+            <AutoInstallBanner />
         </div>
     );
 }

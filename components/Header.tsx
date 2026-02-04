@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import InstallPWAButton from './InstallPWAButton';
 
 interface HeaderProps {
     onNavigate: (page: any) => void;
@@ -100,7 +99,6 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, onLogout }) => {
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <InstallPWAButton />
                         <button
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
                             className="xl:hidden p-2 rounded-2xl bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
