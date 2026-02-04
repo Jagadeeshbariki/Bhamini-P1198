@@ -52,7 +52,6 @@ const BaselinePage: React.FC = () => {
 
         const rawHeaders = parseLine(lines[0]);
         
-        // Expanded fuzzy mapping for common spreadsheet column names
         const headersMap: Record<string, string> = {
             'FARMERID': 'farmerId',
             'FID': 'farmerId',
@@ -80,7 +79,6 @@ const BaselinePage: React.FC = () => {
             'PHONENUMBER': 'phoneNumber',
             'MOBILE': 'phoneNumber',
             'CONTACT': 'phoneNumber',
-            // Comprehensive Aadhaar mapping
             'AADHARNUMBER': 'aadharNumber',
             'AADHAR': 'aadharNumber',
             'AADHARNO': 'aadharNumber',
@@ -89,14 +87,12 @@ const BaselinePage: React.FC = () => {
             'ADHARNUMBER': 'aadharNumber',
             'UID': 'aadharNumber',
             'UIDNO': 'aadharNumber',
-            // Family details mapping
             'TOTALFAMILYMEMBERS': 'totalFamilyMembers',
             'FAMILYMEMBERS': 'totalFamilyMembers',
             'FAMILYSIZE': 'totalFamilyMembers',
             'HHSIZE': 'totalFamilyMembers',
             'TOTALMEMBERS': 'totalFamilyMembers',
             'TOTALMEMBERSINHH': 'totalFamilyMembers',
-            // Income mapping
             'ANNUALINCOME': 'annualIncome',
             'INCOME': 'annualIncome',
             'HOUSEHOLDINCOME': 'annualIncome',
@@ -155,7 +151,6 @@ const BaselinePage: React.FC = () => {
             const matchesGP = selectedGP === 'All' || d.gp === selectedGP;
             const matchesVillage = selectedVillage === 'All' || d.village === selectedVillage;
             
-            // Refined search logic for Aadhaar and ID
             const matchesSearch = !query || 
                 (d.hhHeadName || '').toLowerCase().includes(query) || 
                 (d.farmerId || '').toLowerCase().includes(query) ||
@@ -227,9 +222,8 @@ const BaselinePage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Content View: Desktop Table / Mobile Cards */}
+            {/* List View */}
             <div className="space-y-4">
-                {/* Desktop View Table */}
                 <div className="hidden md:block bg-white dark:bg-gray-800 rounded-3xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-xl">
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700">
@@ -274,7 +268,6 @@ const BaselinePage: React.FC = () => {
                     </table>
                 </div>
 
-                {/* Mobile View Card Grid */}
                 <div className="md:hidden grid grid-cols-1 gap-4">
                     {filteredData.slice(0, 100).map((row, i) => (
                         <div 
@@ -294,16 +287,6 @@ const BaselinePage: React.FC = () => {
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"/></svg>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <p className="text-[8px] font-black uppercase text-gray-400">Village</p>
-                                    <p className="text-xs font-bold truncate">{row.village}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-[8px] font-black uppercase text-gray-400">Category</p>
-                                    <p className="text-xs font-bold truncate">{row.category}</p>
-                                </div>
-                            </div>
                         </div>
                     ))}
                 </div>
@@ -315,56 +298,65 @@ const BaselinePage: React.FC = () => {
                 )}
             </div>
 
-            {/* Detail Modal Overlay */}
+            {/* Redesigned Detail Modal Overlay */}
             {selectedBeneficiary && (
                 <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" onClick={() => setSelectedBeneficiary(null)}>
                     <div 
-                        className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-t-[2.5rem] sm:rounded-[3rem] shadow-2xl p-6 sm:p-10 max-h-[95vh] overflow-y-auto transform transition-all animate-slide-up"
+                        className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-t-[2.5rem] sm:rounded-[3rem] shadow-2xl flex flex-col max-h-[95vh] overflow-hidden transform transition-all animate-slide-up"
                         onClick={e => e.stopPropagation()}
                     >
-                        {/* Header */}
-                        <div className="flex justify-between items-start mb-8 sticky top-0 bg-white dark:bg-gray-900 z-10 pb-4 border-b border-gray-100 dark:border-gray-800">
-                            <div className="space-y-1">
-                                <div className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest inline-block mb-2">Household Profile</div>
-                                <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight uppercase">{selectedBeneficiary.hhHeadName}</h2>
-                                <div className="flex flex-col gap-1">
-                                    <p className="text-sm font-bold text-indigo-500 tracking-tighter uppercase">Farmer ID: {selectedBeneficiary.farmerId || '---'}</p>
+                        {/* Mobile Handle */}
+                        <div className="sm:hidden flex justify-center py-2.5">
+                            <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full opacity-50"></div>
+                        </div>
+
+                        {/* Static Header (Always Visible) */}
+                        <div className="px-6 py-5 sm:px-10 sm:py-8 border-b border-gray-100 dark:border-gray-800 flex justify-between items-start bg-white dark:bg-gray-900">
+                            <div className="space-y-1.5">
+                                <div className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest inline-block mb-1">Household Profile</div>
+                                <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white leading-tight uppercase pr-4">
+                                    {selectedBeneficiary.hhHeadName}
+                                </h2>
+                                <div className="flex flex-col gap-0.5">
+                                    <p className="text-[11px] font-bold text-indigo-500 tracking-tighter uppercase">Farmer ID: {selectedBeneficiary.farmerId || '---'}</p>
                                     <p className="text-[10px] font-black text-gray-400 uppercase">Aadhar (UID): {selectedBeneficiary.aadharNumber || 'NOT FOUND'}</p>
                                 </div>
                             </div>
                             <button 
                                 onClick={() => setSelectedBeneficiary(null)}
-                                className="p-3 bg-gray-50 dark:bg-gray-800 rounded-2xl hover:bg-gray-100 transition-colors"
+                                className="p-3 bg-gray-50 dark:bg-gray-800 rounded-2xl hover:bg-gray-100 transition-colors flex-shrink-0"
                             >
                                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
                         </div>
 
-                        {/* Detailed Data Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
-                            <DetailItem label="Full Name" value={selectedBeneficiary.hhHeadName} highlight />
-                            <DetailItem label="Aadhar / UID" value={selectedBeneficiary.aadharNumber} highlight />
-                            <DetailItem label="Father / Husband Name" value={selectedBeneficiary.spouseName} />
-                            <DetailItem label="Age & Gender" value={`${selectedBeneficiary.age} Years • ${selectedBeneficiary.gender}`} />
-                            <DetailItem label="Total Family Members" value={selectedBeneficiary.totalFamilyMembers || '---'} highlight />
-                            <DetailItem label="Annual Income" value={selectedBeneficiary.annualIncome ? `₹${selectedBeneficiary.annualIncome}` : '---'} highlight />
-                            <DetailItem label="Category" value={selectedBeneficiary.category} />
-                            <DetailItem label="Tribe Name" value={selectedBeneficiary.tribeName} />
-                            <DetailItem label="Village" value={selectedBeneficiary.village} />
-                            <DetailItem label="Gram Panchayat" value={selectedBeneficiary.gp} />
-                            <DetailItem label="Cluster" value={selectedBeneficiary.cluster} />
-                            <DetailItem label="Block & District" value={`${selectedBeneficiary.block}, ${selectedBeneficiary.district}`} />
-                            <DetailItem label="Phone Number" value={selectedBeneficiary.phoneNumber || 'Not Provided'} isContact />
-                            <DetailItem label="Baseline Date" value={selectedBeneficiary.submissionDate} />
-                        </div>
+                        {/* Scrollable Content Area */}
+                        <div className="flex-grow overflow-y-auto px-6 py-6 sm:px-10 sm:py-8 space-y-8 bg-gray-50/50 dark:bg-gray-950/20">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <DetailItem label="Full Name" value={selectedBeneficiary.hhHeadName} highlight />
+                                <DetailItem label="Aadhar / UID" value={selectedBeneficiary.aadharNumber} highlight />
+                                <DetailItem label="Father / Husband Name" value={selectedBeneficiary.spouseName} />
+                                <DetailItem label="Age & Gender" value={`${selectedBeneficiary.age} Years • ${selectedBeneficiary.gender}`} />
+                                <DetailItem label="Total Family Members" value={selectedBeneficiary.totalFamilyMembers || '---'} highlight />
+                                <DetailItem label="Annual Income" value={selectedBeneficiary.annualIncome ? `₹${selectedBeneficiary.annualIncome}` : '---'} highlight />
+                                <DetailItem label="Category" value={selectedBeneficiary.category} />
+                                <DetailItem label="Tribe Name" value={selectedBeneficiary.tribeName} />
+                                <DetailItem label="Village" value={selectedBeneficiary.village} />
+                                <DetailItem label="Gram Panchayat" value={selectedBeneficiary.gp} />
+                                <DetailItem label="Cluster" value={selectedBeneficiary.cluster} />
+                                <DetailItem label="Block & District" value={`${selectedBeneficiary.block}, ${selectedBeneficiary.district}`} />
+                                <DetailItem label="Phone Number" value={selectedBeneficiary.phoneNumber || 'Not Provided'} isContact />
+                                <DetailItem label="Baseline Date" value={selectedBeneficiary.submissionDate} />
+                            </div>
 
-                        {/* Footer Action */}
-                        <button 
-                            onClick={() => setSelectedBeneficiary(null)}
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-100 dark:shadow-none transition-all active:scale-[0.98] uppercase tracking-widest text-xs"
-                        >
-                            Close Explorer
-                        </button>
+                            {/* Sticky Footer Action inside content */}
+                            <button 
+                                onClick={() => setSelectedBeneficiary(null)}
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-100 dark:shadow-none transition-all active:scale-[0.98] uppercase tracking-widest text-xs"
+                            >
+                                Close Explorer
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -374,7 +366,6 @@ const BaselinePage: React.FC = () => {
                 @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
                 .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
                 .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-                .no-scrollbar::-webkit-scrollbar { display: none; }
                 @media (min-width: 640px) {
                     .animate-slide-up { animation: fade-in 0.4s ease-out forwards; }
                 }
@@ -384,7 +375,7 @@ const BaselinePage: React.FC = () => {
 };
 
 const DetailItem: React.FC<{ label: string; value: string; isContact?: boolean; highlight?: boolean }> = ({ label, value, isContact, highlight }) => (
-    <div className={`space-y-1.5 p-4 rounded-2xl border transition-colors ${highlight ? 'bg-indigo-50 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800' : 'bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-700 hover:border-indigo-200'}`}>
+    <div className={`space-y-1.5 p-4 rounded-2xl border transition-colors ${highlight ? 'bg-indigo-50 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800' : 'bg-white dark:bg-gray-800/80 border-gray-100 dark:border-gray-700 hover:border-indigo-200 shadow-sm'}`}>
         <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">{label}</p>
         <p className={`text-sm font-bold ${isContact ? 'text-emerald-600' : highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-800 dark:text-gray-200'}`}>
             {value || '---'}
