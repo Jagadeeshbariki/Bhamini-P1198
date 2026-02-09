@@ -19,10 +19,14 @@ interface AssetRecord {
     totalPrice: number;
     paymentStatus: string;
     assetStatus: string;
-    // Cluster Specific Data
+    // Stock Received
     qtyCluster1: number;
     qtyCluster2: number;
     qtyCluster3: number;
+    // Distributed (Issued)
+    distCluster1: number;
+    distCluster2: number;
+    distCluster3: number;
     cluster1Name: string;
     cluster2Name: string;
     cluster3Name: string;
@@ -59,7 +63,10 @@ const AssetTrackingDashboard: React.FC = () => {
             return idx !== -1 ? row[idx] : '';
         };
 
-        const parseNum = (val: string) => parseFloat(val.toString().replace(/[^0-9.]/g, '')) || 0;
+        const parseNum = (val: any) => {
+            if (val === undefined || val === null) return 0;
+            return parseFloat(val.toString().replace(/[^0-9.]/g, '')) || 0;
+        };
 
         return lines.slice(1).map(line => {
             const row = parseLine(line);
@@ -82,12 +89,22 @@ const AssetTrackingDashboard: React.FC = () => {
                 totalPrice: parseNum(getVal(row, 'TOTALPRICE')),
                 paymentStatus: getVal(row, 'PAYMENTSTATUS'),
                 assetStatus: getVal(row, 'STATUSOFTHEASSET'),
+                
+                // Cluster Mapping based on standard index provided in prompts
+                // 19: Cluster 1 Name, 21: Received, 22: Issued (Distributed)
                 cluster1Name: row[19] || 'Cluster 1',
                 qtyCluster1: parseNum(row[21]),
+                distCluster1: parseNum(row[22]),
+                
+                // 23: Cluster 2 Name, 25: Received, 26: Issued (Distributed)
                 cluster2Name: row[23] || 'Cluster 2',
                 qtyCluster2: parseNum(row[25]),
+                distCluster2: parseNum(row[26]),
+                
+                // 27: Cluster 3 Name, 29: Received, 30: Issued (Distributed)
                 cluster3Name: row[27] || 'Cluster 3',
                 qtyCluster3: parseNum(row[29]),
+                distCluster3: parseNum(row[30]),
             };
         }).filter((a): a is AssetRecord => !!a && !!a.assetName);
     };
@@ -118,9 +135,9 @@ const AssetTrackingDashboard: React.FC = () => {
             const matchesBudget = filterBudgetHead === 'All' || d.budgetHead === filterBudgetHead;
             
             let matchesCluster = true;
-            if (filterCluster === 'Cluster 1') matchesCluster = d.qtyCluster1 > 0;
-            else if (filterCluster === 'Cluster 2') matchesCluster = d.qtyCluster2 > 0;
-            else if (filterCluster === 'Cluster 3') matchesCluster = d.qtyCluster3 > 0;
+            if (filterCluster === 'Cluster 1') matchesCluster = d.qtyCluster1 > 0 || d.distCluster1 > 0;
+            else if (filterCluster === 'Cluster 2') matchesCluster = d.qtyCluster2 > 0 || d.distCluster2 > 0;
+            else if (filterCluster === 'Cluster 3') matchesCluster = d.qtyCluster3 > 0 || d.distCluster3 > 0;
 
             return matchesSearch && matchesBudget && matchesCluster;
         });
@@ -134,6 +151,12 @@ const AssetTrackingDashboard: React.FC = () => {
         const receivedQty = filteredData.reduce((acc, d) => acc + d.qtyReceived, 0);
         const totalPending = filteredData.reduce((acc, d) => acc + d.pending, 0);
         
+        // Distribution Stats
+        const dist1 = filteredData.reduce((acc, d) => acc + d.distCluster1, 0);
+        const dist2 = filteredData.reduce((acc, d) => acc + d.distCluster2, 0);
+        const dist3 = filteredData.reduce((acc, d) => acc + d.distCluster3, 0);
+        const totalDistributed = dist1 + dist2 + dist3;
+
         const paidItems = filteredData.filter(d => d.paymentStatus.toLowerCase().includes('paid'));
         const paidTotal = paidItems.reduce((acc, d) => acc + d.totalPrice, 0);
         const paymentProgress = totalInvestment > 0 ? (paidTotal / totalInvestment) * 100 : 0;
@@ -149,7 +172,8 @@ const AssetTrackingDashboard: React.FC = () => {
 
         return { 
             totalInvestment, hdfcTotal, commTotal, totalQty, receivedQty, 
-            totalPending, paymentProgress, topActivities, paidTotal 
+            totalPending, paymentProgress, topActivities, paidTotal,
+            dist1, dist2, dist3, totalDistributed
         };
     }, [filteredData]);
 
@@ -198,13 +222,13 @@ const AssetTrackingDashboard: React.FC = () => {
 
                 <div className="bg-indigo-600 p-8 rounded-[2.5rem] text-white shadow-2xl flex flex-col justify-between min-h-[180px]">
                     <div>
-                        <p className="text-[10px] font-black uppercase opacity-70 tracking-widest mb-1">Inventory Fulfilment</p>
-                        <h3 className="text-4xl font-black text-white">{(stats.receivedQty / (stats.totalQty || 1) * 100).toFixed(0)}%</h3>
+                        <p className="text-[10px] font-black uppercase opacity-70 tracking-widest mb-1">Distribution Reach</p>
+                        <h3 className="text-4xl font-black text-white">{stats.totalDistributed.toLocaleString()}</h3>
                     </div>
                     <div className="flex justify-between items-end">
                         <div className="flex flex-col">
-                            <span className="text-2xl font-black">{stats.totalPending}</span>
-                            <span className="text-[9px] font-black uppercase opacity-60 tracking-widest">Awaiting Delivery</span>
+                            <span className="text-2xl font-black">{(stats.totalDistributed / (stats.totalQty || 1) * 100).toFixed(0)}%</span>
+                            <span className="text-[9px] font-black uppercase opacity-60 tracking-widest">Distributed to Field</span>
                         </div>
                         <div className="bg-white/20 px-4 py-2 rounded-2xl">
                             <span className="text-[10px] font-black uppercase tracking-widest">{stats.receivedQty} IN STOCK</span>
@@ -244,42 +268,51 @@ const AssetTrackingDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Middle Insight Section */}
+            {/* Middle Insight Section - Two Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-xl">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-gray-400 mb-6">Top 5 Activities by Spend</h3>
+                    <h3 className="text-sm font-black uppercase tracking-widest text-gray-400 mb-6">Activity Expenditure Analysis</h3>
                     <div className="space-y-5">
                         {stats.topActivities.map((act, i) => (
                             <div key={i} className="space-y-1.5">
                                 <div className="flex justify-between text-[10px] font-black uppercase tracking-tight">
                                     <span className="text-gray-700 dark:text-gray-300">{act.code}</span>
-                                    <span className="text-indigo-600 font-bold">₹{act.val.toLocaleString()}</span>
+                                    <span className="text-emerald-600 font-bold">₹{act.val.toLocaleString()}</span>
                                 </div>
                                 <div className="h-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(act.val / stats.totalInvestment) * 100}%` }}></div>
+                                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(act.val / (stats.totalInvestment || 1)) * 100}%` }}></div>
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
-                <div className="bg-gray-900 text-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col justify-between">
-                    <div>
-                        <h3 className="text-sm font-black uppercase tracking-widest text-emerald-400 mb-6">Asset Health Insights</h3>
-                        <div className="grid grid-cols-2 gap-6">
-                            <div className="p-4 bg-white/5 rounded-3xl border border-white/10">
-                                <p className="text-[9px] font-black uppercase opacity-60">Avg. Unit Price</p>
-                                <p className="text-2xl font-black mt-1">₹{stats.totalQty > 0 ? (stats.totalInvestment / stats.totalQty).toFixed(0) : 0}</p>
+                
+                <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-xl">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-gray-400 mb-6">Asset Distribution by Cluster</h3>
+                    <div className="space-y-6">
+                        {[
+                            { name: 'Cluster 1', val: stats.dist1, color: 'bg-indigo-500' },
+                            { name: 'Cluster 2', val: stats.dist2, color: 'bg-blue-500' },
+                            { name: 'Cluster 3', val: stats.dist3, color: 'bg-indigo-400' }
+                        ].map((cluster, idx) => (
+                            <div key={idx} className="space-y-1.5">
+                                <div className="flex justify-between text-[10px] font-black uppercase tracking-tight">
+                                    <span className="text-gray-700 dark:text-gray-300">{cluster.name}</span>
+                                    <span className="text-indigo-600 font-bold">{cluster.val} Assets Distributed</span>
+                                </div>
+                                <div className="h-4 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
+                                    <div 
+                                        className={`h-full ${cluster.color} rounded-full transition-all duration-1000`} 
+                                        style={{ width: `${(cluster.val / (stats.totalDistributed || 1)) * 100}%` }}
+                                    ></div>
+                                </div>
                             </div>
-                            <div className="p-4 bg-white/5 rounded-3xl border border-white/10">
-                                <p className="text-[9px] font-black uppercase opacity-60">High-Value Count</p>
-                                <p className="text-2xl font-black mt-1">{filteredData.filter(d => d.totalPrice > 10000).length}</p>
-                            </div>
+                        ))}
+                        <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+                             <p className="text-[10px] font-bold text-gray-400 uppercase text-center tracking-widest">
+                                Total Units Issued to Beneficiaries: {stats.totalDistributed}
+                             </p>
                         </div>
-                    </div>
-                    <div className="mt-8 space-y-4">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase leading-relaxed italic">
-                            * Analysis based on {filteredData.length} records. High-value count includes assets with total investment exceeding ₹10,000.
-                        </p>
                     </div>
                 </div>
             </div>
@@ -296,7 +329,7 @@ const AssetTrackingDashboard: React.FC = () => {
                             <tr>
                                 <th className="px-6 py-5 text-[9px] font-black uppercase text-gray-400">Asset & Date</th>
                                 <th className="px-6 py-5 text-[9px] font-black uppercase text-gray-400 text-center">Procurement Status</th>
-                                <th className="px-6 py-5 text-[9px] font-black uppercase text-gray-400 text-center">Stock Breakdown</th>
+                                <th className="px-6 py-5 text-[9px] font-black uppercase text-gray-400 text-center">Distributed / In Stock</th>
                                 <th className="px-6 py-5 text-[9px] font-black uppercase text-gray-400 text-right">Investment</th>
                             </tr>
                         </thead>
@@ -315,20 +348,24 @@ const AssetTrackingDashboard: React.FC = () => {
                                                 <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(asset.qtyReceived / asset.qtyPurchased) * 100}%` }}></div>
                                             </div>
                                             <span className={`text-[8px] font-black mt-1 tracking-widest ${asset.pending > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
-                                                {asset.pending > 0 ? `${asset.pending} UNITS PENDING` : 'FULLY RECEIVED'}
+                                                {asset.pending > 0 ? `${asset.pending} UNITS AWAITING` : 'FULLY PROCURED'}
                                             </span>
                                         </div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex justify-center gap-2">
                                             {[
-                                                { label: 'C1', val: asset.qtyCluster1 },
-                                                { label: 'C2', val: asset.qtyCluster2 },
-                                                { label: 'C3', val: asset.qtyCluster3 }
+                                                { label: 'C1', dist: asset.distCluster1, stock: asset.qtyCluster1 },
+                                                { label: 'C2', dist: asset.distCluster2, stock: asset.qtyCluster2 },
+                                                { label: 'C3', dist: asset.distCluster3, stock: asset.qtyCluster3 }
                                             ].map((c, idx) => (
-                                                <div key={idx} className="flex flex-col items-center p-2.5 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700 min-w-[40px]">
+                                                <div key={idx} className="flex flex-col items-center p-2.5 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700 min-w-[55px]">
                                                     <span className="text-[8px] font-black text-gray-400 uppercase mb-0.5">{c.label}</span>
-                                                    <span className="text-xs font-black text-gray-800 dark:text-white">{c.val}</span>
+                                                    <div className="flex flex-col items-center leading-none">
+                                                        <span className="text-[11px] font-black text-indigo-600" title="Distributed">{c.dist}</span>
+                                                        <div className="h-px w-4 bg-gray-200 my-1"></div>
+                                                        <span className="text-[10px] font-bold text-gray-500" title="In Stock">{c.stock}</span>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
