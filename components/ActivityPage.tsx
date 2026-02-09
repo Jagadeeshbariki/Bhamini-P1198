@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import Dashboard from './Dashboard';
+import AssetTrackingDashboard from './AssetTrackingDashboard';
 
 export interface ActivityType {
     id: string;
@@ -9,6 +10,7 @@ export interface ActivityType {
 }
 
 const ACTIVITIES: ActivityType[] = [
+    { id: 'assets', name: 'Asset Tracking System', description: 'Interactive inventory, procurement ledger, and stock point monitoring.' },
     { id: 'hari', name: 'Hari', description: 'Field Data Tracking: Household Head Name and IDs Details' },
     { id: 'agriculture', name: 'Agriculture & Livelihoods', description: 'Tracking crop yields, farmer training, and income.' },
     { id: 'education', name: 'Education & Skills', description: 'School enrollment, digital literacy, and vocational training.' },
@@ -25,6 +27,13 @@ const ActivityPage: React.FC = () => {
     const handleSelect = (activity: ActivityType) => {
         setSelectedActivity(activity);
         setIsPickerOpen(false);
+    };
+
+    const renderContent = () => {
+        if (selectedActivity.id === 'assets') {
+            return <AssetTrackingDashboard />;
+        }
+        return <Dashboard activityId={selectedActivity.id} />;
     };
 
     return (
@@ -76,13 +85,13 @@ const ActivityPage: React.FC = () => {
             <main className="flex-grow w-full space-y-4">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h2 className="text-3xl font-extrabold text-gray-800 dark:text-white">{selectedActivity.name}</h2>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">{selectedActivity.description}</p>
+                        <h2 className="text-3xl font-extrabold text-gray-800 dark:text-white uppercase tracking-tight">{selectedActivity.name}</h2>
+                        <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm font-medium">{selectedActivity.description}</p>
                     </div>
                 </div>
                 
                 <div className="bg-gray-100 dark:bg-gray-900 rounded-2xl p-1 shadow-inner border border-gray-200 dark:border-gray-800">
-                    <Dashboard activityId={selectedActivity.id} />
+                    {renderContent()}
                 </div>
             </main>
         </div>
