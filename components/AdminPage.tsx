@@ -83,7 +83,7 @@ const AdminPage: React.FC = () => {
     const [selectedUsername, setSelectedUsername] = useState<string>('');
     const [usersList, setUsersList] = useState<{username: string}[]>([]);
 
-    // Asset Manager State (Only Update mode now)
+    // Asset Manager State
     const [filterBudgetHead, setFilterBudgetHead] = useState('');
     const [selectedAssetId, setSelectedAssetId] = useState(''); 
     const [assetForm, setAssetForm] = useState<Partial<AssetRecord>>({});
@@ -562,9 +562,11 @@ const AdminPage: React.FC = () => {
     };
 
     const handleDeletePhoto = async (url: string) => {
-        if (!window.confirm("Remove this photo permanently?")) return;
+        if (!window.confirm("Remove this photo record from spreadsheet?")) return;
         setIsDeleting(url);
+        
         try {
+            console.log("Attempting to delete URL:", url);
             const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
                 method: 'POST',
                 mode: 'cors',
@@ -572,14 +574,27 @@ const AdminPage: React.FC = () => {
                 body: JSON.stringify({ action: 'deletePhoto', url })
             });
             
-            const result = await response.json();
-            if (result.status === 'success') {
-                setMediaRegistry(prev => prev.filter(p => p.url !== url));
-            } else {
-                alert("Delete failed.");
+            const rawText = await response.text();
+            console.log("Raw Server Response:", rawText);
+
+            let result;
+            try {
+                result = JSON.parse(rawText);
+            } catch (e) {
+                console.error("JSON Parse Error:", e);
+                alert("Server returned non-JSON data. Check script logs. Server said:\n" + rawText.substring(0, 200));
+                return;
             }
-        } catch (err) {
-            console.error(err);
+            
+            if (result?.status === 'success' || result?.result === 'success') {
+                setMediaRegistry(prev => prev.filter(p => p.url !== url));
+                alert("Deleted successfully from spreadsheet.");
+            } else {
+                alert(`Script Alert: ${result?.message || 'Delete operation reported failure on server.'}`);
+            }
+        } catch (err: any) {
+            console.error("Fetch Exception:", err);
+            alert(`Connection Error: ${err.message}. Ensure your Google Script is published as 'Anyone' access.`);
         } finally {
             setIsDeleting(null);
         }
@@ -865,7 +880,6 @@ const AdminPage: React.FC = () => {
 
                                 {selectedAssetId !== '' && (
                                     <div className="space-y-8 animate-fade-in pt-4 border-t border-gray-100 dark:border-gray-700">
-                                        {/* Core Procurement Details */}
                                         <div className="p-8 bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-gray-100 dark:border-gray-700 space-y-6">
                                             <h4 className="text-[10px] font-black uppercase text-indigo-600 tracking-widest px-1">Asset Metadata & Procurement</h4>
                                             

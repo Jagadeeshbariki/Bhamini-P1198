@@ -46,20 +46,20 @@ const PhotoSlider: React.FC<PhotoSliderProps> = ({ images }) => {
                             loading="lazy" 
                         />
                         
-                        {/* Dramatic Gradient Overlay for Text Readability */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none"></div>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none"></div>
                         
-                        {/* Enhanced Description Overlay */}
-                        {img.description && index === currentIndex && (
-                            <div className="absolute bottom-12 left-0 right-0 px-6 sm:px-12 animate-description z-20">
+                        {index === currentIndex && (
+                            <div className="absolute bottom-10 left-0 right-0 px-6 sm:px-12 z-20 animate-description-entry">
                                 <div className="max-w-2xl">
-                                    <div className="bg-black/40 backdrop-blur-xl border border-white/20 p-5 sm:p-7 rounded-[2rem] shadow-2xl inline-block text-left transform transition-all">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <div className="h-1 w-8 bg-blue-500 rounded-full"></div>
-                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">Project Insight</span>
+                                    <div className="bg-white/10 backdrop-blur-2xl border border-white/20 p-6 sm:p-8 rounded-[2.5rem] shadow-2xl inline-block text-left transform transition-all hover:bg-white/20">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="h-1 w-10 bg-indigo-500 rounded-full"></div>
+                                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-400">Activity Insight</span>
                                         </div>
-                                        <p className="text-white text-lg sm:text-2xl font-black tracking-tight leading-tight drop-shadow-lg">
-                                            {img.description}
+                                        <p className="text-white text-lg sm:text-2xl font-black tracking-tight leading-tight drop-shadow-xl">
+                                            {img.description && img.description.trim() !== "" 
+                                                ? img.description 
+                                                : "Bhamini P1198 Field Documentation: Capturing impact across project GPs."}
                                         </p>
                                     </div>
                                 </div>
@@ -69,19 +69,18 @@ const PhotoSlider: React.FC<PhotoSliderProps> = ({ images }) => {
                 ))}
             </div>
 
-            {/* Premium Navigation Controls */}
             {images.length > 1 && (
                 <>
                     <button
                         onClick={prevSlide}
-                        className="absolute top-1/2 left-6 -translate-y-1/2 bg-white/10 backdrop-blur-md text-white p-4 rounded-full hover:bg-blue-600 transition-all transform hover:scale-110 active:scale-90 opacity-0 group-hover:opacity-100 z-30 border border-white/20"
+                        className="absolute top-1/2 left-6 -translate-y-1/2 bg-black/20 backdrop-blur-md text-white p-4 rounded-full hover:bg-indigo-600 transition-all transform hover:scale-110 active:scale-90 opacity-0 group-hover:opacity-100 z-30 border border-white/10"
                         aria-label="Previous image"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7"/></svg>
                     </button>
                     <button
                         onClick={nextSlide}
-                        className="absolute top-1/2 right-6 -translate-y-1/2 bg-white/10 backdrop-blur-md text-white p-4 rounded-full hover:bg-blue-600 transition-all transform hover:scale-110 active:scale-90 opacity-0 group-hover:opacity-100 z-30 border border-white/20"
+                        className="absolute top-1/2 right-6 -translate-y-1/2 bg-black/20 backdrop-blur-md text-white p-4 rounded-full hover:bg-indigo-600 transition-all transform hover:scale-110 active:scale-90 opacity-0 group-hover:opacity-100 z-30 border border-white/10"
                         aria-label="Next image"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"/></svg>
@@ -93,7 +92,7 @@ const PhotoSlider: React.FC<PhotoSliderProps> = ({ images }) => {
                                 key={index}
                                 onClick={() => setCurrentIndex(index)}
                                 className={`h-1.5 rounded-full transition-all duration-500 ${
-                                    currentIndex === index ? 'w-8 bg-blue-500' : 'w-2 bg-white/40'
+                                    currentIndex === index ? 'w-10 bg-indigo-500 shadow-[0_0_10px_rgba(79,70,229,0.8)]' : 'w-2 bg-white/40'
                                 }`}
                                 aria-label={`Go to slide ${index + 1}`}
                             ></button>
@@ -103,12 +102,12 @@ const PhotoSlider: React.FC<PhotoSliderProps> = ({ images }) => {
             )}
             
             <style>{`
-                @keyframes description-slide {
+                @keyframes description-entry {
                     from { opacity: 0; transform: translateY(30px) scale(0.95); }
                     to { opacity: 1; transform: translateY(0) scale(1); }
                 }
-                .animate-description {
-                    animation: description-slide 0.8s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+                .animate-description-entry {
+                    animation: description-entry 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
                 }
             `}</style>
         </div>
