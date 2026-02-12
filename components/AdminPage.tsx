@@ -1,7 +1,14 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { GOOGLE_SHEET_CSV_URL, GOOGLE_APPS_SCRIPT_URL, GOOGLE_SHEET_PHOTOS_URL, MIS_TARGETS_URL, MAINTENANCE_BILLS_URL } from '../config';
+import { 
+    GOOGLE_SHEET_CSV_URL, 
+    GOOGLE_APPS_SCRIPT_URL, 
+    GOOGLE_SHEET_PHOTOS_URL, 
+    MIS_TARGETS_URL, 
+    MAINTENANCE_BILLS_URL,
+    ASSETS_DATA_URL
+} from '../config';
 import { generateCalendarDays } from '../utils/calendar';
 
 interface AttendanceRecord {
@@ -40,16 +47,48 @@ interface MaintenanceBill {
     timestamp: string;
 }
 
+interface AssetRecord {
+    id: string;
+    projectCode: string;
+    budgetHead: string;
+    activityCode: string;
+    assetCode: string;
+    assetName: string;
+    dateOfPurchase: string;
+    costPerUnit: number;
+    hdfcContribution: number;
+    communityContribution: number;
+    qtyPurchased: number;
+    qtyReceived: number;
+    qtyCluster1: number;
+    distCluster1: number;
+    qtyCluster2: number;
+    distCluster2: number;
+    qtyCluster3: number;
+    distCluster3: number;
+    assetStatus: string;
+    paymentStatus: string;
+    totalPrice: number;
+}
+
 const AdminPage: React.FC = () => {
     const { user, getAllUsers } = useAuth();
-    const [view, setView] = useState<'attendance' | 'media' | 'mis' | 'maintenance'>('attendance');
+    const [view, setView] = useState<'attendance' | 'media' | 'mis' | 'maintenance' | 'assets'>('attendance');
     const [allAttendanceData, setAllAttendanceData] = useState<AttendanceRecord[]>([]);
     const [mediaRegistry, setMediaRegistry] = useState<PhotoRecord[]>([]);
     const [misTargets, setMisTargets] = useState<MISTarget[]>([]);
     const [maintenanceBills, setMaintenanceBills] = useState<MaintenanceBill[]>([]);
+    const [assetsList, setAssetsList] = useState<AssetRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedUsername, setSelectedUsername] = useState<string>('');
     const [usersList, setUsersList] = useState<{username: string}[]>([]);
+
+    // Asset Manager State (Only Update mode now)
+    const [filterBudgetHead, setFilterBudgetHead] = useState('');
+    const [selectedAssetId, setSelectedAssetId] = useState(''); 
+    const [assetForm, setAssetForm] = useState<Partial<AssetRecord>>({});
+    const [isSubmittingAsset, setIsSubmittingAsset] = useState(false);
+    const [assetUpdateStatus, setAssetUpdateStatus] = useState<{success: boolean, message: string} | null>(null);
 
     // MIS Manager State
     const [selectedActivityId, setSelectedActivityId] = useState('');
@@ -67,7 +106,6 @@ const AdminPage: React.FC = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const [uploadStatus, setUploadStatus] = useState<{success: boolean, message: string} | null>(null);
-    const [isZoomOpen, setIsZoomOpen] = useState(false);
 
     // Maintenance Manager State
     const [isSubmittingBill, setIsSubmittingBill] = useState(false);
@@ -100,6 +138,21 @@ const AdminPage: React.FC = () => {
 
     const calendarDays = useMemo(() => generateCalendarDays(calendarDate), [calendarDate]);
 
+    const handleMonthNav = (direction: number) => {
+        let idx = months.indexOf(selectedMonth);
+        let yr = parseInt(selectedYear);
+        idx += direction;
+        if (idx < 0) {
+            idx = 11;
+            yr--;
+        } else if (idx > 11) {
+            idx = 0;
+            yr++;
+        }
+        setSelectedMonth(months[idx]);
+        setSelectedYear(yr.toString());
+    };
+
     const loadUsers = useCallback(async () => {
         const list = await getAllUsers();
         setUsersList(list);
@@ -110,7 +163,7 @@ const AdminPage: React.FC = () => {
 
     const parseCSVToObjects = (csv: string): Record<string, string>[] => {
         if (!csv) return [];
-        const lines = csv.trim().split(/\r\n|\n/);
+        const lines = csv.trim().split(/\r?\n/);
         if (lines.length < 1) return [];
         
         const parseLine = (line: string): string[] => {
@@ -141,11 +194,54 @@ const AdminPage: React.FC = () => {
     const getFuzzy = (row: Record<string, string>, keywords: string[]) => {
         const keys = Object.keys(row);
         for (const keyword of keywords) {
-            const match = keys.find(k => k.includes(keyword));
+            const match = keys.find(k => k.includes(keyword.toUpperCase()) || keyword.toUpperCase().includes(k));
             if (match && row[match]) return row[match];
         }
         return '';
     };
+
+    const parseNum = (val: any) => parseFloat(val?.toString().replace(/[^0-9.]/g, '')) || 0;
+
+    const fetchAssetsData = useCallback(async () => {
+        try {
+            const response = await fetch(`${ASSETS_DATA_URL}&_=${Date.now()}`);
+            if (!response.ok) return;
+            const text = await response.text();
+            const raw = parseCSVToObjects(text);
+            const mapped: AssetRecord[] = raw.map((row, index) => {
+                const keys = Object.keys(row);
+                let id = getFuzzy(row, ['SNO', 'S.NO', 'SERIAL', 'ID']);
+                if (!id) id = `row-${index}`;
+
+                return {
+                    id: String(id),
+                    projectCode: getFuzzy(row, ['PROJECTCODE']),
+                    budgetHead: getFuzzy(row, ['BUDGETHEAD']),
+                    activityCode: getFuzzy(row, ['ACTIVITYCODE']),
+                    assetCode: getFuzzy(row, ['ASSETCODE']),
+                    assetName: getFuzzy(row, ['ASSETNAME']),
+                    dateOfPurchase: getFuzzy(row, ['DATEOFPURCHASE']),
+                    costPerUnit: parseNum(getFuzzy(row, ['COSTOFUNIT'])),
+                    hdfcContribution: parseNum(getFuzzy(row, ['HDFCCONTRIBUTION'])),
+                    communityContribution: parseNum(getFuzzy(row, ['COMMUNITYCONTRIBUTION'])),
+                    qtyPurchased: parseNum(getFuzzy(row, ['NUMBEROFASSETPURCHASED'])),
+                    qtyReceived: parseNum(getFuzzy(row, ['HOWMANYRECEIVED'])),
+                    qtyCluster1: parseNum(row[keys[21]] || 0),
+                    distCluster1: parseNum(row[keys[22]] || 0),
+                    qtyCluster2: parseNum(row[keys[25]] || 0),
+                    distCluster2: parseNum(row[keys[26]] || 0),
+                    qtyCluster3: parseNum(row[keys[29]] || 0),
+                    distCluster3: parseNum(row[keys[30]] || 0),
+                    assetStatus: getFuzzy(row, ['STATUSOFTHEASSET']),
+                    paymentStatus: getFuzzy(row, ['PAYMENTSTATUS']),
+                    totalPrice: parseNum(getFuzzy(row, ['TOTALPRICE'])),
+                };
+            }).filter(a => a.assetName);
+            setAssetsList(mapped);
+        } catch (err) {
+            console.error('Asset fetch error:', err);
+        }
+    }, []);
 
     const fetchAttendanceData = useCallback(async () => {
         try {
@@ -156,13 +252,13 @@ const AdminPage: React.FC = () => {
             
             const mapped: AttendanceRecord[] = parsed.map(row => ({
                 timestamp: getFuzzy(row, ['TIMESTAMP']) || '',
-                name: (getFuzzy(row, ['NAME', 'PERSON']) || '').trim(),
-                date: getFuzzy(row, ['DATE']) || '',
-                workingStatus: getFuzzy(row, ['STATUS', 'WORKING']) || '',
-                reasonNotWorking: getFuzzy(row, ['REASON']) || '',
-                placeOfVisit: getFuzzy(row, ['PLACE', 'VILLAGE']) || '',
-                purposeOfVisit: getFuzzy(row, ['PURPOSE', 'ACTIVITY']) || '',
-                workingHours: getFuzzy(row, ['HOURS']) || '0',
+                name: (getFuzzy(row, ['NAME', 'PERSON', 'SELECTYOURNAME']) || '').trim(),
+                date: getFuzzy(row, ['DATE', 'CHOOSEDATE']) || '',
+                workingStatus: getFuzzy(row, ['STATUS', 'WORKING', 'WORKING/LEAVE/HOLIDAY']) || '',
+                reasonNotWorking: getFuzzy(row, ['REASON', 'WRITETHEREASONFORNOTWORKING']) || '',
+                placeOfVisit: getFuzzy(row, ['PLACE', 'VILLAGE', 'PLACEOFVISIT']) || '',
+                purposeOfVisit: getFuzzy(row, ['PURPOSE', 'ACTIVITY', 'PURPOSEOFVISIT']) || '',
+                workingHours: getFuzzy(row, ['HOURS', 'WORKINGHOURS']) || '0',
                 outcomes: getFuzzy(row, ['OUTCOME']) || '',
             }));
             setAllAttendanceData(mapped);
@@ -240,14 +336,69 @@ const AdminPage: React.FC = () => {
             fetchMediaRegistry(), 
             fetchMISTargets(), 
             fetchMaintenanceBills(),
+            fetchAssetsData(),
             loadUsers()
         ]);
         setLoading(false);
-    }, [fetchAttendanceData, fetchMediaRegistry, fetchMISTargets, fetchMaintenanceBills, loadUsers]);
+    }, [fetchAttendanceData, fetchMediaRegistry, fetchMISTargets, fetchMaintenanceBills, fetchAssetsData, loadUsers]);
 
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    const uniqueBudgetHeads = useMemo(() => {
+        const set = new Set(assetsList.map(a => a.budgetHead));
+        return Array.from(set).filter(Boolean).sort();
+    }, [assetsList]);
+
+    const filteredMaterials = useMemo(() => {
+        if (!filterBudgetHead) return [];
+        return assetsList.filter(a => a.budgetHead === filterBudgetHead);
+    }, [assetsList, filterBudgetHead]);
+
+    const handleAssetSelect = (id: string) => {
+        setSelectedAssetId(id);
+        const asset = assetsList.find(a => String(a.id) === String(id));
+        if (asset) {
+            setAssetForm({...asset});
+        } else {
+            setAssetForm({});
+        }
+        setAssetUpdateStatus(null);
+    };
+
+    const handleUpdateAsset = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmittingAsset(true);
+        setAssetUpdateStatus(null);
+
+        try {
+            const payload = {
+                action: "updateAsset",
+                id: selectedAssetId,
+                ...assetForm
+            };
+
+            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            if (result.status === 'success' || result.result === 'success') {
+                setAssetUpdateStatus({ success: true, message: "Asset distribution updated!" });
+                await fetchAssetsData();
+            } else {
+                throw new Error(result.message || "Update failed");
+            }
+        } catch (err: any) {
+            setAssetUpdateStatus({ success: false, message: err.message });
+        } finally {
+            setIsSubmittingAsset(false);
+        }
+    };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -351,7 +502,6 @@ const AdminPage: React.FC = () => {
             if (result.status === 'success' || result.result === 'success') {
                 setMaintenanceStatus({ success: true, message: "Entry logged successfully!" });
                 
-                // OPTIMISTIC UPDATE: Add the new bill to the state immediately
                 const newBill: MaintenanceBill = {
                     id: result.billId || `TEMP-${Date.now()}`,
                     date: billDate,
@@ -365,7 +515,6 @@ const AdminPage: React.FC = () => {
                 
                 setMaintenanceBills(prev => [newBill, ...prev]);
 
-                // Reset Form
                 setBillAmount('');
                 setBillDescription('');
                 setBillFile(null);
@@ -522,7 +671,7 @@ const AdminPage: React.FC = () => {
     if (loading) return (
         <div className="flex flex-col items-center justify-center min-h-[50vh]">
             <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Authorizing Console...</p>
+            <p className="text-gray-400 font-black uppercase tracking-widest text-[10px]">Authorizing Console...</p>
         </div>
     );
 
@@ -535,38 +684,50 @@ const AdminPage: React.FC = () => {
                 </div>
                 <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl shadow-inner border border-gray-200 dark:border-gray-700 overflow-x-auto no-scrollbar">
                     <button onClick={() => setView('attendance')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'attendance' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-700'}`}>Attendance</button>
-                    <button onClick={() => setView('mis')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'mis' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-700'}`}>MIS Manager</button>
-                    <button onClick={() => setView('media')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'media' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-700'}`}>Media Manager</button>
-                    <button onClick={() => setView('maintenance')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'maintenance' ? 'bg-white dark:bg-gray-700 shadow-sm text-emerald-600 dark:text-emerald-400' : 'text-gray-500 hover:text-gray-700'}`}>Office Maintenance</button>
+                    <button onClick={() => setView('mis')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'mis' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-700'}`}>MIS</button>
+                    <button onClick={() => setView('media')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'media' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-700'}`}>Media</button>
+                    <button onClick={() => setView('maintenance')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'maintenance' ? 'bg-white dark:bg-gray-700 shadow-sm text-emerald-600 dark:text-emerald-400' : 'text-gray-500 hover:text-gray-700'}`}>Finance</button>
+                    <button onClick={() => setView('assets')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${view === 'assets' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-700'}`}>Assets</button>
                 </div>
             </div>
 
             {view === 'attendance' && (
                 <div className="space-y-6 animate-fade-in">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-black uppercase text-gray-400 px-1">Staff Member</label>
-                            <select value={selectedUsername} onChange={e => setSelectedUsername(e.target.value)} className="bg-white dark:bg-gray-800 p-3 rounded-xl border-none ring-1 ring-gray-200 dark:ring-gray-700 font-bold shadow-sm focus:ring-indigo-500 transition-all">
+                            <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">Select Staff Member</label>
+                            <select value={selectedUsername} onChange={e => setSelectedUsername(e.target.value)} className="bg-white dark:bg-gray-800 p-3 rounded-xl border-none ring-1 ring-gray-200 dark:ring-gray-700 font-black text-xs uppercase shadow-sm focus:ring-indigo-500 transition-all cursor-pointer">
                                 {usersList.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}
                             </select>
                         </div>
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-black uppercase text-gray-400 px-1">Month</label>
-                            <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-white dark:bg-gray-800 p-3 rounded-xl border-none ring-1 ring-gray-200 dark:ring-gray-700 font-bold shadow-sm">
-                                {months.map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-black uppercase text-gray-400 px-1">Year</label>
-                            <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="bg-white dark:bg-gray-800 p-3 rounded-xl border-none ring-1 ring-gray-200 dark:ring-gray-700 font-bold shadow-sm">
-                                {years.map(y => <option key={y} value={y}>{y}</option>)}
-                            </select>
+                        <div className="flex items-end gap-2">
+                             <div className="flex-1 flex flex-col gap-1">
+                                <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">Nav Navigation</label>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => handleMonthNav(-1)} className="p-3 bg-white dark:bg-gray-800 rounded-xl ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
+                                        <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7"/></svg>
+                                    </button>
+                                    <div className="flex-grow bg-white dark:bg-gray-800 p-3 rounded-xl ring-1 ring-gray-200 dark:ring-gray-700 text-center font-black text-xs uppercase text-gray-800 dark:text-white shadow-inner">
+                                        {selectedMonth} {selectedYear}
+                                    </div>
+                                    <button onClick={() => handleMonthNav(1)} className="p-3 bg-white dark:bg-gray-800 rounded-xl ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
+                                        <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"/></svg>
+                                    </button>
+                                </div>
+                             </div>
                         </div>
                     </div>
 
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-xl">
-                        <div className="grid grid-cols-7 gap-1 mb-2">
-                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (<div key={i} className={`text-center font-black text-[10px] py-1 uppercase ${i === 0 ? 'text-red-500' : 'text-gray-400'}`}>{d}</div>))}
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-sm font-black uppercase text-gray-400 tracking-widest">Attendance Heatmap</h3>
+                            <div className="flex gap-4">
+                                <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500"><div className="w-3 h-3 bg-green-500 rounded"></div> Working</div>
+                                <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500"><div className="w-3 h-3 bg-red-500 rounded"></div> Leave/Holi</div>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-7 gap-1.5 mb-2">
+                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (<div key={i} className={`text-center font-black text-[9px] py-2 uppercase ${i === 0 ? 'text-red-500' : 'text-gray-400'}`}>{d}</div>))}
                             {calendarDays.map((day, i) => {
                                 const isCurrentMonth = day.getMonth() === calendarDate.getMonth();
                                 const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
@@ -579,9 +740,11 @@ const AdminPage: React.FC = () => {
                                     if (record) {
                                         bgColor = record.workingStatus === 'Working' ? 'bg-green-500' : 'bg-red-500';
                                         textColor = 'text-white';
+                                        borderColor = record.workingStatus === 'Working' ? 'border-green-600' : 'border-red-600';
                                     } else if (isSunday) {
-                                        bgColor = 'bg-red-100 dark:bg-red-900/20';
-                                        textColor = 'text-red-500';
+                                        bgColor = 'bg-red-50 dark:bg-red-900/10';
+                                        textColor = 'text-red-400';
+                                        borderColor = 'border-red-100 dark:border-red-900/20';
                                     } else {
                                         bgColor = 'bg-white dark:bg-gray-800';
                                         borderColor = 'border-gray-100 dark:border-gray-700';
@@ -589,10 +752,208 @@ const AdminPage: React.FC = () => {
                                     }
                                 } else {
                                     textColor = 'text-gray-200 dark:text-gray-700';
+                                    borderColor = 'border-transparent';
                                 }
-                                return (<div key={i} className={`h-12 sm:h-14 rounded-xl border flex flex-col items-center justify-center transition-all ${bgColor} ${borderColor} ${textColor}`}><span className={`text-sm font-black ${!isCurrentMonth ? 'opacity-20' : ''}`}>{day.getDate()}</span></div>);
+                                return (
+                                    <div key={i} className={`h-12 sm:h-16 rounded-xl border-2 flex flex-col items-center justify-center transition-all shadow-sm ${bgColor} ${borderColor} ${textColor}`}>
+                                        <span className={`text-xs font-black ${!isCurrentMonth ? 'opacity-20' : ''}`}>{day.getDate()}</span>
+                                        {record && <span className="text-[7px] font-black uppercase opacity-60 truncate px-1">{record.workingStatus}</span>}
+                                    </div>
+                                );
                             })}
                         </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-800 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-xl overflow-hidden">
+                        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50">
+                            <div>
+                                <h3 className="text-sm font-black uppercase tracking-widest text-gray-800 dark:text-white leading-none">Marked Attendance Log</h3>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 tracking-widest">Period: 26th {months[(months.indexOf(selectedMonth) - 1 + 12) % 12]} - 25th {selectedMonth}</p>
+                            </div>
+                            <span className="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-[10px] font-black uppercase">{filteredRecords.length} Days Logged</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-gray-50 dark:bg-gray-900/80">
+                                    <tr>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Date</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Status</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Visit Place / Activity</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest text-center">Hours</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Outcomes</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                                    {filteredRecords.length > 0 ? filteredRecords.map((r, i) => (
+                                        <tr key={i} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
+                                            <td className="px-6 py-4 font-black text-xs text-gray-900 dark:text-white whitespace-nowrap">{r.date}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${r.workingStatus === 'Working' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {r.workingStatus}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {r.workingStatus === 'Working' ? (
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs font-bold text-gray-800 dark:text-gray-200">{r.placeOfVisit}</span>
+                                                        <span className="text-[10px] font-medium text-gray-500 italic">Purpose: {r.purposeOfVisit}</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs font-bold text-gray-400 italic">Reason: {r.reasonNotWorking || 'No reason provided'}</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-center font-black text-xs text-gray-800 dark:text-gray-200">{r.workingHours || '0'}</td>
+                                            <td className="px-6 py-4 text-xs font-medium text-gray-500 dark:text-gray-400 italic">{r.outcomes || '---'}</td>
+                                        </tr>
+                                    )) : (
+                                        <tr>
+                                            <td colSpan={5} className="p-12 text-center text-gray-400 font-bold uppercase tracking-widest text-[10px] italic">No attendance records found for this period.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {view === 'assets' && (
+                <div className="max-w-4xl mx-auto animate-fade-in pb-12">
+                    <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-lg">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Asset Manager</h2>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Update Field Records</p>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleUpdateAsset} className="space-y-8">
+                            <div className="space-y-6 animate-fade-in">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">1. Select Budget Head</label>
+                                        <select 
+                                            value={filterBudgetHead} 
+                                            onChange={e => { setFilterBudgetHead(e.target.value); setSelectedAssetId(''); setAssetForm({}); }} 
+                                            className="w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-xs uppercase focus:ring-2 focus:ring-indigo-600 shadow-inner min-h-[50px] cursor-pointer"
+                                        >
+                                            <option value="">-- Choose Budget Head --</option>
+                                            {uniqueBudgetHeads.map(bh => <option key={bh} value={bh}>{bh}</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">2. Select Asset</label>
+                                        <select 
+                                            value={selectedAssetId} 
+                                            onChange={e => handleAssetSelect(e.target.value)} 
+                                            disabled={!filterBudgetHead}
+                                            className={`w-full bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-xs uppercase focus:ring-2 focus:ring-indigo-600 shadow-inner min-h-[50px] cursor-pointer ${!filterBudgetHead ? 'opacity-50' : ''}`}
+                                        >
+                                            <option value="">-- Choose Asset To Update --</option>
+                                            {filteredMaterials.map(a => (
+                                                <option key={a.id} value={a.id}>
+                                                    {a.assetName} ({a.assetCode})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {selectedAssetId !== '' && (
+                                    <div className="space-y-8 animate-fade-in pt-4 border-t border-gray-100 dark:border-gray-700">
+                                        {/* Core Procurement Details */}
+                                        <div className="p-8 bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-gray-100 dark:border-gray-700 space-y-6">
+                                            <h4 className="text-[10px] font-black uppercase text-indigo-600 tracking-widest px-1">Asset Metadata & Procurement</h4>
+                                            
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Budget Head</label>
+                                                        <input type="text" value={assetForm.budgetHead || ''} onChange={e => setAssetForm({...assetForm, budgetHead: e.target.value})} className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Date of Purchase</label>
+                                                        <input type="text" value={assetForm.dateOfPurchase || ''} onChange={e => setAssetForm({...assetForm, dateOfPurchase: e.target.value})} className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold text-sm" placeholder="DD/MM/YYYY" />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Total Assets Purchased</label>
+                                                        <input type="number" value={assetForm.qtyPurchased || 0} onChange={e => setAssetForm({...assetForm, qtyPurchased: parseInt(e.target.value) || 0})} className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Total Assets Received</label>
+                                                        <input type="number" value={assetForm.qtyReceived || 0} onChange={e => setAssetForm({...assetForm, qtyReceived: parseInt(e.target.value) || 0})} className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold text-sm" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="p-6 bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-gray-100 dark:border-gray-700">
+                                                <h4 className="text-[10px] font-black uppercase text-indigo-600 mb-4 tracking-widest flex items-center gap-2">
+                                                    <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>
+                                                    Physical Status
+                                                </h4>
+                                                <div>
+                                                    <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Status Remarks</label>
+                                                    <input type="text" value={assetForm.assetStatus || ''} onChange={e => setAssetForm({...assetForm, assetStatus: e.target.value})} className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold text-sm" placeholder="Functional, Damaged, etc." />
+                                                </div>
+                                            </div>
+                                            <div className="p-6 bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-gray-100 dark:border-gray-700">
+                                                <h4 className="text-[10px] font-black uppercase text-indigo-600 mb-4 tracking-widest flex items-center gap-2">
+                                                    <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>
+                                                    Finance Status
+                                                </h4>
+                                                <div>
+                                                    <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Payment Status</label>
+                                                    <input type="text" value={assetForm.paymentStatus || ''} onChange={e => setAssetForm({...assetForm, paymentStatus: e.target.value})} className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold text-sm" />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            {[
+                                                { num: 1, label: 'Cluster 1', r: 'qtyCluster1', d: 'distCluster1' },
+                                                { num: 2, label: 'Cluster 2', r: 'qtyCluster2', d: 'distCluster2' },
+                                                { num: 3, label: 'Cluster 3', r: 'qtyCluster3', d: 'distCluster3' }
+                                            ].map(c => (
+                                                <div key={c.num} className="p-5 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm space-y-4">
+                                                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest text-center border-b border-gray-50 dark:border-gray-700 pb-2">{c.label}</p>
+                                                    <div>
+                                                        <label className="text-[8px] font-black uppercase text-indigo-400">Stock In</label>
+                                                        <input type="number" value={(assetForm as any)[c.r] || 0} onChange={e => setAssetForm({...assetForm, [c.r]: parseInt(e.target.value) || 0})} className="w-full bg-gray-50 dark:bg-gray-900 p-2 rounded-lg font-bold text-xs" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[8px] font-black uppercase text-emerald-500">Field Issue</label>
+                                                        <input type="number" value={(assetForm as any)[c.d] || 0} onChange={e => setAssetForm({...assetForm, [c.d]: parseInt(e.target.value) || 0})} className="w-full bg-gray-50 dark:bg-gray-900 p-2 rounded-lg font-bold text-xs" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <button 
+                                            type="submit" 
+                                            disabled={isSubmittingAsset} 
+                                            className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+                                        >
+                                            {isSubmittingAsset ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : "Sync All Changes"}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {assetUpdateStatus && (
+                                <div className={`p-4 rounded-2xl text-center text-xs font-black uppercase tracking-widest animate-fade-in ${assetUpdateStatus.success ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+                                    {assetUpdateStatus.message}
+                                </div>
+                            )}
+                        </form>
                     </div>
                 </div>
             )}
