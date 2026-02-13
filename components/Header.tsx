@@ -65,6 +65,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                             {user && (
                                 <>
                                     <NavLink page="baseline">Baseline Explorer</NavLink>
+                                    <NavLink page="contribution">Contributions</NavLink>
                                     <NavLink page="field-mis" primary>Target vs Achievements</NavLink>
                                 </>
                             )}
@@ -126,6 +127,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                         {user && (
                             <>
                                 <NavLink page="baseline">Baseline Explorer</NavLink>
+                                <NavLink page="contribution">Contributions</NavLink>
                                 <NavLink page="field-mis" primary>Target vs Achievements</NavLink>
                             </>
                         )}

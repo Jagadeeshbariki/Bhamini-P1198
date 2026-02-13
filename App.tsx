@@ -12,10 +12,11 @@ import AdminPage from './components/AdminPage';
 import BudgetTrackerPage from './components/BudgetTrackerPage';
 import FieldMISPage from './components/FieldMISPage';
 import BaselinePage from './components/BaselinePage';
+import ContributionPage from './components/ContributionPage';
 import AutoInstallBanner from './components/AutoInstallBanner';
 import { APP_VERSION } from './config';
 
-type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline';
+type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>('home');
@@ -33,7 +34,7 @@ const AppContent: React.FC = () => {
     }, [user, logout]);
 
     useEffect(() => {
-        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline'];
+        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution'];
         
         // Handle unauthenticated access to protected pages
         if (!user && protectedPages.includes(page)) {
@@ -49,11 +50,11 @@ const AppContent: React.FC = () => {
             const isAdmin = user.role === 'admin';
 
             if (isField) {
-                // Field staff: Allow Gallery, Attendance, Reports, MIS, Baseline
+                // Field staff: Allow Gallery, Attendance, Reports, MIS, Baseline, Contribution
                 const restrictedPages: Page[] = ['activity', 'budget-tracker', 'admin'];
                 if (restrictedPages.includes(page)) setPage('home');
             } else if (isProject) {
-                // Project staff: Allow Gallery, Dashboards, Budget, MIS, Baseline
+                // Project staff: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution
                 const restrictedPages: Page[] = ['mark-attendance', 'attendance-report', 'admin'];
                 if (restrictedPages.includes(page)) setPage('home');
             }
@@ -96,6 +97,8 @@ const AppContent: React.FC = () => {
                 return <FieldMISPage />;
             case 'baseline':
                 return <BaselinePage />;
+            case 'contribution':
+                return <ContributionPage />;
             case 'login':
                 return <LoginPage onLoginSuccess={handleLoginSuccess} />;
             default:
