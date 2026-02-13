@@ -33,6 +33,7 @@ const ContributionPage: React.FC = () => {
     const [selectedCluster, setSelectedCluster] = useState('All');
     const [selectedGP, setSelectedGP] = useState('All');
     const [selectedVillage, setSelectedVillage] = useState('All');
+    const [selectedActivity, setSelectedActivity] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
 
     const parseCSV = (csv: string): Record<string, string>[] => {
@@ -121,7 +122,6 @@ const ContributionPage: React.FC = () => {
                 });
 
                 // 2. Identify Activity Columns in the contribution sheet
-                // Based on user provided image/text:
                 const activityHeaders = [
                     'BYP-NS', 'MOBILE IRR', 'PROCESSING', 'ASC', 'CROP MOD', 
                     'BYP-BFE', 'FISHERIES', 'GOAT SHED', 'ECO-FARMPOND', 'FIXED IRRIG'
@@ -142,7 +142,6 @@ const ContributionPage: React.FC = () => {
                     if (normId) {
                         const baseline = baselineMap.get(normId);
                         if (baseline) {
-                            // Check each activity column for a value
                             foundActivityColumns.forEach((colName) => {
                                 const valStr = row[colName] || row[headersInSheet.find(h => h.includes(colName)) || ''] || '0';
                                 const amount = parseFloat(valStr.toString().replace(/[^0-9.]/g, '')) || 0;
@@ -157,7 +156,7 @@ const ContributionPage: React.FC = () => {
                                         village: baseline.village,
                                         category: baseline.category,
                                         amount: amount,
-                                        activity: colName, // Display the header as the activity name
+                                        activity: colName,
                                         date: date
                                     });
                                 }
@@ -195,6 +194,9 @@ const ContributionPage: React.FC = () => {
             : mergedData.filter(d => d.gp === selectedGP);
         return ['All', ...Array.from(new Set(filtered.map(d => d.village).filter(Boolean))).sort()];
     }, [mergedData, selectedCluster, selectedGP]);
+    
+    // New: Activity Name options
+    const activityOptions = useMemo(() => ['All', ...Array.from(new Set(mergedData.map(d => d.activity).filter(Boolean))).sort()], [mergedData]);
 
     const filteredData = useMemo(() => {
         const query = searchQuery.toLowerCase().trim();
@@ -202,13 +204,14 @@ const ContributionPage: React.FC = () => {
             const matchesCluster = selectedCluster === 'All' || d.cluster === selectedCluster;
             const matchesGP = selectedGP === 'All' || d.gp === selectedGP;
             const matchesVillage = selectedVillage === 'All' || d.village === selectedVillage;
+            const matchesActivity = selectedActivity === 'All' || d.activity === selectedActivity;
             const matchesSearch = !query || 
                 d.name.toLowerCase().includes(query) || 
                 d.farmerId.toLowerCase().includes(query) ||
                 d.activity.toLowerCase().includes(query);
-            return matchesCluster && matchesGP && matchesVillage && matchesSearch;
+            return matchesCluster && matchesGP && matchesVillage && matchesActivity && matchesSearch;
         });
-    }, [mergedData, selectedCluster, selectedGP, selectedVillage, searchQuery]);
+    }, [mergedData, selectedCluster, selectedGP, selectedVillage, selectedActivity, searchQuery]);
 
     const totals = useMemo(() => {
         const amount = filteredData.reduce((acc, d) => acc + d.amount, 0);
@@ -242,10 +245,10 @@ const ContributionPage: React.FC = () => {
                     </div>
                 </div>
                 <div className="bg-indigo-600 p-6 rounded-[2.5rem] text-white shadow-xl flex flex-col justify-center h-36 space-y-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Regional Filters</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Active Filters</p>
                     <div className="flex flex-wrap gap-2">
                         <span className="px-3 py-1 bg-white/10 rounded-full text-[9px] font-black uppercase border border-white/10 whitespace-nowrap">Cl: {selectedCluster}</span>
-                        <span className="px-3 py-1 bg-white/10 rounded-full text-[9px] font-black uppercase border border-white/10 whitespace-nowrap">GP: {selectedGP}</span>
+                        <span className="px-3 py-1 bg-white/10 rounded-full text-[9px] font-black uppercase border border-white/10 whitespace-nowrap">Act: {selectedActivity}</span>
                         <span className="px-3 py-1 bg-white/10 rounded-full text-[9px] font-black uppercase border border-white/10 whitespace-nowrap">Vi: {selectedVillage}</span>
                     </div>
                 </div>
@@ -253,25 +256,33 @@ const ContributionPage: React.FC = () => {
 
             {/* Toolbar */}
             <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-700">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="relative group">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    <div className="relative group col-span-1 md:col-span-1">
                         <input 
                             type="text" 
-                            placeholder="Search Name, FID or Activity..." 
+                            placeholder="Search..." 
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-900 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold focus:ring-2 focus:ring-emerald-500 text-xs transition-all shadow-inner"
                         />
                         <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                     </div>
+                    
+                    <select value={selectedActivity} onChange={(e) => setSelectedActivity(e.target.value)} className="bg-gray-50 dark:bg-gray-900 p-3 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-[10px] uppercase cursor-pointer text-indigo-600">
+                        <option value="All">All Activities</option>
+                        {activityOptions.filter(o => o !== 'All').map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+
                     <select value={selectedCluster} onChange={(e) => { setSelectedCluster(e.target.value); setSelectedGP('All'); setSelectedVillage('All'); }} className="bg-gray-50 dark:bg-gray-900 p-3 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-[10px] uppercase cursor-pointer">
                         <option value="All">All Clusters</option>
                         {clusters.filter(c => c !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
+                    
                     <select value={selectedGP} onChange={(e) => { setSelectedGP(e.target.value); setSelectedVillage('All'); }} className="bg-gray-50 dark:bg-gray-900 p-3 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-[10px] uppercase cursor-pointer">
-                        <option value="All">All Gram Panchayats</option>
+                        <option value="All">All GPs</option>
                         {gps.filter(g => g !== 'All').map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
+                    
                     <select value={selectedVillage} onChange={(e) => setSelectedVillage(e.target.value)} className="bg-gray-50 dark:bg-gray-900 p-3 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-[10px] uppercase cursor-pointer">
                         <option value="All">All Villages</option>
                         {villages.filter(v => v !== 'All').map(v => <option key={v} value={v}>{v}</option>)}
@@ -302,7 +313,7 @@ const ContributionPage: React.FC = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-5">
-                                        <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 leading-snug max-w-xs">{row.activity}</div>
+                                        <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 leading-snug max-w-xs uppercase">{row.activity}</div>
                                         <div className="text-[9px] font-black uppercase text-gray-400 mt-1">{row.date}</div>
                                     </td>
                                     <td className="px-6 py-5">
