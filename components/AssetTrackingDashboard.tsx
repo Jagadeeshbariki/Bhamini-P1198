@@ -188,7 +188,7 @@ const AssetTrackingDashboard: React.FC = () => {
 
     return (
         <div className="flex flex-col gap-8 animate-fade-in pb-20 overflow-visible">
-            {/* 1. TOP FILTERS (Non-sticky as requested) */}
+            {/* 1. TOP FILTERS */}
             <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-gray-800 p-4 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
                 <div className="flex items-center gap-2">
                     <div className="p-1.5 bg-indigo-600 rounded-lg text-white">
@@ -268,67 +268,73 @@ const AssetTrackingDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* 4. REFINED ASSET LEDGER (STICKY HEADING) */}
+            {/* 4. REFINED ASSET LEDGER (FIXED STICKY POSITIONING) */}
             <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col overflow-visible">
                 {/* 
-                    STICKY LEDGER HEADING 
-                    Offset top-20 (80px) to account for global Header component.
+                    CONSOLIDATED STICKY HEADER
+                    To avoid overlap issues, we put the Title and Headers in a single sticky block if they are close, 
+                    OR we ensure the offsets are exactly calculated. 
+                    Main Navigation = top-0, h-20 (80px).
                 */}
-                <div className="sticky top-20 z-40 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700 p-4 flex justify-between items-center rounded-t-[2.5rem] shadow-sm">
-                    <span className="text-[11px] font-black uppercase text-gray-500 tracking-widest px-2">Detailed Asset Ledger</span>
-                    <span className="text-[9px] font-black bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full uppercase tracking-tighter">{filteredData.length} Registry Items</span>
+                <div className="sticky top-20 z-[46] bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700 p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center rounded-t-[2.5rem] shadow-sm">
+                    <div className="flex flex-col">
+                        <h2 className="text-lg sm:text-xl font-black text-gray-800 dark:text-white uppercase tracking-tight leading-none">Detailed Asset Ledger</h2>
+                        <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1">Full Inventory Pipeline</span>
+                    </div>
+                    <span className="mt-2 sm:mt-0 text-[10px] font-black bg-indigo-100 text-indigo-600 px-4 py-1.5 rounded-full uppercase tracking-tighter">{filteredData.length} Registry Items</span>
                 </div>
                 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        {/* 
-                            STICKY TABLE COLUMN NAMES 
-                            Offset top-20 (80px) + height of title bar (52px) = 132px
-                        */}
-                        <thead className="bg-gray-100 dark:bg-gray-800 sticky top-[132px] z-30 shadow-sm">
-                            <tr>
-                                <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-500 whitespace-nowrap">Asset Name & Activity</th>
-                                <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-500 text-center whitespace-nowrap">Receipt Status</th>
-                                <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-500 text-center whitespace-nowrap">Field Reach (C1|C2|C3)</th>
-                                <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-500 text-center whitespace-nowrap">Field Distribution</th>
-                                <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-500 text-right whitespace-nowrap">Valuation</th>
+                <div className="overflow-x-auto sm:overflow-x-visible">
+                    <table className="w-full text-left border-separate border-spacing-0 table-auto sm:table-fixed">
+                        <thead>
+                            {/* 
+                                COLUMN HEADERS
+                                Offset = 80px (Main Nav) + 74px (Approx Title Bar Height) = 154px.
+                                We'll use 154px as a stable top value.
+                            */}
+                            <tr className="sticky top-[132px] sm:top-[154px] z-[45]">
+                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">Asset & Activity</th>
+                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Status</th>
+                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Reach</th>
+                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Distribution</th>
+                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-right border-b border-gray-200 dark:border-gray-700 shadow-sm">Valuation</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                             {filteredData.map((asset, i) => (
-                                <tr key={i} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="font-black text-gray-900 dark:text-white text-[11px] leading-none uppercase mb-1">{asset.assetName}</div>
-                                        <div className="text-[8px] font-bold text-indigo-500 uppercase tracking-tighter">{asset.assetCode} • {asset.activityCode}</div>
+                                <tr key={i} className="group hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
+                                    <td className="px-3 sm:px-6 py-4 border-b border-gray-50 dark:border-gray-800/50">
+                                        <div className="font-black text-gray-900 dark:text-white text-[10px] sm:text-[12px] leading-tight uppercase mb-1">{asset.assetName}</div>
+                                        <div className="text-[8px] sm:text-[9px] font-bold text-indigo-500 uppercase tracking-tighter truncate max-w-[120px] sm:max-w-none">{asset.assetCode} • {asset.activityCode}</div>
                                     </td>
-                                    <td className="px-6 py-4">
+                                    <td className="px-3 sm:px-6 py-4 border-b border-gray-50 dark:border-gray-800/50">
                                         <div className="flex flex-col items-center">
                                             <div className="flex items-center gap-1 mb-1">
-                                                <span className="text-[10px] font-black">{asset.qtyReceived}</span>
-                                                <span className="text-[8px] font-bold text-gray-400">/ {asset.qtyPurchased}</span>
+                                                <span className="text-[10px] sm:text-[11px] font-black text-gray-900 dark:text-white">{asset.qtyReceived}</span>
+                                                <span className="text-[8px] sm:text-[9px] font-bold text-gray-400">/{asset.qtyPurchased}</span>
                                             </div>
-                                            <div className="w-16 h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                            <div className="w-12 sm:w-20 h-1 sm:h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
                                                 <div className="h-full bg-emerald-500" style={{ width: `${(asset.qtyReceived/asset.qtyPurchased)*100}%` }}></div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex justify-center gap-1">
+                                    <td className="px-3 sm:px-6 py-4 border-b border-gray-50 dark:border-gray-800/50">
+                                        <div className="flex justify-center gap-0.5 sm:gap-1">
                                             {[asset.qtyCluster1, asset.qtyCluster2, asset.qtyCluster3].map((v, idx) => (
-                                                <div key={idx} className={`w-8 py-1 rounded-lg text-center text-[10px] font-black ${v > 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30' : 'bg-gray-50 dark:bg-gray-800 text-gray-300'}`}>{v}</div>
+                                                <div key={idx} className={`w-6 sm:w-10 py-1 rounded-lg text-center text-[8px] sm:text-[11px] font-black ${v > 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 ring-1 ring-emerald-100' : 'bg-gray-50 dark:bg-gray-800 text-gray-300'}`}>{v}</div>
                                             ))}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex justify-center gap-1">
+                                    <td className="px-3 sm:px-6 py-4 border-b border-gray-50 dark:border-gray-800/50">
+                                        <div className="flex justify-center gap-0.5 sm:gap-1">
                                             {[asset.distCluster1, asset.distCluster2, asset.distCluster3].map((v, idx) => (
-                                                <div key={idx} className={`w-8 py-1 rounded-lg text-center text-[10px] font-black ${v > 0 ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30' : 'bg-gray-50 dark:bg-gray-800 text-gray-300'}`}>{v}</div>
+                                                <div key={idx} className={`w-6 sm:w-10 py-1 rounded-lg text-center text-[8px] sm:text-[11px] font-black ${v > 0 ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 ring-1 ring-indigo-100' : 'bg-gray-50 dark:bg-gray-800 text-gray-300'}`}>{v}</div>
                                             ))}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="text-[11px] font-black">₹{asset.totalPrice.toLocaleString()}</div>
-                                        <div className={`text-[7px] font-black uppercase tracking-widest mt-0.5 ${asset.paymentStatus.toLowerCase().includes('paid') ? 'text-emerald-500' : 'text-amber-500'}`}>{asset.paymentStatus}</div>
+                                    <td className="px-3 sm:px-6 py-4 border-b border-gray-50 dark:border-gray-800/50 text-right">
+                                        <div className="text-[10px] sm:text-[12px] font-black text-gray-900 dark:text-white leading-none">₹{asset.totalPrice.toLocaleString()}</div>
+                                        <div className={`text-[7px] sm:text-[8px] font-black uppercase tracking-widest mt-1 px-1.5 sm:px-2 py-0.5 rounded-full inline-block ${asset.paymentStatus.toLowerCase().includes('paid') ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>{asset.paymentStatus}</div>
                                     </td>
                                 </tr>
                             ))}
@@ -340,7 +346,7 @@ const AssetTrackingDashboard: React.FC = () => {
             <style>{`
                 @keyframes fade-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
                 .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
-                .custom-scrollbar::-webkit-scrollbar { width: 3px; }
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
                 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
                 .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -352,45 +358,45 @@ const AssetTrackingDashboard: React.FC = () => {
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6'];
 
 const KPICard: React.FC<{ label: string; value: any; color: string }> = ({ label, value, color }) => (
-    <div className={`${color} p-4 rounded-[2rem] text-white shadow-lg shadow-black/5`}>
-        <p className="text-[8px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">{label}</p>
-        <p className="text-xl font-black">{value}</p>
+    <div className={`${color} p-5 rounded-[2.5rem] text-white shadow-xl shadow-black/5`}>
+        <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1.5">{label}</p>
+        <p className="text-2xl font-black tracking-tight">{value}</p>
     </div>
 );
 
 const ClusterGroup: React.FC<{ label: string; rec: number; dist: number; stock: number; max: number }> = ({ label, rec, dist, stock, max }) => (
     <div className="flex-1 flex flex-col items-center h-full justify-end group relative">
-        <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50 pointer-events-none whitespace-nowrap bg-gray-900 text-white p-2 rounded-xl shadow-2xl flex flex-col gap-1 min-w-[80px]">
-            <div className="flex justify-between gap-3 text-[8px] font-black border-b border-white/10 pb-1">
+        <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50 pointer-events-none whitespace-nowrap bg-gray-900 text-white p-2.5 rounded-2xl shadow-2xl flex flex-col gap-1.5 min-w-[90px]">
+            <div className="flex justify-between gap-3 text-[9px] font-black border-b border-white/10 pb-1">
                 <span className="text-indigo-400">RCV:</span>
                 <span>{rec}</span>
             </div>
-            <div className="flex justify-between gap-3 text-[8px] font-black border-b border-white/10 pb-1">
+            <div className="flex justify-between gap-3 text-[9px] font-black border-b border-white/10 pb-1">
                 <span className="text-blue-400">ISS:</span>
                 <span>{dist}</span>
             </div>
-            <div className="flex justify-between gap-3 text-[8px] font-black">
+            <div className="flex justify-between gap-3 text-[9px] font-black">
                 <span className="text-teal-400">STK:</span>
                 <span>{stock}</span>
             </div>
         </div>
 
-        <div className="w-full flex items-end justify-center gap-1 h-full pb-2">
-            <div className="w-2.5 bg-indigo-500 rounded-t-lg transition-all duration-700 shadow-sm" style={{ height: `${(rec/max)*100}%`, minHeight: '4px' }}></div>
-            <div className="w-2.5 bg-blue-400 rounded-t-lg transition-all duration-700 shadow-sm" style={{ height: `${(dist/max)*100}%`, minHeight: '4px' }}></div>
-            <div className="w-2.5 bg-teal-400 rounded-t-lg transition-all duration-700 shadow-sm" style={{ height: `${(stock/max)*100}%`, minHeight: '4px' }}></div>
+        <div className="w-full flex items-end justify-center gap-1.5 h-full pb-3">
+            <div className="w-3 bg-indigo-500 rounded-t-xl transition-all duration-700 shadow-md" style={{ height: `${(rec/max)*100}%`, minHeight: '4px' }}></div>
+            <div className="w-3 bg-blue-400 rounded-t-xl transition-all duration-700 shadow-md" style={{ height: `${(dist/max)*100}%`, minHeight: '4px' }}></div>
+            <div className="w-3 bg-teal-400 rounded-t-xl transition-all duration-700 shadow-md" style={{ height: `${(stock/max)*100}%`, minHeight: '4px' }}></div>
         </div>
-        <span className="text-[8px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-tighter">{label}</span>
+        <span className="text-[9px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-tighter">{label}</span>
     </div>
 );
 
 const ActivityBar: React.FC<{ label: string; value: number; max: number }> = ({ label, value, max }) => (
-    <div className="flex-1 flex flex-col items-center h-full justify-end group relative min-w-[35px]">
-        <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50 pointer-events-none whitespace-nowrap bg-gray-900 text-white p-2 rounded-lg shadow-xl text-[9px] font-black">
+    <div className="flex-1 flex flex-col items-center h-full justify-end group relative min-w-[40px]">
+        <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50 pointer-events-none whitespace-nowrap bg-gray-900 text-white p-2 rounded-xl shadow-xl text-[10px] font-black">
             ₹{value.toLocaleString()}
         </div>
-        <div className="w-full max-w-[28px] bg-gradient-to-t from-indigo-600 to-indigo-400 rounded-t-md transition-all duration-700 shadow-md group-hover:scale-y-105 origin-bottom" style={{ height: `${(value/max)*100}%`, minHeight: '4px' }}></div>
-        <span className="text-[7px] font-black text-gray-500 dark:text-gray-400 uppercase mt-2 rotate-45 origin-left truncate w-14">{label}</span>
+        <div className="w-full max-w-[32px] bg-gradient-to-t from-indigo-600 to-indigo-400 rounded-t-lg transition-all duration-700 shadow-lg group-hover:scale-y-105 origin-bottom" style={{ height: `${(value/max)*100}%`, minHeight: '4px' }}></div>
+        <span className="text-[8px] font-black text-gray-500 dark:text-gray-400 uppercase mt-2 rotate-45 origin-left truncate w-16">{label}</span>
     </div>
 );
 
@@ -411,17 +417,16 @@ const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ da
                         cx="50" cy="50" r={radius} 
                         fill="transparent" 
                         stroke={stroke} 
-                        strokeWidth="12" 
+                        strokeWidth="14" 
                         strokeDasharray={circ}
                         strokeDashoffset={offset}
-                        style={{ transformOrigin: 'center', transform: `rotate(${(currentOffset/100)*360}deg)` }}
-                        className="transition-all duration-1000"
+                        style={{ transformOrigin: 'center', transform: `rotate(${(currentOffset/100)*360}deg)`, transition: 'all 1s ease' }}
                     />
                 );
                 currentOffset += item.percent;
                 return res;
             })}
-            <text x="50" y="50" className="text-[8px] font-black fill-gray-400 transform rotate-90" textAnchor="middle" dominantBaseline="middle">
+            <text x="50" y="50" className="text-[9px] font-black fill-gray-400 transform rotate-90" textAnchor="middle" dominantBaseline="middle">
                 STATUS
             </text>
         </svg>

@@ -24,6 +24,45 @@ interface MergedContribution {
     category: string;
 }
 
+const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#f97316'];
+
+const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ data }) => {
+    let currentOffset = 0;
+    const radius = 40;
+    const circ = 2 * Math.PI * radius;
+
+    if (data.length === 0) return <div className="text-[10px] font-black text-gray-300">NO DATA</div>;
+
+    return (
+        <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+            {data.map((item, idx) => {
+                const dash = (item.percent / 100) * circ;
+                const offset = circ - dash;
+                const stroke = CHART_COLORS[idx % CHART_COLORS.length];
+                const res = (
+                    <circle 
+                        key={idx}
+                        cx="50" cy="50" r={radius} 
+                        fill="transparent" 
+                        stroke={stroke} 
+                        strokeWidth="12" 
+                        strokeDasharray={circ}
+                        strokeDashoffset={offset}
+                        style={{ 
+                            transformOrigin: 'center', 
+                            transform: `rotate(${(currentOffset/100)*360}deg)`,
+                            transition: 'all 1s cubic-bezier(0.16, 1, 0.3, 1)'
+                        }}
+                    />
+                );
+                currentOffset += item.percent;
+                return res;
+            })}
+            <circle cx="50" cy="50" r="30" fill="white" className="dark:fill-gray-800" />
+        </svg>
+    );
+};
+
 const ContributionPage: React.FC = () => {
     const [mergedData, setMergedData] = useState<MergedContribution[]>([]);
     const [loading, setLoading] = useState(true);
@@ -53,7 +92,6 @@ const ContributionPage: React.FC = () => {
         };
 
         const rawHeaders = parseLine(lines[0]);
-        // Clean headers for keys
         const cleanHeaders = rawHeaders.map(h => h.trim().toUpperCase());
 
         return lines.slice(1).map(line => {
@@ -64,9 +102,6 @@ const ContributionPage: React.FC = () => {
         });
     };
 
-    /**
-     * Normalizes IDs to ensure "001" matches "1"
-     */
     const normalizeId = (id: any): string => {
         if (!id) return '';
         const str = id.toString().trim();
@@ -76,7 +111,6 @@ const ContributionPage: React.FC = () => {
         return str;
     };
 
-    // Helper to find a value by checking multiple key variants
     const getFuzzyValue = (row: any, keys: string[]) => {
         const rowKeys = Object.keys(row);
         for (const k of keys) {
@@ -96,7 +130,7 @@ const ContributionPage: React.FC = () => {
                     fetch(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)
                 ]);
 
-                if (!baselineRes.ok || !contribRes.ok) throw new Error("Synchronization failure with master spreadsheets.");
+                if (!baselineRes.ok || !contribRes.ok) throw new Error("Synchronization failure.");
 
                 const baselineText = await baselineRes.text();
                 const contribText = await contribRes.text();
@@ -104,7 +138,6 @@ const ContributionPage: React.FC = () => {
                 const rawBaseline = parseCSV(baselineText);
                 const rawContrib = parseCSV(contribText);
 
-                // 1. Build Baseline Reference Map
                 const baselineMap = new Map<string, BaselineRecord>();
                 rawBaseline.forEach(row => {
                     const rawId = getFuzzyValue(row, ['FARMERID', 'FID', 'ID']);
@@ -121,7 +154,6 @@ const ContributionPage: React.FC = () => {
                     }
                 });
 
-                // 2. Identify Activity Columns in the contribution sheet
                 const activityHeaders = [
                     'BYP-NS', 'MOBILE IRR', 'PROCESSING', 'ASC', 'CROP MOD', 
                     'BYP-BFE', 'FISHERIES', 'GOAT SHED', 'ECO-FARMPOND', 'FIXED IRRIG'
@@ -132,7 +164,6 @@ const ContributionPage: React.FC = () => {
                     headersInSheet.some(h => h.includes(ah.toUpperCase()))
                 );
 
-                // 3. Process every row and every activity column
                 const merged: MergedContribution[] = [];
                 rawContrib.forEach((row, rowIndex) => {
                     const rawId = getFuzzyValue(row, ['FARMERID', 'FID', 'ID']);
@@ -182,7 +213,6 @@ const ContributionPage: React.FC = () => {
         fetchData();
     }, []);
 
-    // Filter Dynamic Calculations
     const clusters = useMemo(() => ['All', ...Array.from(new Set(mergedData.map(d => d.cluster).filter(Boolean))).sort()], [mergedData]);
     const gps = useMemo(() => {
         const filtered = selectedCluster === 'All' ? mergedData : mergedData.filter(d => d.cluster === selectedCluster);
@@ -194,8 +224,6 @@ const ContributionPage: React.FC = () => {
             : mergedData.filter(d => d.gp === selectedGP);
         return ['All', ...Array.from(new Set(filtered.map(d => d.village).filter(Boolean))).sort()];
     }, [mergedData, selectedCluster, selectedGP]);
-    
-    // New: Activity Name options
     const activityOptions = useMemo(() => ['All', ...Array.from(new Set(mergedData.map(d => d.activity).filter(Boolean))).sort()], [mergedData]);
 
     const filteredData = useMemo(() => {
@@ -213,10 +241,29 @@ const ContributionPage: React.FC = () => {
         });
     }, [mergedData, selectedCluster, selectedGP, selectedVillage, selectedActivity, searchQuery]);
 
-    const totals = useMemo(() => {
-        const amount = filteredData.reduce((acc, d) => acc + d.amount, 0);
+    const stats = useMemo(() => {
+        const totalAmount = filteredData.reduce((acc, d) => acc + d.amount, 0);
         const uniqueFIDs = new Set(filteredData.map(d => d.farmerId)).size;
-        return { amount, count: filteredData.length, uniqueFIDs };
+
+        const clusterMap: Record<string, number> = {};
+        const activityMap: Record<string, number> = {};
+
+        filteredData.forEach(d => {
+            clusterMap[d.cluster] = (clusterMap[d.cluster] || 0) + d.amount;
+            activityMap[d.activity] = (activityMap[d.activity] || 0) + d.amount;
+        });
+
+        const clusterShare = Object.entries(clusterMap).map(([label, val]) => ({
+            label,
+            percent: totalAmount > 0 ? (val / totalAmount) * 100 : 0
+        })).sort((a,b) => b.percent - a.percent);
+
+        const activityShare = Object.entries(activityMap).map(([label, val]) => ({
+            label,
+            percent: totalAmount > 0 ? (val / totalAmount) * 100 : 0
+        })).sort((a,b) => b.percent - a.percent);
+
+        return { totalAmount, count: filteredData.length, uniqueFIDs, clusterShare, activityShare };
     }, [filteredData]);
 
     if (loading) return (
@@ -229,27 +276,62 @@ const ContributionPage: React.FC = () => {
     return (
         <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-12">
             {/* KPI Summary Strip */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-emerald-600 p-6 rounded-[2.5rem] text-white shadow-xl flex flex-col justify-between h-36">
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Total Collected</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-emerald-600 p-8 rounded-[2.5rem] text-white shadow-xl flex flex-col justify-between h-40">
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Total Collections</p>
                     <div>
-                        <h2 className="text-3xl font-black">₹{totals.amount.toLocaleString()}</h2>
-                        <p className="text-[9px] font-bold opacity-60 uppercase mt-1">{totals.count} Contribution Instances</p>
+                        <h2 className="text-4xl font-black">₹{stats.totalAmount.toLocaleString()}</h2>
+                        <p className="text-[9px] font-bold opacity-60 uppercase mt-1">{stats.count} Instances across project GPs</p>
                     </div>
                 </div>
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-xl flex flex-col justify-between h-36">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Contributor Base</p>
+                <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-xl flex flex-col justify-between h-40">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Unique Contributors</p>
                     <div>
-                        <h2 className="text-3xl font-black text-gray-900 dark:text-white">{totals.uniqueFIDs}</h2>
-                        <p className="text-[9px] font-black uppercase text-emerald-500 mt-1">Unique Beneficiaries</p>
+                        <h2 className="text-4xl font-black text-gray-900 dark:text-white">{stats.uniqueFIDs}</h2>
+                        <p className="text-[9px] font-black uppercase text-emerald-500 mt-1">Beneficiary Base Impacted</p>
                     </div>
                 </div>
-                <div className="bg-indigo-600 p-6 rounded-[2.5rem] text-white shadow-xl flex flex-col justify-center h-36 space-y-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Active Filters</p>
-                    <div className="flex flex-wrap gap-2">
-                        <span className="px-3 py-1 bg-white/10 rounded-full text-[9px] font-black uppercase border border-white/10 whitespace-nowrap">Cl: {selectedCluster}</span>
-                        <span className="px-3 py-1 bg-white/10 rounded-full text-[9px] font-black uppercase border border-white/10 whitespace-nowrap">Act: {selectedActivity}</span>
-                        <span className="px-3 py-1 bg-white/10 rounded-full text-[9px] font-black uppercase border border-white/10 whitespace-nowrap">Vi: {selectedVillage}</span>
+            </div>
+
+            {/* Analytics Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-xl flex flex-col md:flex-row items-center gap-8">
+                    <div className="w-32 h-32 flex-shrink-0">
+                        <PieChart data={stats.clusterShare} />
+                    </div>
+                    <div className="flex-grow space-y-3 w-full">
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-50 dark:border-gray-700 pb-2">Cluster-wise Share (%)</h3>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                            {stats.clusterShare.map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full" style={{ background: CHART_COLORS[idx % CHART_COLORS.length] }}></div>
+                                        <span className="text-[9px] font-bold text-gray-600 dark:text-gray-400 uppercase truncate max-w-[80px]">{item.label}</span>
+                                    </div>
+                                    <span className="text-[9px] font-black text-gray-900 dark:text-white">{item.percent.toFixed(1)}%</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-xl flex flex-col md:flex-row items-center gap-8">
+                    <div className="w-32 h-32 flex-shrink-0">
+                        <PieChart data={stats.activityShare} />
+                    </div>
+                    <div className="flex-grow space-y-3 w-full">
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-50 dark:border-gray-700 pb-2">Activity-wise Share (%)</h3>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 max-h-32 overflow-y-auto custom-scrollbar pr-2">
+                            {stats.activityShare.map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full" style={{ background: CHART_COLORS[idx % CHART_COLORS.length] }}></div>
+                                        <span className="text-[9px] font-bold text-gray-600 dark:text-gray-400 uppercase truncate max-w-[80px]">{item.label}</span>
+                                    </div>
+                                    <span className="text-[9px] font-black text-gray-900 dark:text-white">{item.percent.toFixed(1)}%</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -257,7 +339,7 @@ const ContributionPage: React.FC = () => {
             {/* Toolbar */}
             <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-700">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                    <div className="relative group col-span-1 md:col-span-1">
+                    <div className="relative group">
                         <input 
                             type="text" 
                             placeholder="Search..." 
@@ -341,6 +423,9 @@ const ContributionPage: React.FC = () => {
             <style>{`
                 @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
                 .animate-fade-in { animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
+                .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
                 .no-scrollbar::-webkit-scrollbar { display: none; }
             `}</style>
         </div>

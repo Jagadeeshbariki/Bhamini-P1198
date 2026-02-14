@@ -27,6 +27,7 @@ const ImageSchema = new mongoose.Schema({
   url: { type: String, required: true },
   fileName: { type: String },
   type: { type: String, enum: ['slider', 'gallery'], default: 'gallery' },
+  activity: { type: String, default: 'Uncategorized' },
   uploadedAt: { type: Date, default: Date.now }
 });
 
@@ -86,7 +87,6 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // Hardcoded fallback accounts REMOVED to prioritize Spreadsheet/DB sources.
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ message: 'User not found' });
 
@@ -109,7 +109,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/images/upload', authenticateToken, async (req, res) => {
   try {
-    const { imageBase64, fileName, type } = req.body;
+    const { imageBase64, fileName, type, activity } = req.body;
     if (!imageBase64) return res.status(400).json({ message: 'No image data provided' });
     const sizeInBytes = Buffer.byteLength(imageBase64, 'utf8');
     if (sizeInBytes > 15 * 1024 * 1024) return res.status(413).json({ message: 'Image too large (Max 15MB)' });
@@ -117,7 +117,8 @@ app.post('/api/images/upload', authenticateToken, async (req, res) => {
     const newImage = new Image({ 
         url: imageBase64, 
         fileName: fileName || 'upload.png',
-        type: type || 'gallery' 
+        type: type || 'gallery',
+        activity: activity || 'Uncategorized'
     });
     await newImage.save();
     res.status(201).json({ message: 'Image uploaded successfully' });
