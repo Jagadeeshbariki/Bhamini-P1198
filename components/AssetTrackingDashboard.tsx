@@ -15,16 +15,16 @@ interface AssetRecord {
     hdfcContribution: number;
     communityContribution: number;
     qtyPurchased: number;
-    qtyReceived: number;
+    qtyReceived: number; // Central/Main Receipt
     pending: number;
     totalPrice: number;
     paymentStatus: string;
     assetStatus: string;
     qtyCluster1: number;
-    qtyCluster2: number;
-    qtyCluster3: number;
     distCluster1: number;
+    qtyCluster2: number;
     distCluster2: number;
+    qtyCluster3: number;
     distCluster3: number;
 }
 
@@ -55,13 +55,14 @@ const AssetTrackingDashboard: React.FC = () => {
         const cleanHeaders = headers.map(h => h.toUpperCase().replace(/\s+/g, ''));
 
         const getVal = (row: string[], search: string) => {
-            const idx = cleanHeaders.findIndex(h => h.includes(search));
+            const idx = cleanHeaders.findIndex(h => h.includes(search.toUpperCase().replace(/\s+/g, '')));
             return idx !== -1 ? row[idx] : '';
         };
 
         const parseNum = (val: any) => {
             if (val === undefined || val === null) return 0;
-            return parseFloat(val.toString().replace(/[^0-9.]/g, '')) || 0;
+            const clean = val.toString().replace(/[^0-9.]/g, '');
+            return parseFloat(clean) || 0;
         };
 
         return lines.slice(1).map(line => {
@@ -81,16 +82,17 @@ const AssetTrackingDashboard: React.FC = () => {
                 hdfcContribution: parseNum(getVal(row, 'HDFCCONTRIBUTION')),
                 communityContribution: parseNum(getVal(row, 'COMMUNITYCONTRIBUTION')),
                 qtyPurchased: parseNum(getVal(row, 'NUMBEROFASSETPURCHASED')),
-                qtyReceived: parseNum(getVal(row, 'HOWMANYRECEIVED')),
+                qtyReceived: parseNum(getVal(row, 'HOWMANYRECEIVED')), 
                 pending: parseNum(getVal(row, 'PENDING')),
                 totalPrice: parseNum(getVal(row, 'TOTALPRICE')),
                 paymentStatus: getVal(row, 'PAYMENTSTATUS'),
                 assetStatus: getVal(row, 'STATUSOFTHEASSET'),
-                qtyCluster1: parseNum(row[21]),
+                
+                qtyCluster1: parseNum(row[21]), 
                 distCluster1: parseNum(row[22]),
-                qtyCluster2: parseNum(row[25]),
+                qtyCluster2: parseNum(row[25]), 
                 distCluster2: parseNum(row[26]),
-                qtyCluster3: parseNum(row[29]),
+                qtyCluster3: parseNum(row[29]), 
                 distCluster3: parseNum(row[30]),
             };
         }).filter((a): a is AssetRecord => !!a && !!a.assetName);
@@ -115,41 +117,55 @@ const AssetTrackingDashboard: React.FC = () => {
     const budgetHeadOptions = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.budgetHead))).sort()], [data]);
     const clusterOptions = ['All', 'Cluster 1', 'Cluster 2', 'Cluster 3'];
 
-    const filteredData = useMemo(() => {
+    const filteredLedgerData = useMemo(() => {
         return data.filter(d => {
             const matchesSearch = d.assetName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                  d.assetCode.toLowerCase().includes(searchQuery.toLowerCase());
             const matchesBudget = filterBudgetHead === 'All' || d.budgetHead === filterBudgetHead;
-            
             let matchesCluster = true;
             if (filterCluster !== 'All') {
                 if (filterCluster === 'Cluster 1') matchesCluster = d.qtyCluster1 > 0 || d.distCluster1 > 0;
                 if (filterCluster === 'Cluster 2') matchesCluster = d.qtyCluster2 > 0 || d.distCluster2 > 0;
                 if (filterCluster === 'Cluster 3') matchesCluster = d.qtyCluster3 > 0 || d.distCluster3 > 0;
             }
-
             return matchesSearch && matchesBudget && matchesCluster;
         });
     }, [data, searchQuery, filterBudgetHead, filterCluster]);
 
     const stats = useMemo(() => {
-        const ordered = filteredData.reduce((acc, d) => acc + d.qtyPurchased, 0);
-        const received = filteredData.reduce((acc, d) => acc + d.qtyReceived, 0);
-        const toReceive = filteredData.reduce((acc, d) => acc + d.pending, 0);
-        const investment = filteredData.reduce((acc, d) => acc + d.totalPrice, 0);
+        const baseFiltered = data.filter(d => {
+            const matchesSearch = d.assetName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                 d.assetCode.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesBudget = filterBudgetHead === 'All' || d.budgetHead === filterBudgetHead;
+            return matchesSearch && matchesBudget;
+        });
 
-        const c1Rec = filteredData.reduce((acc, d) => acc + d.qtyCluster1, 0);
-        const c1Dist = filteredData.reduce((acc, d) => acc + d.distCluster1, 0);
-        const c2Rec = filteredData.reduce((acc, d) => acc + d.qtyCluster2, 0);
-        const c2Dist = filteredData.reduce((acc, d) => acc + d.distCluster2, 0);
-        const c3Rec = filteredData.reduce((acc, d) => acc + d.qtyCluster3, 0);
-        const c3Dist = filteredData.reduce((acc, d) => acc + d.distCluster3, 0);
+        const ordered = baseFiltered.reduce((acc, d) => acc + d.qtyPurchased, 0);
+        const receivedCentral = baseFiltered.reduce((acc, d) => acc + d.qtyReceived, 0); 
+        const investment = baseFiltered.reduce((acc, d) => acc + d.totalPrice, 0);
 
-        const totalDist = c1Dist + c2Dist + c3Dist;
-        const totalStock = (c1Rec - c1Dist) + (c2Rec - c2Dist) + (c3Rec - c3Dist);
+        let fieldReached = 0;
+        let fieldDistributed = 0;
+
+        baseFiltered.forEach(d => {
+            if (filterCluster === 'All' || filterCluster === 'Cluster 1') {
+                fieldReached += d.qtyCluster1;
+                fieldDistributed += d.distCluster1;
+            }
+            if (filterCluster === 'All' || filterCluster === 'Cluster 2') {
+                fieldReached += d.qtyCluster2;
+                fieldDistributed += d.distCluster2;
+            }
+            if (filterCluster === 'All' || filterCluster === 'Cluster 3') {
+                fieldReached += d.qtyCluster3;
+                fieldDistributed += d.distCluster3;
+            }
+        });
+
+        const totalStock = fieldReached - fieldDistributed;
 
         const expenseMap: Record<string, number> = {};
-        filteredData.forEach(d => {
+        baseFiltered.forEach(d => {
             const activity = d.activityCode || 'N/A';
             expenseMap[activity] = (expenseMap[activity] || 0) + d.totalPrice;
         });
@@ -157,27 +173,41 @@ const AssetTrackingDashboard: React.FC = () => {
         const maxActivityExpense = Math.max(...activityExpenseData.map(d => d.total), 1);
 
         const statusMap: Record<string, number> = {};
-        filteredData.forEach(d => {
+        baseFiltered.forEach(d => {
             const status = d.assetStatus || 'Unknown';
             statusMap[status] = (statusMap[status] || 0) + 1;
         });
-        const totalCount = filteredData.length || 1;
+        const totalCount = baseFiltered.length || 1;
         const statusData = Object.entries(statusMap).map(([label, count]) => ({
             label,
             percent: (count / totalCount) * 100,
             count
         })).sort((a, b) => b.percent - a.percent);
 
-        const maxChartVal = Math.max(ordered, received, toReceive, c1Rec, c2Rec, c3Rec) || 1;
+        const c1Rec = baseFiltered.reduce((acc, d) => acc + d.qtyCluster1, 0);
+        const c1Dist = baseFiltered.reduce((acc, d) => acc + d.distCluster1, 0);
+        const c2Rec = baseFiltered.reduce((acc, d) => acc + d.qtyCluster2, 0);
+        const c2Dist = baseFiltered.reduce((acc, d) => acc + d.distCluster2, 0);
+        const c3Rec = baseFiltered.reduce((acc, d) => acc + d.qtyCluster3, 0);
+        const c3Dist = baseFiltered.reduce((acc, d) => acc + d.distCluster3, 0);
+
+        const getPct = (dist: number, rec: number) => rec > 0 ? (dist / rec) * 100 : 0;
+        const distributionEfficiency = [
+            { label: 'Cluster 1', value: getPct(c1Dist, c1Rec) },
+            { label: 'Cluster 2', value: getPct(c2Dist, c2Rec) },
+            { label: 'Cluster 3', value: getPct(c3Dist, c3Rec) },
+        ];
 
         return { 
-            ordered, received, toReceive, investment, totalDist, totalStock,
-            c1Rec, c1Dist, c1Stock: c1Rec - c1Dist,
-            c2Rec, c2Dist, c2Stock: c2Rec - c2Dist,
-            c3Rec, c3Dist, c3Stock: c3Rec - c3Dist,
-            maxChartVal, statusData, activityExpenseData, maxActivityExpense
+            ordered: Math.round(ordered), 
+            receivedCentral: Math.round(receivedCentral), 
+            fieldReached: Math.round(fieldReached), 
+            fieldDistributed: Math.round(fieldDistributed),
+            investment, 
+            totalStock: Math.round(totalStock),
+            activityExpenseData, maxActivityExpense, statusData, distributionEfficiency
         };
-    }, [filteredData]);
+    }, [data, searchQuery, filterBudgetHead, filterCluster]);
 
     if (loading) return (
         <div className="flex flex-col items-center justify-center min-h-[50vh]">
@@ -201,60 +231,55 @@ const AssetTrackingDashboard: React.FC = () => {
                     placeholder="Search Asset/Code..." 
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none w-32 md:w-48 focus:ring-2 focus:ring-indigo-500"
+                    className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none w-32 md:w-48 focus:ring-2 focus:ring-indigo-500 font-bold"
                 />
-                <select value={filterBudgetHead} onChange={e => setFilterBudgetHead(e.target.value)} className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none">
+                <select value={filterBudgetHead} onChange={e => setFilterBudgetHead(e.target.value)} className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer">
                     <option value="All">All Budget Heads</option>
                     {budgetHeadOptions.filter(o => o !== 'All').map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
-                <select value={filterCluster} onChange={e => setFilterCluster(e.target.value)} className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none">
-                    {clusterOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                <select value={filterCluster} onChange={e => setFilterCluster(e.target.value)} className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer">
+                    <option value="All">All Clusters (Summary)</option>
+                    {clusterOptions.filter(o => o !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
             </div>
 
             {/* 2. KPI STRIP */}
             <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                 <KPICard label="Ordered Assets" value={stats.ordered} color="bg-blue-600" />
-                <KPICard label="Received Assets" value={stats.received} color="bg-emerald-600" />
-                <KPICard label="Need to Receive" value={stats.toReceive} color="bg-amber-500" />
-                <KPICard label="Field Distributed" value={stats.totalDist} color="bg-indigo-600" />
-                <KPICard label="In Stock Assets" value={stats.totalStock} color="bg-teal-600" />
+                <KPICard label="Central Received" value={stats.receivedCentral} color="bg-emerald-600" />
+                <KPICard label="Field Reached" value={stats.fieldReached} color="bg-indigo-500" />
+                <KPICard label="Field Distributed" value={stats.fieldDistributed} color="bg-indigo-700" />
+                <KPICard label="Stock In Hand" value={stats.totalStock} color="bg-teal-600" />
                 <KPICard label="Total Valuation" value={`₹${(stats.investment/100000).toFixed(1)}L`} color="bg-gray-900" />
             </div>
 
-            {/* 3. ANALYTICS & INSIGHTS */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                <div className="lg:col-span-1.5 bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col min-h-[300px]">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Cluster Reach Summary</h3>
-                        <div className="flex gap-2 text-[7px] font-black uppercase">
-                            <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded bg-indigo-500"></div>R</div>
-                            <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded bg-blue-400"></div>I</div>
-                            <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded bg-teal-400"></div>S</div>
-                        </div>
-                    </div>
+            {/* 3. ANALYTICS & INSIGHTS - Adjusted to 3 equal columns on desktop */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col min-h-[350px]">
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-6 px-2">Cluster Distribution Efficiency (%)</h3>
                     <div className="flex-grow flex items-end justify-around gap-4 px-2">
-                        <ClusterGroup label="C1" rec={stats.c1Rec} dist={stats.c1Dist} stock={stats.c1Stock} max={stats.maxChartVal} />
-                        <ClusterGroup label="C2" rec={stats.c2Rec} dist={stats.c2Dist} stock={stats.c2Stock} max={stats.maxChartVal} />
-                        <ClusterGroup label="C3" rec={stats.c3Rec} dist={stats.c3Dist} stock={stats.c3Stock} max={stats.maxChartVal} />
+                        {stats.distributionEfficiency.map((c, i) => (
+                            <EfficiencyBar key={i} label={c.label} percent={c.value} />
+                        ))}
                     </div>
                 </div>
 
-                <div className="lg:col-span-1.5 bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col min-h-[300px]">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-6">Activity Wise Expenses</h3>
-                    <div className="flex-grow flex items-end justify-around gap-2 px-2 overflow-x-auto no-scrollbar">
+                {/* Activity Wise Expenses - Width Adjusted, No Horizontal Scroll */}
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col min-h-[350px]">
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-6 px-2">Activity Wise Expenses</h3>
+                    <div className="flex-grow flex items-end justify-between gap-1 px-4 h-full">
                         {stats.activityExpenseData.map((d, i) => (
                             <ActivityBar key={i} label={d.label} value={d.total} max={stats.maxActivityExpense} />
                         ))}
                     </div>
                 </div>
 
-                <div className="lg:col-span-1 bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col items-center min-h-[300px]">
-                    <h3 className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-4">Asset Physical Status</h3>
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col items-center min-h-[350px]">
+                    <h3 className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-4 px-2 text-center">Asset Physical Status</h3>
                     <div className="relative w-28 h-28 flex items-center justify-center">
                         <PieChart data={stats.statusData} />
                     </div>
-                    <div className="mt-4 grid grid-cols-1 gap-1 w-full overflow-y-auto custom-scrollbar max-h-[120px]">
+                    <div className="mt-4 grid grid-cols-1 gap-1 w-full overflow-y-auto custom-scrollbar max-h-[140px]">
                         {stats.statusData.map((s, idx) => (
                             <div key={idx} className="flex items-center justify-between gap-1.5 py-1">
                                 <div className="flex items-center gap-1">
@@ -268,67 +293,48 @@ const AssetTrackingDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* 4. REFINED ASSET LEDGER (FIXED STICKY POSITIONING) */}
+            {/* 4. REFINED ASSET LEDGER */}
             <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col overflow-visible">
-                {/* 
-                    CONSOLIDATED STICKY HEADER
-                    To avoid overlap issues, we put the Title and Headers in a single sticky block if they are close, 
-                    OR we ensure the offsets are exactly calculated. 
-                    Main Navigation = top-0, h-20 (80px).
-                */}
                 <div className="sticky top-20 z-[46] bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700 p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center rounded-t-[2.5rem] shadow-sm">
                     <div className="flex flex-col">
                         <h2 className="text-lg sm:text-xl font-black text-gray-800 dark:text-white uppercase tracking-tight leading-none">Detailed Asset Ledger</h2>
                         <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1">Full Inventory Pipeline</span>
                     </div>
-                    <span className="mt-2 sm:mt-0 text-[10px] font-black bg-indigo-100 text-indigo-600 px-4 py-1.5 rounded-full uppercase tracking-tighter">{filteredData.length} Registry Items</span>
+                    <span className="mt-2 sm:mt-0 text-[10px] font-black bg-indigo-100 text-indigo-600 px-4 py-1.5 rounded-full uppercase tracking-tighter">{filteredLedgerData.length} Registry Items</span>
                 </div>
                 
                 <div className="overflow-x-auto sm:overflow-x-visible">
                     <table className="w-full text-left border-separate border-spacing-0 table-auto sm:table-fixed">
                         <thead>
-                            {/* 
-                                COLUMN HEADERS
-                                Offset = 80px (Main Nav) + 74px (Approx Title Bar Height) = 154px.
-                                We'll use 154px as a stable top value.
-                            */}
                             <tr className="sticky top-[132px] sm:top-[154px] z-[45]">
                                 <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">Asset & Activity</th>
-                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Status</th>
-                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Reach</th>
-                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Distribution</th>
+                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Central Rec.</th>
+                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Rec. at Stock</th>
+                                <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Distributed</th>
                                 <th className="px-3 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 bg-gray-100 dark:bg-gray-800 text-right border-b border-gray-200 dark:border-gray-700 shadow-sm">Valuation</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                            {filteredData.map((asset, i) => (
+                            {filteredLedgerData.map((asset, i) => (
                                 <tr key={i} className="group hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
                                     <td className="px-3 sm:px-6 py-4 border-b border-gray-50 dark:border-gray-800/50">
                                         <div className="font-black text-gray-900 dark:text-white text-[10px] sm:text-[12px] leading-tight uppercase mb-1">{asset.assetName}</div>
                                         <div className="text-[8px] sm:text-[9px] font-bold text-indigo-500 uppercase tracking-tighter truncate max-w-[120px] sm:max-w-none">{asset.assetCode} • {asset.activityCode}</div>
                                     </td>
-                                    <td className="px-3 sm:px-6 py-4 border-b border-gray-50 dark:border-gray-800/50">
-                                        <div className="flex flex-col items-center">
-                                            <div className="flex items-center gap-1 mb-1">
-                                                <span className="text-[10px] sm:text-[11px] font-black text-gray-900 dark:text-white">{asset.qtyReceived}</span>
-                                                <span className="text-[8px] sm:text-[9px] font-bold text-gray-400">/{asset.qtyPurchased}</span>
-                                            </div>
-                                            <div className="w-12 sm:w-20 h-1 sm:h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
-                                                <div className="h-full bg-emerald-500" style={{ width: `${(asset.qtyReceived/asset.qtyPurchased)*100}%` }}></div>
-                                            </div>
-                                        </div>
+                                    <td className="px-3 sm:px-6 py-4 border-b border-gray-50 dark:border-gray-800/50 text-center font-black text-[11px] text-gray-900 dark:text-white uppercase">
+                                        {Math.round(asset.qtyReceived)}
                                     </td>
                                     <td className="px-3 sm:px-6 py-4 border-b border-gray-50 dark:border-gray-800/50">
                                         <div className="flex justify-center gap-0.5 sm:gap-1">
                                             {[asset.qtyCluster1, asset.qtyCluster2, asset.qtyCluster3].map((v, idx) => (
-                                                <div key={idx} className={`w-6 sm:w-10 py-1 rounded-lg text-center text-[8px] sm:text-[11px] font-black ${v > 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 ring-1 ring-emerald-100' : 'bg-gray-50 dark:bg-gray-800 text-gray-300'}`}>{v}</div>
+                                                <div key={idx} className={`w-6 sm:w-10 py-1 rounded-lg text-center text-[8px] sm:text-[11px] font-black ${v > 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 ring-1 ring-emerald-100' : 'bg-gray-50 dark:bg-gray-800 text-gray-300'}`}>{Math.round(v)}</div>
                                             ))}
                                         </div>
                                     </td>
                                     <td className="px-3 sm:px-6 py-4 border-b border-gray-50 dark:border-gray-800/50">
                                         <div className="flex justify-center gap-0.5 sm:gap-1">
                                             {[asset.distCluster1, asset.distCluster2, asset.distCluster3].map((v, idx) => (
-                                                <div key={idx} className={`w-6 sm:w-10 py-1 rounded-lg text-center text-[8px] sm:text-[11px] font-black ${v > 0 ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 ring-1 ring-indigo-100' : 'bg-gray-50 dark:bg-gray-800 text-gray-300'}`}>{v}</div>
+                                                <div key={idx} className={`w-6 sm:w-10 py-1 rounded-lg text-center text-[8px] sm:text-[11px] font-black ${v > 0 ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 ring-1 ring-indigo-100' : 'bg-gray-50 dark:bg-gray-800 text-gray-300'}`}>{Math.round(v)}</div>
                                             ))}
                                         </div>
                                     </td>
@@ -364,39 +370,48 @@ const KPICard: React.FC<{ label: string; value: any; color: string }> = ({ label
     </div>
 );
 
-const ClusterGroup: React.FC<{ label: string; rec: number; dist: number; stock: number; max: number }> = ({ label, rec, dist, stock, max }) => (
-    <div className="flex-1 flex flex-col items-center h-full justify-end group relative">
-        <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50 pointer-events-none whitespace-nowrap bg-gray-900 text-white p-2.5 rounded-2xl shadow-2xl flex flex-col gap-1.5 min-w-[90px]">
-            <div className="flex justify-between gap-3 text-[9px] font-black border-b border-white/10 pb-1">
-                <span className="text-indigo-400">RCV:</span>
-                <span>{rec}</span>
-            </div>
-            <div className="flex justify-between gap-3 text-[9px] font-black border-b border-white/10 pb-1">
-                <span className="text-blue-400">ISS:</span>
-                <span>{dist}</span>
-            </div>
-            <div className="flex justify-between gap-3 text-[9px] font-black">
-                <span className="text-teal-400">STK:</span>
-                <span>{stock}</span>
-            </div>
+const EfficiencyBar: React.FC<{ label: string; percent: number }> = ({ label, percent }) => (
+    <div className="flex-1 flex flex-col items-center h-full justify-end group relative max-w-[80px]">
+        <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50 pointer-events-none whitespace-nowrap bg-gray-900 text-white p-2 rounded-xl shadow-xl text-[10px] font-black">
+            {percent.toFixed(1)}% Distributed
         </div>
-
-        <div className="w-full flex items-end justify-center gap-1.5 h-full pb-3">
-            <div className="w-3 bg-indigo-500 rounded-t-xl transition-all duration-700 shadow-md" style={{ height: `${(rec/max)*100}%`, minHeight: '4px' }}></div>
-            <div className="w-3 bg-blue-400 rounded-t-xl transition-all duration-700 shadow-md" style={{ height: `${(dist/max)*100}%`, minHeight: '4px' }}></div>
-            <div className="w-3 bg-teal-400 rounded-t-xl transition-all duration-700 shadow-md" style={{ height: `${(stock/max)*100}%`, minHeight: '4px' }}></div>
+        <div className="w-full flex flex-col items-center gap-2 h-full justify-end">
+            <div className="w-8 sm:w-10 bg-indigo-50 dark:bg-gray-700/50 rounded-xl relative overflow-hidden h-full border border-gray-100 dark:border-gray-700">
+                <div 
+                    className="absolute bottom-0 left-0 right-0 bg-indigo-600 transition-all duration-1000 shadow-inner" 
+                    style={{ height: `${percent}%` }}
+                >
+                    <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[7px] font-black text-white/40 rotate-90">
+                        {percent > 20 ? `${percent.toFixed(0)}%` : ''}
+                    </div>
+                </div>
+            </div>
+            <span className="text-[9px] font-black text-gray-500 uppercase truncate w-full text-center tracking-tighter leading-tight">{label}</span>
         </div>
-        <span className="text-[9px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-tighter">{label}</span>
     </div>
 );
 
 const ActivityBar: React.FC<{ label: string; value: number; max: number }> = ({ label, value, max }) => (
-    <div className="flex-1 flex flex-col items-center h-full justify-end group relative min-w-[40px]">
+    <div className="flex-1 min-w-0 flex flex-col items-center h-full justify-end group relative">
+        {/* Value Tooltip */}
         <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50 pointer-events-none whitespace-nowrap bg-gray-900 text-white p-2 rounded-xl shadow-xl text-[10px] font-black">
             ₹{value.toLocaleString()}
         </div>
-        <div className="w-full max-w-[32px] bg-gradient-to-t from-indigo-600 to-indigo-400 rounded-t-lg transition-all duration-700 shadow-lg group-hover:scale-y-105 origin-bottom" style={{ height: `${(value/max)*100}%`, minHeight: '4px' }}></div>
-        <span className="text-[8px] font-black text-gray-500 dark:text-gray-400 uppercase mt-2 rotate-45 origin-left truncate w-16">{label}</span>
+        
+        {/* The Column Bar - Flexible Width */}
+        <div 
+            className="w-1/2 min-w-[12px] max-w-[40px] bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-xl transition-all duration-700 shadow-lg group-hover:scale-y-105 origin-bottom border-t border-white/20" 
+            style={{ height: `${(value/max)*100}%`, minHeight: '8px' }}
+        ></div>
+        
+        {/* RE-ALIGNED LABEL */}
+        <div className="h-12 mt-4 relative w-full flex justify-center overflow-visible">
+            <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-start">
+                <span className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase rotate-45 origin-top-left whitespace-nowrap leading-none mt-2">
+                    {label}
+                </span>
+            </div>
+        </div>
     </div>
 );
 
