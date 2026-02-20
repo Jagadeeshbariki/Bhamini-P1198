@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import Dashboard from './Dashboard';
 import AssetTrackingDashboard from './AssetTrackingDashboard';
+import BeneficiaryExplorer from './BeneficiaryExplorer';
 
 export interface ActivityType {
     id: string;
@@ -11,13 +12,7 @@ export interface ActivityType {
 
 const ACTIVITIES: ActivityType[] = [
     { id: 'assets', name: 'Asset Tracking System', description: 'Interactive inventory, procurement ledger, and stock point monitoring.' },
-    { id: 'hari', name: 'Hari', description: 'Field Data Tracking: Household Head Name and IDs Details' },
-    { id: 'agriculture', name: 'Agriculture & Livelihoods', description: 'Tracking crop yields, farmer training, and income.' },
-    { id: 'education', name: 'Education & Skills', description: 'School enrollment, digital literacy, and vocational training.' },
-    { id: 'healthcare', name: 'Healthcare & Nutrition', description: 'Maternal health, immunization, and nutrition camps.' },
-    { id: 'wash', name: 'Water & Sanitation (WASH)', description: 'Safe drinking water and community sanitation projects.' },
-    { id: 'financial', name: 'Financial Inclusion', description: 'Self-help groups, bank linkages, and insurance.' },
-    { id: 'infrastructure', name: 'Rural Infrastructure', description: 'Check dams, roads, and community centers.' },
+    { id: 'beneficiary', name: 'Beneficiary Explorer', description: 'Detailed explorer for project beneficiaries and demographics.' },
 ];
 
 const ActivityPage: React.FC = () => {
@@ -32,6 +27,9 @@ const ActivityPage: React.FC = () => {
     const renderContent = () => {
         if (selectedActivity.id === 'assets') {
             return <AssetTrackingDashboard />;
+        }
+        if (selectedActivity.id === 'beneficiary') {
+            return <BeneficiaryExplorer />;
         }
         return <Dashboard activityId={selectedActivity.id} />;
     };
