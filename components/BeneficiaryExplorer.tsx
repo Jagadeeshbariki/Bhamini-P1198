@@ -48,7 +48,13 @@ const BeneficiaryExplorer: React.FC = () => {
         const cleanHeaders = headers.map(h => h.toUpperCase().replace(/\s+/g, ''));
 
         const getVal = (row: string[], search: string) => {
-            const idx = cleanHeaders.findIndex(h => h.includes(search.toUpperCase().replace(/\s+/g, '')));
+            const searchClean = search.toUpperCase().replace(/\s+/g, '');
+            // Try exact match first to avoid partial matches (e.g., 'Activity' matching 'Activity Registration Date')
+            let idx = cleanHeaders.findIndex(h => h === searchClean);
+            if (idx === -1) {
+                // Fallback to includes only if exact match fails
+                idx = cleanHeaders.findIndex(h => h.includes(searchClean));
+            }
             return idx !== -1 ? row[idx] : '';
         };
 
@@ -57,17 +63,17 @@ const BeneficiaryExplorer: React.FC = () => {
             if (row.length < 5) return null;
 
             return {
-                hhId: getVal(row, 'HHID') || getVal(row, 'HOUSEHOLDID'),
-                hhHeadName: getVal(row, 'HHHEADNAME') || getVal(row, 'HEADOFHOUSEHOLD'),
-                activity: getVal(row, 'ACTIVITY'),
-                beneficiaryName: getVal(row, 'BENEFICIARYNAME') || getVal(row, 'NAME'),
-                beneficiaryId: getVal(row, 'BENEFICIARYID') || getVal(row, 'ID'),
-                age: parseInt(getVal(row, 'AGE')) || 0,
-                gender: getVal(row, 'GENDER'),
-                phoneNumber: getVal(row, 'PHONENUMBER') || getVal(row, 'MOBILE'),
-                cluster: getVal(row, 'CLUSTER'),
-                gp: getVal(row, 'GP') || getVal(row, 'GRAMPANCHAYAT'),
-                village: getVal(row, 'VILLAGE'),
+                hhId: getVal(row, 'HH Id') || getVal(row, 'HHID'),
+                hhHeadName: getVal(row, 'HH Head Name') || getVal(row, 'HHHEADNAME'),
+                activity: getVal(row, 'Activity'),
+                beneficiaryName: getVal(row, 'Beneficiary Name') || getVal(row, 'BENEFICIARYNAME'),
+                beneficiaryId: getVal(row, 'Beneficiary ID') || getVal(row, 'BENEFICIARYID'),
+                age: parseInt(getVal(row, 'Age')) || 0,
+                gender: getVal(row, 'Gender'),
+                phoneNumber: getVal(row, 'phone number') || getVal(row, 'PHONENUMBER'),
+                cluster: getVal(row, 'cluster') || getVal(row, 'CLUSTER'),
+                gp: getVal(row, 'GP'),
+                village: getVal(row, 'village'),
             };
         }).filter((b): b is Beneficiary => !!b && !!b.beneficiaryName);
     };
