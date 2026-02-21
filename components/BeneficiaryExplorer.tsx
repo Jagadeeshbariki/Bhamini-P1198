@@ -63,14 +63,14 @@ const BeneficiaryExplorer: React.FC = () => {
             if (row.length < 5) return null;
 
             return {
-                hhId: getVal(row, 'HH Id') || getVal(row, 'HHID'),
-                hhHeadName: getVal(row, 'HH Head Name') || getVal(row, 'HHHEADNAME'),
-                activity: getVal(row, 'Activity'),
-                beneficiaryName: getVal(row, 'Beneficiary Name') || getVal(row, 'BENEFICIARYNAME'),
-                beneficiaryId: getVal(row, 'Beneficiary ID') || getVal(row, 'BENEFICIARYID'),
-                age: parseInt(getVal(row, 'Age')) || 0,
-                gender: getVal(row, 'Gender'),
-                phoneNumber: getVal(row, 'phone number') || getVal(row, 'PHONENUMBER'),
+                hhId: getVal(row, 'HH Id') || getVal(row, 'HHID') || getVal(row, 'House Hold ID'),
+                hhHeadName: getVal(row, 'HH Head Name') || getVal(row, 'HHHEADNAME') || getVal(row, 'HH Head Name'),
+                activity: getVal(row, 'Activity') || getVal(row, 'activity_registration-activity'),
+                beneficiaryName: getVal(row, 'Beneficiary Name') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'location-show_farmer_name'),
+                beneficiaryId: getVal(row, 'Beneficiary ID') || getVal(row, 'bnf_section-adhaar_number') || getVal(row, 'bnf_section_-adhaar_number_') || getVal(row, 'location-show_farmer_id'),
+                age: parseInt(getVal(row, 'Age') || getVal(row, 'bnf_section-age') || getVal(row, 'bnf_section_-age_')) || 0,
+                gender: getVal(row, 'Gender') || getVal(row, 'bnf_section-gender') || getVal(row, 'bnf_section_-gender_'),
+                phoneNumber: getVal(row, 'phone number') || getVal(row, 'bnf_section-phone_number') || getVal(row, 'bnf_section_-phone_number_'),
                 cluster: getVal(row, 'cluster') || getVal(row, 'CLUSTER'),
                 gp: getVal(row, 'GP'),
                 village: getVal(row, 'village'),
