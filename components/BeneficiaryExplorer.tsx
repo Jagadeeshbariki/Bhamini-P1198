@@ -164,7 +164,8 @@ const BeneficiaryExplorer: React.FC = () => {
         
         const activityCounts: Record<string, number> = {};
         filteredData.forEach(d => {
-            activityCounts[d.activity] = (activityCounts[d.activity] || 0) + 1;
+            const act = d.activity || 'Unassigned';
+            activityCounts[act] = (activityCounts[act] || 0) + 1;
         });
 
         const genderCounts: Record<string, number> = {};
@@ -180,7 +181,10 @@ const BeneficiaryExplorer: React.FC = () => {
             percent: total > 0 ? (count / total) * 100 : 0
         }));
 
-        return { total, activityCounts, genderData };
+        const averageAge = total > 0 ? filteredData.reduce((acc, d) => acc + d.age, 0) / total : 0;
+        const uniqueVillages = new Set(filteredData.map(d => d.village)).size;
+
+        return { total, activityCounts, genderData, averageAge, uniqueVillages };
     }, [filteredData]);
 
     if (loading) return (
@@ -232,21 +236,32 @@ const BeneficiaryExplorer: React.FC = () => {
 
             {/* 2. SCORECARDS & CHARTS */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                {/* Total Count Card */}
-                <div className="bg-indigo-600 p-8 rounded-[2.5rem] text-white shadow-xl shadow-indigo-200 dark:shadow-none flex flex-col justify-center">
-                    <p className="text-[10px] font-black uppercase opacity-60 tracking-[0.2em] mb-2">Total Beneficiaries</p>
-                    <p className="text-5xl font-black tracking-tighter">{stats.total}</p>
-                    <div className="mt-4 h-1 w-12 bg-white/30 rounded-full"></div>
+                {/* Main Scorecards Column */}
+                <div className="flex flex-col gap-4">
+                    <div className="bg-indigo-600 p-6 rounded-[2rem] text-white shadow-xl shadow-indigo-200 dark:shadow-none">
+                        <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Beneficiaries</p>
+                        <p className="text-4xl font-black tracking-tighter">{stats.total}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white dark:bg-gray-800 p-5 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm">
+                            <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest mb-1">Avg. Age</p>
+                            <p className="text-xl font-black text-gray-800 dark:text-white">{stats.averageAge.toFixed(1)}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-5 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm">
+                            <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest mb-1">Villages</p>
+                            <p className="text-xl font-black text-gray-800 dark:text-white">{stats.uniqueVillages}</p>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Activity Wise Counts */}
-                <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-6">Activity Distribution</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[180px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-4">Activity Distribution</h3>
+                    <div className="flex-grow grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto pr-2 custom-scrollbar max-h-[180px]">
                         {Object.entries(stats.activityCounts).map(([activity, count]) => (
-                            <div key={activity} className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+                            <div key={activity} className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 flex flex-col justify-center">
                                 <p className="text-[8px] font-black uppercase text-gray-400 truncate mb-1">{activity}</p>
-                                <p className="text-xl font-black text-gray-800 dark:text-white">{count}</p>
+                                <p className="text-lg font-black text-gray-800 dark:text-white">{count}</p>
                             </div>
                         ))}
                     </div>
@@ -255,14 +270,14 @@ const BeneficiaryExplorer: React.FC = () => {
                 {/* Gender Pie Chart */}
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col items-center">
                     <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-4">Gender Split</h3>
-                    <div className="relative w-32 h-32">
+                    <div className="relative w-28 h-28">
                         <PieChart data={stats.genderData} />
                     </div>
-                    <div className="mt-4 flex flex-wrap justify-center gap-4">
+                    <div className="mt-4 flex flex-wrap justify-center gap-3">
                         {stats.genderData.map((g, idx) => (
                             <div key={idx} className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full" style={{ background: COLORS[idx % COLORS.length] }}></div>
-                                <span className="text-[9px] font-black uppercase text-gray-500">{g.label} ({g.percent.toFixed(0)}%)</span>
+                                <span className="text-[8px] font-black uppercase text-gray-500">{g.label} ({g.percent.toFixed(0)}%)</span>
                             </div>
                         ))}
                     </div>
