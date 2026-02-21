@@ -35,8 +35,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
     };
 
     // Permission Logic based on User Roles
-    const isFieldRole = user?.role === 'field' || user?.role === 'admin';
-    const isProjectRole = user?.role === 'project' || user?.role === 'admin';
+    const isFieldRole = user?.role === 'field' || user?.role === 'admin' || user?.role === 'da';
+    const isProjectRole = user?.role === 'project' || user?.role === 'admin' || user?.role === 'da';
     const isAdmin = user?.role === 'admin';
 
     return (
@@ -73,7 +73,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                             {isProjectRole && (
                                 <>
                                     <NavLink page="activity">Dashboards</NavLink>
-                                    <NavLink page="budget-tracker">Budget Analysis</NavLink>
+                                    {user?.role !== 'da' && <NavLink page="budget-tracker">Budget Analysis</NavLink>}
                                 </>
                             )}
 
@@ -134,7 +134,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                         {isProjectRole && (
                             <>
                                 <NavLink page="activity">Dashboards</NavLink>
-                                <NavLink page="budget-tracker">Budget Analysis</NavLink>
+                                {user?.role !== 'da' && <NavLink page="budget-tracker">Budget Analysis</NavLink>}
                             </>
                         )}
                         {isFieldRole && (

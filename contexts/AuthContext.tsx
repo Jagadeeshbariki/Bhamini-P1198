@@ -96,7 +96,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (foundUser) {
         const rawRole = (foundUser.ROLE || 'field').toLowerCase().trim();
-        const role = (['admin', 'project', 'field'].includes(rawRole) ? rawRole : 'field') as 'field' | 'project' | 'admin';
+        const role = (['admin', 'project', 'field', 'da'].includes(rawRole) ? rawRole : 'field') as 'field' | 'project' | 'admin' | 'da';
         
         const authUser: AuthUser = {
           username: foundUser.USERNAME,

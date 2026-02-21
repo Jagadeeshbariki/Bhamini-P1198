@@ -47,6 +47,7 @@ const AppContent: React.FC = () => {
         if (user) {
             const isField = user.role === 'field';
             const isProject = user.role === 'project';
+            const isDA = user.role === 'da';
             const isAdmin = user.role === 'admin';
 
             if (isField) {
@@ -56,6 +57,11 @@ const AppContent: React.FC = () => {
             } else if (isProject) {
                 // Project staff: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution
                 const restrictedPages: Page[] = ['mark-attendance', 'attendance-report', 'admin'];
+                if (restrictedPages.includes(page)) setPage('home');
+            } else if (isDA) {
+                // DA: Allow Gallery, Dashboards, Attendance, Reports, MIS, Baseline, Contribution
+                // Restricted: Budget, Admin
+                const restrictedPages: Page[] = ['budget-tracker', 'admin'];
                 if (restrictedPages.includes(page)) setPage('home');
             }
             // Admin has no restrictions
