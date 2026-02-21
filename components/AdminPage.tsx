@@ -85,8 +85,8 @@ const AdminPage: React.FC = () => {
     const [usersList, setUsersList] = useState<{username: string, role: string}[]>([]);
 
     // Media Manager State
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [previewUrls, setPreviewUrls] = useState<string[]>([]);
     const [photoDescription, setPhotoDescription] = useState('');
     const [uploadType, setUploadType] = useState<'slider' | 'gallery'>('gallery');
     const [photoActivity, setPhotoActivity] = useState('');
@@ -280,41 +280,71 @@ const AdminPage: React.FC = () => {
     }, [allAttendanceData, selectedUsername, selectedMonth, selectedYear, months]);
 
     const handleUploadMedia = async () => {
-        if (!selectedFile || !previewUrl || !photoActivity) {
-            setUploadStatus({ success: false, message: 'Missing file or activity context' });
+        if (selectedFiles.length === 0 || !photoActivity) {
+            setUploadStatus({ success: false, message: 'Missing files or activity context' });
             return;
         }
         setIsUploading(true);
         setUploadStatus(null);
+        
+        let successCount = 0;
+        let errorCount = 0;
+
         try {
-            const base64Data = previewUrl.split(',')[1];
-            const payload = {
-                action: "addPhoto",
-                fileName: selectedFile.name,
-                mimeType: selectedFile.type,
-                type: uploadType,
-                description: photoDescription || 'Field Entry',
-                activity: photoActivity,
-                Activity: photoActivity,
-                data: base64Data
-            };
-            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                method: 'POST',
-                mode: 'cors',
-                headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify(payload)
-            });
-            const raw = await response.text();
-            let data;
-            try { data = JSON.parse(raw); } catch (e) { throw new Error("Registry server communication failure."); }
-            if (data.status === 'success') {
-                setUploadStatus({ success: true, message: 'Committed to registry!' });
-                setSelectedFile(null); setPreviewUrl(null); setPhotoDescription(''); setPhotoActivity('');
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                const preview = previewUrls[i];
+                const base64Data = preview.split(',')[1];
+                
+                const payload = {
+                    action: "addPhoto",
+                    fileName: file.name,
+                    mimeType: file.type,
+                    type: uploadType,
+                    description: photoDescription || 'Field Entry',
+                    activity: photoActivity,
+                    Activity: photoActivity,
+                    data: base64Data
+                };
+
+                const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(payload)
+                });
+
+                const raw = await response.text();
+                try {
+                    const data = JSON.parse(raw);
+                    if (data.status === 'success') {
+                        successCount++;
+                    } else {
+                        errorCount++;
+                    }
+                } catch (e) {
+                    errorCount++;
+                }
+            }
+
+            if (successCount > 0) {
+                setUploadStatus({ 
+                    success: true, 
+                    message: `Successfully uploaded ${successCount} image(s).${errorCount > 0 ? ` ${errorCount} failed.` : ''}` 
+                });
+                setSelectedFiles([]);
+                setPreviewUrls([]);
+                setPhotoDescription('');
+                setPhotoActivity('');
                 fetchData();
-            } else { setUploadStatus({ success: false, message: data.message || 'Submission failed' }); }
+            } else {
+                setUploadStatus({ success: false, message: 'All uploads failed. Check script deployment.' });
+            }
         } catch (err: any) {
-            setUploadStatus({ success: false, message: 'Connection error. Check script deployment.' });
-        } finally { setIsUploading(false); }
+            setUploadStatus({ success: false, message: 'Connection error during multiple upload.' });
+        } finally {
+            setIsUploading(false);
+        }
     };
 
     const handleDeleteMedia = async (imageUrl: string) => {
@@ -450,18 +480,51 @@ const AdminPage: React.FC = () => {
                                 <option value="gallery">Field Activity Gallery</option>
                                 <option value="slider">Hero Highlights Slider</option>
                             </select>
-                            <input type="file" accept="image/*" onChange={e => {
-                                const file = e.target.files?.[0];
-                                if (file) { setSelectedFile(file); const reader = new FileReader(); reader.onloadend = () => setPreviewUrl(reader.result as string); reader.readAsDataURL(file); }
-                            }} className="text-xs w-full" />
-                            {previewUrl && <img src={previewUrl} className="aspect-video rounded-3xl object-cover border-4 border-white shadow-xl" />}
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                multiple 
+                                onChange={e => {
+                                    const files = Array.from(e.target.files || []).slice(0, 5);
+                                    if (files.length > 0) {
+                                        setSelectedFiles(files);
+                                        const newPreviews: string[] = [];
+                                        let loadedCount = 0;
+                                        
+                                        files.forEach((file, index) => {
+                                            const reader = new FileReader();
+                                            reader.onloadend = () => {
+                                                newPreviews[index] = reader.result as string;
+                                                loadedCount++;
+                                                if (loadedCount === files.length) {
+                                                    setPreviewUrls(newPreviews);
+                                                }
+                                            };
+                                            reader.readAsDataURL(file);
+                                        });
+                                    }
+                                }} 
+                                className="text-xs w-full" 
+                            />
+                            {previewUrls.length > 0 && (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {previewUrls.map((url, idx) => (
+                                        <div key={idx} className="relative aspect-video rounded-2xl overflow-hidden border-2 border-white shadow-md">
+                                            <img src={url} className="w-full h-full object-cover" />
+                                            <div className="absolute top-1 right-1 bg-black/50 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black">
+                                                {idx + 1}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             <select value={photoActivity} onChange={e => setPhotoActivity(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl font-bold text-sm">
                                 <option value="">Select Activity...</option>
                                 {activityContextOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                             </select>
                             <textarea value={photoDescription} onChange={e => setPhotoDescription(e.target.value)} rows={3} placeholder="Description..." className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl font-bold text-sm" />
-                            <button onClick={handleUploadMedia} disabled={isUploading || !selectedFile || !photoActivity} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl disabled:opacity-50">
-                                {isUploading ? "Publishing..." : "Commit to Registry"}
+                            <button onClick={handleUploadMedia} disabled={isUploading || selectedFiles.length === 0 || !photoActivity} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl disabled:opacity-50">
+                                {isUploading ? `Publishing (${selectedFiles.length})...` : "Commit to Registry"}
                             </button>
                             {uploadStatus && <p className={`text-center text-[10px] font-black uppercase mt-2 ${uploadStatus.success ? 'text-emerald-500' : 'text-red-500'}`}>{uploadStatus.message}</p>}
                         </div>
