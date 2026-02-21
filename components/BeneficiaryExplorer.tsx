@@ -108,7 +108,8 @@ const BeneficiaryExplorer: React.FC = () => {
             const matchesActivity = filterActivity === 'All' || d.activity === filterActivity;
             const matchesSearch = d.beneficiaryName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                  d.beneficiaryId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                 d.hhHeadName.toLowerCase().includes(searchQuery.toLowerCase());
+                                 d.hhHeadName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                 d.hhId.toLowerCase().includes(searchQuery.toLowerCase());
             return matchesCluster && matchesGP && matchesVillage && matchesActivity && matchesSearch;
         });
     }, [data, filterCluster, filterGP, filterVillage, filterActivity, searchQuery]);
