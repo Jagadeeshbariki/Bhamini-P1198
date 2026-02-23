@@ -49,7 +49,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
     // Permission Logic based on User Roles
     const isFieldRole = user?.role === 'field' || user?.role === 'admin' || user?.role === 'DA';
     const isProjectRole = user?.role === 'project' || user?.role === 'admin' || user?.role === 'DA';
-    const canAccessAdmin = user?.role === 'admin' || user?.role === 'da';
+    const canAccessAdmin = user?.role === 'admin' || user?.role === 'DA';
 
     return (
         <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 sticky top-0 z-50">
@@ -85,7 +85,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                             {isProjectRole && (
                                 <>
                                     <NavLink {...navLinkProps} page="activity">Dashboards</NavLink>
-                                    {user?.role !== 'da' && <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>}
+                                    {user?.role !== 'DA' && <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>}
                                 </>
                             )}
 
@@ -146,7 +146,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                         {isProjectRole && (
                             <>
                                 <NavLink {...navLinkProps} page="activity">Dashboards</NavLink>
-                                {user?.role !== 'da' && <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>}
+                                {user?.role !== 'DA' && <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>}
                             </>
                         )}
                         {isFieldRole && (
