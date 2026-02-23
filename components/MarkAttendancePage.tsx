@@ -17,16 +17,10 @@ interface AttendanceRecord {
     outcomes: string;
 }
 
-interface MarkAttendancePageProps {
-    onNavigate?: (page: any) => void;
-}
-
-const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) => {
+const MarkAttendancePage: React.FC = () => {
     const { user } = useAuth();
     const [currentDate, setCurrentDate] = useState(new Date());
     const [markedRecords, setMarkedRecords] = useState<Map<string, AttendanceRecord>>(new Map());
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -72,7 +66,6 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
 
     const fetchMarkedDates = useCallback(async () => {
         if (!user) return;
-        setLoading(true);
         try {
             const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&cb=${Date.now()}`);
             const csvText = await response.text();
@@ -106,13 +99,13 @@ const MarkAttendancePage: React.FC<MarkAttendancePageProps> = ({ onNavigate }) =
             });
             setMarkedRecords(recordMap);
         } catch (err) {
-            setError('Failed to load data.');
-        } finally {
-            setLoading(false);
+            console.error('Failed to load data:', err);
         }
     }, [user]);
 
-    useEffect(() => { fetchMarkedDates(); }, [fetchMarkedDates]);
+    useEffect(() => { 
+        fetchMarkedDates(); 
+    }, [fetchMarkedDates]);
 
     const navigateMonth = (direction: number) => {
         const next = new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1);

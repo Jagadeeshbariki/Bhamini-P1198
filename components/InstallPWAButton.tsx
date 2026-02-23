@@ -9,7 +9,7 @@ const InstallPWAButton: React.FC = () => {
     useEffect(() => {
         // Check if the app is already running in standalone mode
         if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
-            setIsAppInstalled(true);
+            setTimeout(() => setIsAppInstalled(true), 0);
             return;
         }
 

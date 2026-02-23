@@ -38,8 +38,10 @@ const AppContent: React.FC = () => {
         
         // Handle unauthenticated access to protected pages
         if (!user && protectedPages.includes(page)) {
-            setLastProtectedPage(page);
-            setPage('login');
+            setTimeout(() => {
+                setLastProtectedPage(page);
+                setPage('login');
+            }, 0);
             return;
         }
 
@@ -48,21 +50,20 @@ const AppContent: React.FC = () => {
             const isField = user.role === 'field';
             const isProject = user.role === 'project';
             const isDA = user.role === 'da';
-            const isAdmin = user.role === 'admin';
 
             if (isField) {
                 // Field staff: Allow Gallery, Attendance, Reports, MIS, Baseline, Contribution
                 const restrictedPages: Page[] = ['activity', 'budget-tracker', 'admin'];
-                if (restrictedPages.includes(page)) setPage('home');
+                if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
             } else if (isProject) {
                 // Project staff: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution
                 const restrictedPages: Page[] = ['mark-attendance', 'attendance-report', 'admin'];
-                if (restrictedPages.includes(page)) setPage('home');
+                if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
             } else if (isDA) {
-                // DA: Allow Gallery, Dashboards, Attendance, Reports, MIS, Baseline, Contribution
-                // Restricted: Budget, Admin
-                const restrictedPages: Page[] = ['budget-tracker', 'admin'];
-                if (restrictedPages.includes(page)) setPage('home');
+                // DA: Allow Gallery, Dashboards, Attendance, Reports, MIS, Baseline, Contribution, Admin
+                // Restricted: Budget
+                const restrictedPages: Page[] = ['budget-tracker'];
+                if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
             }
             // Admin has no restrictions
         }
@@ -94,7 +95,7 @@ const AppContent: React.FC = () => {
             case 'attendance-report':
                 return <ReportPage />;
             case 'mark-attendance':
-                return <MarkAttendancePage onNavigate={handleNavigate} />;
+                return <MarkAttendancePage />;
             case 'admin':
                 return <AdminPage />;
             case 'budget-tracker':

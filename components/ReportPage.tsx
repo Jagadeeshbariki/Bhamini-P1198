@@ -21,7 +21,6 @@ const ReportPage: React.FC = () => {
     const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
     const [filteredData, setFilteredData] = useState<AttendanceRecord[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [editingRecord, setEditingRecord] = useState<{date: Date, data: AttendanceRecord} | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
@@ -50,7 +49,6 @@ const ReportPage: React.FC = () => {
 
     const fetchData = useCallback(async () => {
         setLoading(true);
-        setError(null);
         try {
             const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&_=${new Date().getTime()}`);
             if (!response.ok) throw new Error(`Network error (${response.status})`);
@@ -119,7 +117,7 @@ const ReportPage: React.FC = () => {
             }
 
         } catch (err) {
-            setError('Failed to sync data.');
+            console.error('Failed to sync data:', err);
         } finally {
             setLoading(false);
         }
@@ -162,7 +160,7 @@ const ReportPage: React.FC = () => {
         if (!user || !printRef.current) return;
         setIsGenerating(true);
         try {
-            // @ts-ignore
+            // @ts-expect-error - html2pdf is not typed
             const worker = window.html2pdf();
             await worker.from(printRef.current).set({
                 margin: [10, 5, 10, 5],

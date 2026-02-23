@@ -322,7 +322,7 @@ const AdminPage: React.FC = () => {
                     } else {
                         errorCount++;
                     }
-                } catch (e) {
+                } catch {
                     errorCount++;
                 }
             }
@@ -340,7 +340,7 @@ const AdminPage: React.FC = () => {
             } else {
                 setUploadStatus({ success: false, message: 'All uploads failed. Check script deployment.' });
             }
-        } catch (err: any) {
+        } catch {
             setUploadStatus({ success: false, message: 'Connection error during multiple upload.' });
         } finally {
             setIsUploading(false);
@@ -363,7 +363,7 @@ const AdminPage: React.FC = () => {
             } else {
                 alert('Deletion failed: ' + data.message);
             }
-        } catch (err) {
+        } catch {
             alert('Connection error while deleting.');
         } finally {
             setIsDeletingMedia(null);
@@ -389,10 +389,10 @@ const AdminPage: React.FC = () => {
                 body: JSON.stringify({ action: 'updateBillStatus', id, status })
             });
             if ((await res.json()).status === 'success') fetchData();
-        } catch (err) { alert("Status update failed."); }
+        } catch { alert("Status update failed."); }
     };
 
-    if (!user?.isAdmin) return <div className="p-10 text-center font-black text-red-500 uppercase">Access Denied</div>;
+    if (user?.role !== 'admin' && user?.role !== 'da') return <div className="p-10 text-center font-black text-red-500 uppercase">Access Denied</div>;
     if (loading) return <div className="p-20 text-center font-black text-indigo-400 uppercase animate-pulse">Syncing...</div>;
 
     return (
@@ -437,7 +437,7 @@ const AdminPage: React.FC = () => {
                                 const records = allAttendanceData.filter(r => r.name.toLowerCase() === selectedUsername.toLowerCase() && r.date === dateKey);
                                 const record = records.length > 0 ? records[records.length - 1] : null;
                                 const isCurrentMonth = day.getMonth() === months.indexOf(selectedMonth);
-                                let statusColor = record ? (record.workingStatus === 'Working' ? 'bg-emerald-500 border-emerald-600 text-white shadow-lg' : 'bg-red-500 border-red-600 text-white shadow-lg') : (day.getDay() === 0 && isCurrentMonth ? 'bg-red-50 dark:bg-red-900/10 border-red-100 text-red-300' : 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-300');
+                                const statusColor = record ? (record.workingStatus === 'Working' ? 'bg-emerald-500 border-emerald-600 text-white shadow-lg' : 'bg-red-500 border-red-600 text-white shadow-lg') : (day.getDay() === 0 && isCurrentMonth ? 'bg-red-50 dark:bg-red-900/10 border-red-100 text-red-300' : 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-300');
                                 return (
                                     <div key={i} className={`h-24 p-2 rounded-3xl border-2 flex flex-col justify-between transition-all ${!isCurrentMonth ? 'opacity-20 pointer-events-none' : statusColor}`}>
                                         <span className="text-sm font-black">{day.getDate()}</span>
@@ -713,8 +713,6 @@ const AdminPage: React.FC = () => {
             )}
 
             <style>{`
-                @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-                .animate-fade-in { animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
                 .no-scrollbar::-webkit-scrollbar { display: none; }
                 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }

@@ -1,16 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { AuthUser } from '../types';
 import { GOOGLE_APPS_SCRIPT_URL } from '../config';
-
-interface AttendanceRecord {
-    workingStatus: string;
-    reasonNotWorking: string;
-    placeOfVisit: string;
-    purposeOfVisit: string;
-    workingHours: string;
-    outcomes: string;
-}
 
 interface AttendanceFormModalProps {
     user: AuthUser;

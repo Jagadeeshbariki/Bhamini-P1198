@@ -25,7 +25,6 @@ interface HouseholdData {
 const BaselinePage: React.FC = () => {
     const [allData, setAllData] = useState<HouseholdData[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [selectedBeneficiary, setSelectedBeneficiary] = useState<HouseholdData | null>(null);
 
     // Filters
@@ -121,8 +120,8 @@ const BaselinePage: React.FC = () => {
                 const csvText = await response.text();
                 const parsed = parseCSV(csvText);
                 setAllData(parsed);
-            } catch (err: any) {
-                setError(err.message);
+            } catch (err) {
+                console.error(err);
             } finally {
                 setLoading(false);
             }
@@ -362,9 +361,7 @@ const BaselinePage: React.FC = () => {
             )}
 
             <style>{`
-                @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
                 @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
-                .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
                 .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
                 @media (min-width: 640px) {
                     .animate-slide-up { animation: fade-in 0.4s ease-out forwards; }

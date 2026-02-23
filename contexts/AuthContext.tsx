@@ -1,9 +1,8 @@
 
-import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { useState, useEffect, useCallback, ReactNode } from 'react';
 import type { AuthUser, AuthContextType, Session } from '../types';
 import { GOOGLE_SHEET_USERS_URL } from '../config';
-
-export const AuthContext = createContext<AuthContextType | null>(null);
+import { AuthContext } from './AuthContextInstance';
 
 const SESSION_DURATION = 12 * 60 * 60 * 1000;
 
@@ -22,7 +21,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           localStorage.removeItem('bhamini_session');
           setUser(null);
         }
-      } catch (e) {
+      } catch {
         localStorage.removeItem('bhamini_session');
         setUser(null);
       }

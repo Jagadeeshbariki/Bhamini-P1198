@@ -8,36 +8,48 @@ interface HeaderProps {
     onLogout: () => void;
 }
 
+interface NavLinkProps {
+    page: string;
+    targetPage: string;
+    currentPage: string;
+    onNavigate: (page: any) => void;
+    setIsMenuOpen: (open: boolean) => void;
+    children: React.ReactNode;
+    primary?: boolean;
+}
+
+const NavLink: React.FC<NavLinkProps> = ({ page: targetPage, currentPage, onNavigate, setIsMenuOpen, children, primary }) => {
+    const isActive = currentPage === targetPage;
+    
+    return (
+        <button
+            onClick={() => {
+                onNavigate(targetPage);
+                setIsMenuOpen(false);
+            }}
+            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+                isActive 
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none scale-105' 
+                : primary 
+                    ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900/40' 
+                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600'
+            }`}
+        >
+            {children}
+        </button>
+    );
+};
+
 const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) => {
     const { user } = useAuth();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-    const NavLink: React.FC<{ page: string; children: React.ReactNode; primary?: boolean }> = ({ page: targetPage, children, primary }) => {
-        const isActive = currentPage === targetPage;
-        
-        return (
-            <button
-                onClick={() => {
-                    onNavigate(targetPage);
-                    setIsMenuOpen(false);
-                }}
-                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
-                    isActive 
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none scale-105' 
-                    : primary 
-                        ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900/40' 
-                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600'
-                }`}
-            >
-                {children}
-            </button>
-        );
-    };
+    const navLinkProps = { currentPage, onNavigate, setIsMenuOpen };
 
     // Permission Logic based on User Roles
-    const isFieldRole = user?.role === 'field' || user?.role === 'admin' || user?.role === 'da';
-    const isProjectRole = user?.role === 'project' || user?.role === 'admin' || user?.role === 'da';
-    const isAdmin = user?.role === 'admin';
+    const isFieldRole = user?.role === 'field' || user?.role === 'admin' || user?.role === 'DA';
+    const isProjectRole = user?.role === 'project' || user?.role === 'admin' || user?.role === 'DA';
+    const canAccessAdmin = user?.role === 'admin' || user?.role === 'da';
 
     return (
         <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 sticky top-0 z-50">
@@ -60,31 +72,31 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
 
                     <div className="hidden xl:block">
                         <div className="flex items-center gap-2">
-                            <NavLink page="home">Gallery</NavLink>
+                            <NavLink {...navLinkProps} page="home">Gallery</NavLink>
                             
                             {user && (
                                 <>
-                                    <NavLink page="baseline">Baseline Explorer</NavLink>
-                                    <NavLink page="contribution">Contributions</NavLink>
-                                    <NavLink page="field-mis" primary>Target vs Achievements</NavLink>
+                                    <NavLink {...navLinkProps} page="baseline">Baseline Explorer</NavLink>
+                                    <NavLink {...navLinkProps} page="contribution">Contributions</NavLink>
+                                    <NavLink {...navLinkProps} page="field-mis" primary>Target vs Achievements</NavLink>
                                 </>
                             )}
 
                             {isProjectRole && (
                                 <>
-                                    <NavLink page="activity">Dashboards</NavLink>
-                                    {user?.role !== 'da' && <NavLink page="budget-tracker">Budget Analysis</NavLink>}
+                                    <NavLink {...navLinkProps} page="activity">Dashboards</NavLink>
+                                    {user?.role !== 'da' && <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>}
                                 </>
                             )}
 
                             {isFieldRole && (
                                 <>
-                                    <NavLink page="mark-attendance">Log Work</NavLink>
-                                    <NavLink page="attendance-report">My Reports</NavLink>
+                                    <NavLink {...navLinkProps} page="mark-attendance">Log Work</NavLink>
+                                    <NavLink {...navLinkProps} page="attendance-report">My Reports</NavLink>
                                 </>
                             )}
 
-                            {isAdmin && <NavLink page="admin">Admin Panel</NavLink>}
+                            {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Panel</NavLink>}
                             
                             <div className="h-6 w-px bg-gray-100 dark:bg-gray-800 mx-2"></div>
                             {user ? (
@@ -97,7 +109,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                     <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                                 </button>
                             ) : (
-                                <NavLink page="login">Sign In</NavLink>
+                                <NavLink {...navLinkProps} page="login">Sign In</NavLink>
                             )}
                         </div>
                     </div>
@@ -123,27 +135,27 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
             {isMenuOpen && (
                 <div className="xl:hidden bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 animate-fade-in overflow-hidden">
                     <div className="px-4 py-6 flex flex-col gap-2">
-                        <NavLink page="home">Gallery</NavLink>
+                        <NavLink {...navLinkProps} page="home">Gallery</NavLink>
                         {user && (
                             <>
-                                <NavLink page="baseline">Baseline Explorer</NavLink>
-                                <NavLink page="contribution">Contributions</NavLink>
-                                <NavLink page="field-mis" primary>Target vs Achievements</NavLink>
+                                <NavLink {...navLinkProps} page="baseline">Baseline Explorer</NavLink>
+                                <NavLink {...navLinkProps} page="contribution">Contributions</NavLink>
+                                <NavLink {...navLinkProps} page="field-mis" primary>Target vs Achievements</NavLink>
                             </>
                         )}
                         {isProjectRole && (
                             <>
-                                <NavLink page="activity">Dashboards</NavLink>
-                                {user?.role !== 'da' && <NavLink page="budget-tracker">Budget Analysis</NavLink>}
+                                <NavLink {...navLinkProps} page="activity">Dashboards</NavLink>
+                                {user?.role !== 'da' && <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>}
                             </>
                         )}
                         {isFieldRole && (
                             <>
-                                <NavLink page="mark-attendance">Log Work</NavLink>
-                                <NavLink page="attendance-report">Monthly Reports</NavLink>
+                                <NavLink {...navLinkProps} page="mark-attendance">Log Work</NavLink>
+                                <NavLink {...navLinkProps} page="attendance-report">Monthly Reports</NavLink>
                             </>
                         )}
-                        {isAdmin && <NavLink page="admin">Admin Console</NavLink>}
+                        {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Console</NavLink>}
                         {user ? (
                             <button
                                 onClick={() => { onLogout(); setIsMenuOpen(false); }}
@@ -152,7 +164,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 Logout ({user.username})
                             </button>
                         ) : (
-                            <NavLink page="login">Sign In</NavLink>
+                            <NavLink {...navLinkProps} page="login">Sign In</NavLink>
                         )}
                     </div>
                 </div>

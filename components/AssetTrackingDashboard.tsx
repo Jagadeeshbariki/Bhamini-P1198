@@ -416,7 +416,6 @@ const ActivityBar: React.FC<{ label: string; value: number; max: number }> = ({ 
 );
 
 const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ data }) => {
-    let currentOffset = 0;
     const radius = 40;
     const circ = 2 * Math.PI * radius;
 
@@ -426,7 +425,11 @@ const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ da
                 const dash = (item.percent / 100) * circ;
                 const offset = circ - dash;
                 const stroke = COLORS[idx % COLORS.length];
-                const res = (
+                
+                // Calculate cumulative rotation based on previous items
+                const rotation = (data.slice(0, idx).reduce((acc, curr) => acc + curr.percent, 0) / 100) * 360;
+                
+                return (
                     <circle 
                         key={idx}
                         cx="50" cy="50" r={radius} 
@@ -435,11 +438,9 @@ const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ da
                         strokeWidth="14" 
                         strokeDasharray={circ}
                         strokeDashoffset={offset}
-                        style={{ transformOrigin: 'center', transform: `rotate(${(currentOffset/100)*360}deg)`, transition: 'all 1s ease' }}
+                        style={{ transformOrigin: 'center', transform: `rotate(${rotation}deg)`, transition: 'all 1s ease' }}
                     />
                 );
-                currentOffset += item.percent;
-                return res;
             })}
             <text x="50" y="50" className="text-[9px] font-black fill-gray-400 transform rotate-90" textAnchor="middle" dominantBaseline="middle">
                 STATUS

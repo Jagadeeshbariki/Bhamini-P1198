@@ -21,7 +21,6 @@ const BudgetTrackerPage: React.FC = () => {
     // Filters & Search
     const [selectedYear, setSelectedYear] = useState<string>('All');
     const [selectedQuarter, setSelectedQuarter] = useState<string>('All');
-    const [selectedHead, setSelectedHead] = useState<string>('All');
     const [searchQuery, setSearchQuery] = useState('');
 
     const parseCSV = (csv: string): BudgetRow[] => {
@@ -91,9 +90,9 @@ const BudgetTrackerPage: React.FC = () => {
             const matchesHead = selectedHead === 'All' || d.budgetHead === selectedHead;
             const matchesSearch = d.budgetHead.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                  d.headCode.toLowerCase().includes(searchQuery.toLowerCase());
-            return matchesYear && matchesQuarter && matchesHead && matchesSearch;
+            return matchesYear && matchesQuarter && matchesSearch;
         });
-    }, [allData, selectedYear, selectedQuarter, selectedHead, searchQuery]);
+    }, [allData, selectedYear, selectedQuarter, searchQuery]);
 
     const stats = useMemo(() => {
         const totalAmount = filteredData.reduce((acc, d) => acc + d.targetAmount, 0);
@@ -360,13 +359,6 @@ const BudgetTrackerPage: React.FC = () => {
             </div>
 
             <style>{`
-                @keyframes fade-in {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                .animate-fade-in {
-                    animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-                }
                 .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }

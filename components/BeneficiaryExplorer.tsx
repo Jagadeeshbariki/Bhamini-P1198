@@ -1,6 +1,21 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { 
+    BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, 
+    XAxis, YAxis, Tooltip 
+} from 'recharts';
+import { 
+    Users, MapPin, Filter, Search, 
+    Download, X, ArrowUpDown,
+    Activity as ActivityIcon, UserCheck
+} from 'lucide-react';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 import { BENEFICIARY_DATA_URL } from '../config';
+
+function cn(...inputs: ClassValue[]) {
+    return twMerge(clsx(inputs));
+}
 
 interface Beneficiary {
     hhId: string;
@@ -15,6 +30,8 @@ interface Beneficiary {
     gp: string;
     village: string;
 }
+
+const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#f43f5e'];
 
 const BeneficiaryExplorer: React.FC = () => {
     const [data, setData] = useState<Beneficiary[]>([]);
@@ -115,7 +132,7 @@ const BeneficiaryExplorer: React.FC = () => {
     }, [data, filterCluster, filterGP, filterVillage, filterActivity, searchQuery]);
 
     const sortedData = useMemo(() => {
-        let sortableItems = [...filteredData];
+        const sortableItems = [...filteredData];
         if (sortConfig !== null) {
             sortableItems.sort((a, b) => {
                 const aValue = a[sortConfig.key];
@@ -141,25 +158,6 @@ const BeneficiaryExplorer: React.FC = () => {
         setSortConfig({ key, direction });
     };
 
-    const SortIcon = ({ columnKey }: { columnKey: keyof Beneficiary }) => {
-        if (!sortConfig || sortConfig.key !== columnKey) {
-            return (
-                <svg className="w-3 h-3 ml-1 opacity-20 group-hover:opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                </svg>
-            );
-        }
-        return sortConfig.direction === 'asc' ? (
-            <svg className="w-3 h-3 ml-1 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 15l7-7 7 7" />
-            </svg>
-        ) : (
-            <svg className="w-3 h-3 ml-1 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7" />
-            </svg>
-        );
-    };
-
     const stats = useMemo(() => {
         const total = filteredData.length;
         
@@ -169,6 +167,10 @@ const BeneficiaryExplorer: React.FC = () => {
             activityCounts[act] = (activityCounts[act] || 0) + 1;
         });
 
+        const activityData = Object.entries(activityCounts)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
+
         const genderCounts: Record<string, number> = {};
         filteredData.forEach(d => {
             const g = d.gender?.trim().toLowerCase() || 'unknown';
@@ -176,208 +178,348 @@ const BeneficiaryExplorer: React.FC = () => {
             genderCounts[label] = (genderCounts[label] || 0) + 1;
         });
 
-        const genderData = Object.entries(genderCounts).map(([label, count]) => ({
-            label,
-            count,
-            percent: total > 0 ? (count / total) * 100 : 0
+        const genderData = Object.entries(genderCounts).map(([name, value]) => ({
+            name,
+            value,
+            percent: total > 0 ? (value / total) * 100 : 0
         }));
 
         const averageAge = total > 0 ? filteredData.reduce((acc, d) => acc + d.age, 0) / total : 0;
         const uniqueVillages = new Set(filteredData.map(d => d.village)).size;
+        const uniqueGPs = new Set(filteredData.map(d => d.gp)).size;
 
-        return { total, activityCounts, genderData, averageAge, uniqueVillages };
+        return { total, activityData, genderData, averageAge, uniqueVillages, uniqueGPs };
     }, [filteredData]);
 
+    const clearFilters = () => {
+        setFilterCluster('All');
+        setFilterGP('All');
+        setFilterVillage('All');
+        setFilterActivity('All');
+        setSearchQuery('');
+    };
+
+    const downloadCSV = () => {
+        const headers = ['HH Id', 'HH Head', 'Activity', 'Beneficiary', 'ID', 'Age', 'Gender', 'Phone', 'Village', 'GP', 'Cluster'];
+        const csvContent = [
+            headers.join(','),
+            ...filteredData.map(b => [
+                `"${b.hhId}"`, `"${b.hhHeadName}"`, `"${b.activity}"`, `"${b.beneficiaryName}"`, 
+                `"${b.beneficiaryId}"`, b.age, `"${b.gender}"`, `"${b.phoneNumber}"`, 
+                `"${b.village}"`, `"${b.gp}"`, `"${b.cluster}"`
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `beneficiary_report_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     if (loading) return (
-        <div className="flex flex-col items-center justify-center min-h-[50vh]">
-            <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="mt-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Syncing Beneficiary Registry...</p>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] animate-pulse">
+            <div className="relative w-16 h-16">
+                <div className="absolute inset-0 border-4 border-indigo-100 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <p className="mt-6 text-xs font-black uppercase text-gray-400 tracking-[0.3em]">Syncing MIS Core...</p>
         </div>
     );
 
     return (
-        <div className="flex flex-col gap-8 animate-fade-in pb-20">
-            {/* 1. FILTERS */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm">
-                <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest ml-2">Cluster</label>
-                    <select value={filterCluster} onChange={e => { setFilterCluster(e.target.value); setFilterGP('All'); setFilterVillage('All'); }} className="bg-gray-50 dark:bg-gray-900 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer focus:ring-2 focus:ring-indigo-500">
+        <div className="flex flex-col gap-6 animate-fade-in pb-20">
+            {/* 1. HEADER & GLOBAL ACTIONS */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Beneficiary Explorer</h1>
+                    <p className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em] mt-1">Real-time Field Intelligence & Demographics</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={downloadCSV}
+                        className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm"
+                    >
+                        <Download className="w-3.5 h-3.5" />
+                        Export Data
+                    </button>
+                    {(filterCluster !== 'All' || filterGP !== 'All' || filterVillage !== 'All' || filterActivity !== 'All' || searchQuery !== '') && (
+                        <button 
+                            onClick={clearFilters}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-400 hover:bg-red-100 transition-all"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                            Clear
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* 2. FILTERS */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-[9px] font-black uppercase text-gray-400 tracking-widest ml-1">
+                        <MapPin className="w-3 h-3" /> Cluster
+                    </label>
+                    <select value={filterCluster} onChange={e => { setFilterCluster(e.target.value); setFilterGP('All'); setFilterVillage('All'); }} className="w-full bg-gray-50 dark:bg-gray-900 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-all">
                         {clusterOptions.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest ml-2">GP</label>
-                    <select value={filterGP} onChange={e => { setFilterGP(e.target.value); setFilterVillage('All'); }} className="bg-gray-50 dark:bg-gray-900 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer focus:ring-2 focus:ring-indigo-500">
+                <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-[9px] font-black uppercase text-gray-400 tracking-widest ml-1">
+                        <Filter className="w-3 h-3" /> GP
+                    </label>
+                    <select value={filterGP} onChange={e => { setFilterGP(e.target.value); setFilterVillage('All'); }} className="w-full bg-gray-50 dark:bg-gray-900 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-all">
                         {gpOptions.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest ml-2">Village</label>
-                    <select value={filterVillage} onChange={e => setFilterVillage(e.target.value)} className="bg-gray-50 dark:bg-gray-900 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer focus:ring-2 focus:ring-indigo-500">
+                <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-[9px] font-black uppercase text-gray-400 tracking-widest ml-1">
+                        <MapPin className="w-3 h-3" /> Village
+                    </label>
+                    <select value={filterVillage} onChange={e => setFilterVillage(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-all">
                         {villageOptions.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest ml-2">Activity</label>
-                    <select value={filterActivity} onChange={e => setFilterActivity(e.target.value)} className="bg-gray-50 dark:bg-gray-900 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer focus:ring-2 focus:ring-indigo-500">
+                <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-[9px] font-black uppercase text-gray-400 tracking-widest ml-1">
+                        <ActivityIcon className="w-3 h-3" /> Activity
+                    </label>
+                    <select value={filterActivity} onChange={e => setFilterActivity(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-all">
                         {activityOptions.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest ml-2">Search</label>
-                    <input 
-                        type="text" 
-                        placeholder="Name / ID..." 
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="bg-gray-50 dark:bg-gray-900 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-[9px] font-black uppercase text-gray-400 tracking-widest ml-1">
+                        <Search className="w-3 h-3" /> Search
+                    </label>
+                    <div className="relative">
+                        <input 
+                            type="text" 
+                            placeholder="NAME / ID / HHID..." 
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full bg-gray-50 dark:bg-gray-900 pl-4 pr-10 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                        />
+                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                    </div>
                 </div>
             </div>
 
-            {/* 2. SCORECARDS & CHARTS */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                {/* Main Scorecards Column */}
-                <div className="flex flex-col gap-4">
-                    <div className="bg-indigo-600 p-6 rounded-[2rem] text-white shadow-xl shadow-indigo-200 dark:shadow-none">
-                        <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Beneficiaries</p>
-                        <p className="text-4xl font-black tracking-tighter">{stats.total}</p>
+            {/* 3. ANALYTICS GRID */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Key Metrics Bento */}
+                <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2 bg-indigo-600 p-6 rounded-3xl text-white shadow-xl shadow-indigo-100 dark:shadow-none flex flex-col justify-between relative overflow-hidden group">
+                        <Users className="absolute -right-4 -bottom-4 w-32 h-32 opacity-10 group-hover:scale-110 transition-transform duration-700" />
+                        <div>
+                            <p className="text-[10px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Beneficiaries</p>
+                            <p className="text-5xl font-black tracking-tighter">{stats.total.toLocaleString()}</p>
+                        </div>
+                        <div className="mt-6 flex items-center gap-2">
+                            <div className="h-1 w-12 bg-white/30 rounded-full"></div>
+                            <span className="text-[8px] font-black uppercase opacity-60">Live Registry Count</span>
+                        </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white dark:bg-gray-800 p-5 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm">
-                            <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest mb-1">Avg. Age</p>
-                            <p className="text-xl font-black text-gray-800 dark:text-white">{stats.averageAge.toFixed(1)}</p>
+                    <div className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Avg. Age</p>
+                            <p className="text-2xl font-black text-gray-900 dark:text-white">{stats.averageAge.toFixed(1)}</p>
                         </div>
-                        <div className="bg-white dark:bg-gray-800 p-5 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm">
-                            <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest mb-1">Villages</p>
-                            <p className="text-xl font-black text-gray-800 dark:text-white">{stats.uniqueVillages}</p>
+                        <div className="mt-2 text-[8px] font-black uppercase text-indigo-500">Years Old</div>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Villages</p>
+                            <p className="text-2xl font-black text-gray-900 dark:text-white">{stats.uniqueVillages}</p>
                         </div>
+                        <div className="mt-2 text-[8px] font-black uppercase text-emerald-500">{stats.uniqueGPs} GPs Covered</div>
                     </div>
                 </div>
 
-                {/* Activity Wise Counts */}
-                <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-4">Activity Distribution</h3>
-                    <div className="flex-grow grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto pr-2 custom-scrollbar max-h-[180px]">
-                        {Object.entries(stats.activityCounts).map(([activity, count]) => (
-                            <div key={activity} className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 flex flex-col justify-center">
-                                <p className="text-[8px] font-black uppercase text-gray-400 truncate mb-1">{activity}</p>
-                                <p className="text-lg font-black text-gray-800 dark:text-white">{count}</p>
-                            </div>
-                        ))}
+                {/* Activity Distribution Chart */}
+                <div className="lg:col-span-5 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Activity Distribution</h3>
+                        <ActivityIcon className="w-4 h-4 text-indigo-500" />
+                    </div>
+                    <div className="flex-grow min-h-[200px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={stats.activityData.slice(0, 6)} layout="vertical" margin={{ left: -20, right: 20 }}>
+                                <XAxis type="number" hide />
+                                <YAxis 
+                                    dataKey="name" 
+                                    type="category" 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    width={100}
+                                    tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af' }}
+                                />
+                                <Tooltip 
+                                    cursor={{ fill: 'transparent' }}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }}
+                                />
+                                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                                    {stats.activityData.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
 
-                {/* Gender Pie Chart */}
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col items-center">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-4">Gender Split</h3>
-                    <div className="relative w-28 h-28">
-                        <PieChart data={stats.genderData} />
+                {/* Gender Split Chart */}
+                <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Gender Split</h3>
+                        <Users className="w-4 h-4 text-pink-500" />
                     </div>
-                    <div className="mt-4 flex flex-wrap justify-center gap-3">
+                    <div className="flex-grow min-h-[160px] relative">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={stats.genderData}
+                                    innerRadius={45}
+                                    outerRadius={65}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                >
+                                    {stats.genderData.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className="text-lg font-black text-gray-900 dark:text-white">{stats.total}</span>
+                            <span className="text-[7px] font-black uppercase text-gray-400">Total</span>
+                        </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2">
                         {stats.genderData.map((g, idx) => (
                             <div key={idx} className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full" style={{ background: COLORS[idx % COLORS.length] }}></div>
-                                <span className="text-[8px] font-black uppercase text-gray-500">{g.label} ({g.percent.toFixed(0)}%)</span>
+                                <span className="text-[8px] font-black uppercase text-gray-500">{g.name} {g.percent.toFixed(0)}%</span>
                             </div>
                         ))}
                     </div>
                 </div>
             </div>
 
-            {/* 3. DETAILED TABLE */}
-            <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-gray-50 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20">
+            {/* 4. DETAILED TABLE */}
+            <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
+                <div className="p-6 border-b border-gray-50 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50 dark:bg-gray-900/20">
                     <div>
-                        <h2 className="text-xl font-black text-gray-800 dark:text-white uppercase tracking-tight">Beneficiary Registry</h2>
-                        <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1">Detailed Demographics & Activity Log</p>
+                        <h2 className="text-lg font-black text-gray-800 dark:text-white uppercase tracking-tight">Beneficiary Registry</h2>
+                        <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">Detailed Demographics & Activity Log</p>
                     </div>
-                    <div className="px-4 py-1.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full text-[10px] font-black uppercase">
-                        {filteredData.length} Records
+                    <div className="flex items-center gap-2 px-4 py-1.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full text-[9px] font-black uppercase tracking-widest">
+                        <UserCheck className="w-3 h-3" />
+                        {filteredData.length.toLocaleString()} Records
                     </div>
                 </div>
                 
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="bg-gray-50 dark:bg-gray-900/50">
+                            <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800">
                                 <th 
-                                    className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
+                                    className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
                                     onClick={() => requestSort('hhId')}
                                 >
-                                    <div className="flex items-center">
+                                    <div className="flex items-center gap-2">
                                         HH ID & Head
-                                        <SortIcon columnKey="hhId" />
+                                        <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'hhId' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
                                     </div>
                                 </th>
                                 <th 
-                                    className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
+                                    className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
                                     onClick={() => requestSort('activity')}
                                 >
-                                    <div className="flex items-center">
+                                    <div className="flex items-center gap-2">
                                         Activity
-                                        <SortIcon columnKey="activity" />
+                                        <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'activity' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
                                     </div>
                                 </th>
                                 <th 
-                                    className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
+                                    className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
                                     onClick={() => requestSort('beneficiaryName')}
                                 >
-                                    <div className="flex items-center">
+                                    <div className="flex items-center gap-2">
                                         Beneficiary Details
-                                        <SortIcon columnKey="beneficiaryName" />
+                                        <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'beneficiaryName' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
                                     </div>
                                 </th>
                                 <th 
-                                    className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
+                                    className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
                                     onClick={() => requestSort('age')}
                                 >
-                                    <div className="flex items-center">
+                                    <div className="flex items-center gap-2">
                                         Age/Gender
-                                        <SortIcon columnKey="age" />
+                                        <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'age' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
                                     </div>
                                 </th>
                                 <th 
-                                    className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
+                                    className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
                                     onClick={() => requestSort('village')}
                                 >
-                                    <div className="flex items-center">
-                                        Contact
-                                        <SortIcon columnKey="village" />
+                                    <div className="flex items-center gap-2">
+                                        Location & Contact
+                                        <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'village' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
                                     </div>
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                            {sortedData.map((b, i) => (
-                                <tr key={i} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
+                        <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                            {sortedData.length > 0 ? sortedData.map((b, i) => (
+                                <tr key={i} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors group">
                                     <td className="px-6 py-4">
-                                        <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{b.hhId}</div>
-                                        <div className="text-[9px] font-bold text-gray-400 uppercase">{b.hhHeadName}</div>
+                                        <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase group-hover:text-indigo-600 transition-colors">{b.hhId}</div>
+                                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">{b.hhHeadName}</div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className="px-3 py-1 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg text-[9px] font-black uppercase">
+                                        <span className="inline-flex items-center px-2.5 py-1 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg text-[8px] font-black uppercase tracking-widest border border-indigo-100/50 dark:border-indigo-900/50">
                                             {b.activity}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{b.beneficiaryName}</div>
-                                        <div className="text-[9px] font-bold text-indigo-500 uppercase tracking-tighter">{b.beneficiaryId}</div>
+                                        <div className="text-[9px] font-bold text-indigo-500 uppercase tracking-tighter opacity-80">{b.beneficiaryId}</div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <span className="text-[11px] font-black text-gray-700 dark:text-gray-300">{b.age} Yrs</span>
-                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${b.gender?.toLowerCase().startsWith('m') ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
+                                            <span className={cn(
+                                                "px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest",
+                                                b.gender?.toLowerCase().startsWith('m') 
+                                                    ? 'bg-blue-50 text-blue-600 border border-blue-100' 
+                                                    : 'bg-pink-50 text-pink-600 border border-pink-100'
+                                            )}>
                                                 {b.gender}
                                             </span>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="text-[11px] font-black text-gray-600 dark:text-gray-400 font-mono">{b.phoneNumber}</div>
-                                        <div className="text-[8px] font-bold text-gray-400 uppercase">{b.village}, {b.gp}</div>
+                                        <div className="text-[11px] font-black text-gray-600 dark:text-gray-400 font-mono tracking-tighter">{b.phoneNumber}</div>
+                                        <div className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">{b.village}, {b.gp}</div>
                                     </td>
                                 </tr>
-                            ))}
+                            )) : (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-20 text-center">
+                                        <div className="flex flex-col items-center gap-3 opacity-30">
+                                            <Search className="w-12 h-12" />
+                                            <p className="text-xs font-black uppercase tracking-[0.3em]">No matching records found</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -385,45 +527,12 @@ const BeneficiaryExplorer: React.FC = () => {
 
             <style>{`
                 @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-                .animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
+                .animate-fade-in { animation: fade-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
                 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
                 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
             `}</style>
         </div>
-    );
-};
-
-const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6'];
-
-const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ data }) => {
-    let currentOffset = 0;
-    const radius = 40;
-    const circ = 2 * Math.PI * radius;
-
-    return (
-        <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-            {data.map((item, idx) => {
-                const dash = (item.percent / 100) * circ;
-                const offset = circ - dash;
-                const stroke = COLORS[idx % COLORS.length];
-                const res = (
-                    <circle 
-                        key={idx}
-                        cx="50" cy="50" r={radius} 
-                        fill="transparent" 
-                        stroke={stroke} 
-                        strokeWidth="12" 
-                        strokeDasharray={circ}
-                        strokeDashoffset={offset}
-                        style={{ transformOrigin: 'center', transform: `rotate(${(currentOffset/100)*360}deg)`, transition: 'all 1s ease' }}
-                    />
-                );
-                currentOffset += item.percent;
-                return res;
-            })}
-            <circle cx="50" cy="50" r="30" className="fill-white dark:fill-gray-800" />
-        </svg>
     );
 };
 

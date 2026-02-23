@@ -27,7 +27,6 @@ interface MergedContribution {
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#f97316'];
 
 const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ data }) => {
-    let currentOffset = 0;
     const radius = 40;
     const circ = 2 * Math.PI * radius;
 
@@ -39,7 +38,11 @@ const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ da
                 const dash = (item.percent / 100) * circ;
                 const offset = circ - dash;
                 const stroke = CHART_COLORS[idx % CHART_COLORS.length];
-                const res = (
+                
+                // Calculate cumulative rotation based on previous items
+                const rotation = (data.slice(0, idx).reduce((acc, curr) => acc + curr.percent, 0) / 100) * 360;
+                
+                return (
                     <circle 
                         key={idx}
                         cx="50" cy="50" r={radius} 
@@ -50,13 +53,11 @@ const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ da
                         strokeDashoffset={offset}
                         style={{ 
                             transformOrigin: 'center', 
-                            transform: `rotate(${(currentOffset/100)*360}deg)`,
+                            transform: `rotate(${rotation}deg)`,
                             transition: 'all 1s cubic-bezier(0.16, 1, 0.3, 1)'
                         }}
                     />
                 );
-                currentOffset += item.percent;
-                return res;
             })}
             <circle cx="50" cy="50" r="30" fill="white" className="dark:fill-gray-800" />
         </svg>
@@ -66,7 +67,6 @@ const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ da
 const ContributionPage: React.FC = () => {
     const [mergedData, setMergedData] = useState<MergedContribution[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     // Filters
     const [selectedCluster, setSelectedCluster] = useState('All');
@@ -123,7 +123,6 @@ const ContributionPage: React.FC = () => {
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
-            setError(null);
             try {
                 const [baselineRes, contribRes] = await Promise.all([
                     fetch(`${BASELINE_DATA_URL}&cb=${Date.now()}`),
@@ -202,9 +201,8 @@ const ContributionPage: React.FC = () => {
                     if (dateB !== dateA) return dateB - dateA;
                     return a.name.localeCompare(b.name);
                 }));
-            } catch (err: any) {
+            } catch (err) {
                 console.error("Data processing error:", err);
-                setError(err.message);
             } finally {
                 setLoading(false);
             }
@@ -421,8 +419,6 @@ const ContributionPage: React.FC = () => {
             </div>
 
             <style>{`
-                @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-                .animate-fade-in { animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
                 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
                 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
