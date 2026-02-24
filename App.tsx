@@ -60,9 +60,9 @@ const AppContent: React.FC = () => {
                 const restrictedPages: Page[] = ['mark-attendance', 'attendance-report', 'admin'];
                 if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
             } else if (isDA) {
-                // DA: Allow Gallery, Dashboards, Attendance, Reports, MIS, Baseline, Contribution, Admin
-                // Restricted: Budget
-                const restrictedPages: Page[] = ['budget-tracker'];
+                // DA: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution, Admin
+                // DA has full dashboard access
+                const restrictedPages: Page[] = [];
                 if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
             }
             // Admin has no restrictions

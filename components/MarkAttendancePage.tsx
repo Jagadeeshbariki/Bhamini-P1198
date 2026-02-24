@@ -104,7 +104,10 @@ const MarkAttendancePage: React.FC = () => {
     }, [user]);
 
     useEffect(() => { 
-        fetchMarkedDates(); 
+        const init = async () => {
+            await fetchMarkedDates();
+        };
+        init();
     }, [fetchMarkedDates]);
 
     const navigateMonth = (direction: number) => {

@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { AuthUser, AuthContextType, Session } from '../types';
 import { GOOGLE_SHEET_USERS_URL } from '../config';
-import { AuthContext } from './AuthContextInstance';
+
+export const AuthContext = createContext<AuthContextType | null>(null);
 
 const SESSION_DURATION = 12 * 60 * 60 * 1000;
 

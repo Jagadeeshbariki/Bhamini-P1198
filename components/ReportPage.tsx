@@ -158,18 +158,78 @@ const ReportPage: React.FC = () => {
 
     const downloadPDF = async () => {
         if (!user || !printRef.current) return;
+        
+        const html2pdf = (window as any).html2pdf;
+        if (!html2pdf) {
+            alert("PDF library is not loaded. Please refresh and try again.");
+            return;
+        }
+
         setIsGenerating(true);
+        
+        // 1. Capture the content and the head elements
+        const element = printRef.current;
+        const head = document.head;
+        const originalStyles = Array.from(head.querySelectorAll('style, link[rel="stylesheet"]'));
+        
         try {
-            // @ts-expect-error - html2pdf is not typed
-            const worker = window.html2pdf();
-            await worker.from(printRef.current).set({
+            // 2. Create a "Safe" style for the PDF
+            const pdfStyle = document.createElement('style');
+            pdfStyle.id = "pdf-safe-style";
+            pdfStyle.innerHTML = `
+                @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Telugu:wght@400;700&family=Inter:wght@400;700;900&display=swap');
+                .pdf-print-container { 
+                    background: white !important; 
+                    color: black !important; 
+                    font-family: 'Inter', sans-serif !important;
+                    width: 1080px !important;
+                    padding: 20px !important;
+                    display: block !important;
+                }
+                .telugu-font { font-family: 'Noto Sans Telugu', 'Inter', sans-serif !important; }
+                .pdf-header-box { 
+                    border: 1px solid #000000 !important; 
+                    text-align: center !important; 
+                    padding: 8px 0 !important; 
+                    font-weight: 900 !important; 
+                    font-size: 24px !important; 
+                    text-transform: uppercase !important; 
+                }
+                .pdf-bg-gray { background-color: #f3f4f6 !important; }
+                table { width: 100% !important; border-collapse: collapse !important; margin-top: 0 !important; font-size: 12px !important; }
+                th, td { border: 1px solid #000000 !important; color: #000000 !important; padding: 8px !important; }
+            `;
+
+            // 3. STRIP ALL STYLES to prevent oklch parsing error in html2canvas
+            originalStyles.forEach(s => s.remove());
+            head.appendChild(pdfStyle);
+
+            const opt = {
                 margin: [10, 5, 10, 5],
                 filename: `Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`,
-                html2canvas: { scale: 1.5, useCORS: true, letterRendering: true },
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { 
+                    scale: 2, 
+                    useCORS: true, 
+                    logging: false,
+                    letterRendering: true,
+                    allowTaint: true
+                },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
                 pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-            }).save();
+            };
+
+            // 4. Generate PDF
+            await html2pdf().set(opt).from(element).save();
+            
+        } catch (err) {
+            console.error('PDF Generation Error:', err);
+            alert("Failed to generate PDF. Please try again.");
         } finally {
+            // 5. RESTORE ALL STYLES
+            const safeStyle = document.getElementById('pdf-safe-style');
+            if (safeStyle) safeStyle.remove();
+            originalStyles.forEach(s => head.appendChild(s));
             setIsGenerating(false);
         }
     };
@@ -254,70 +314,70 @@ const ReportPage: React.FC = () => {
 
             {/* Hidden Official PDF Template Section */}
             <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-                <div ref={printRef} className="bg-white text-black telugu-font" style={{ width: '1080px', padding: '10px 20px', color: '#000000' }}>
+                <div ref={printRef} className="telugu-font pdf-print-container" style={{ width: '1080px', padding: '10px 20px', backgroundColor: '#ffffff', color: '#000000' }}>
                     
                     {/* Header Block Matching Image - LEAD TECHNICAL AGENCY */}
-                    <div className="w-full border-t-4 border-blue-800 pt-1 mb-0">
-                        <div className="border border-black text-center py-2 font-black text-2xl uppercase tracking-widest text-black">
+                    <div style={{ width: '100%', paddingTop: '4px', marginBottom: '0', borderTop: '4px solid #1e40af' }}>
+                        <div className="pdf-header-box">
                             LEAD TECHNICAL AGENCY – WASSAN
                         </div>
                     </div>
                     
-                    <div className="border-x border-black text-black">
-                        <div className="border-b border-black py-2 px-4 font-black text-center uppercase text-black text-lg">
+                    <div style={{ borderLeft: '1px solid #000000', borderRight: '1px solid #000000' }}>
+                        <div style={{ borderBottom: '1px solid #000000', padding: '8px 16px', fontWeight: '900', textAlign: 'center', textTransform: 'uppercase', fontSize: '18px' }}>
                             HDFC PARIVARTAN PROJECT - Bhamini P1198
                         </div>
-                        <div className="border-b border-black text-center py-1 font-black bg-gray-100 uppercase text-black text-md">
+                        <div className="pdf-bg-gray" style={{ borderBottom: '1px solid #000000', textAlign: 'center', padding: '4px 0', fontWeight: '900', textTransform: 'uppercase' }}>
                             WORK DONE REPORT
                         </div>
                         
-                        <div className="border-b border-black py-1 px-4 font-bold flex text-black text-sm">
+                        <div style={{ borderBottom: '1px solid #000000', padding: '4px 16px', fontWeight: 'bold', display: 'flex', fontSize: '14px' }}>
                             <span style={{ width: '250px' }}>Month:</span>
-                            <span className="flex-grow">{selectedMonth} {selectedYear}</span>
+                            <span style={{ flexGrow: 1 }}>{selectedMonth} {selectedYear}</span>
                         </div>
-                        <div className="border-b border-black py-1 px-4 font-bold flex text-black text-sm">
+                        <div style={{ borderBottom: '1px solid #000000', padding: '4px 16px', fontWeight: 'bold', display: 'flex', fontSize: '14px' }}>
                             <span style={{ width: '250px' }}>Name of the Person:</span>
-                            <span className="flex-grow uppercase">{user?.username}</span>
+                            <span style={{ flexGrow: 1, textTransform: 'uppercase' }}>{user?.username}</span>
                         </div>
-                        <div className="border-b border-black py-1 px-4 font-bold flex text-black text-sm">
+                        <div style={{ borderBottom: '1px solid #000000', padding: '4px 16px', fontWeight: 'bold', display: 'flex', fontSize: '14px' }}>
                             <span style={{ width: '250px' }}>Working GP:</span>
-                            <span className="flex-grow">{filteredData[0]?.placeOfVisit || 'Field Operations'}</span>
+                            <span style={{ flexGrow: 1 }}>{filteredData[0]?.placeOfVisit || 'Field Operations'}</span>
                         </div>
                     </div>
 
-                    {/* Table Block - Optimized for 2 Pages (approx 16 rows per page) */}
-                    <table className="w-full border-collapse border border-black mt-0 text-xs text-black">
+                    {/* Table Block */}
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0', fontSize: '12px' }}>
                         <thead>
-                            <tr className="bg-gray-100 font-black text-center text-black uppercase">
-                                <th className="border border-black px-1 py-2 w-10">S.No</th>
-                                <th className="border border-black px-2 py-2 w-28">Date</th>
-                                <th className="border border-black px-2 py-2 w-44">Place of Visit</th>
-                                <th className="border border-black px-2 py-2">Purpose of visit/Work done</th>
-                                <th className="border border-black px-1 py-2 w-20">Hours</th>
-                                <th className="border border-black px-2 py-2 w-44">Outcome</th>
+                            <tr className="pdf-bg-gray" style={{ fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' }}>
+                                <th style={{ padding: '8px 4px', width: '40px' }}>S.No</th>
+                                <th style={{ padding: '8px 8px', width: '110px' }}>Date</th>
+                                <th style={{ padding: '8px 8px', width: '170px' }}>Place of Visit</th>
+                                <th style={{ padding: '8px 8px' }}>Purpose of visit/Work done</th>
+                                <th style={{ padding: '8px 4px', width: '80px' }}>Hours</th>
+                                <th style={{ padding: '8px 8px', width: '170px' }}>Outcome</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredData.length > 0 ? filteredData.map((r, i) => (
-                                <tr key={i} className="align-top text-black" style={{ pageBreakInside: 'avoid' }}>
-                                    <td className="border border-black px-1 py-2 text-center font-bold text-black">{i + 1}</td>
-                                    <td className="border border-black px-2 py-2 text-center whitespace-nowrap font-bold text-black">{r.date}</td>
-                                    <td className="border border-black px-2 py-2 text-black">
+                                <tr key={i} style={{ verticalAlign: 'top', pageBreakInside: 'avoid' }}>
+                                    <td style={{ padding: '8px 4px', textAlign: 'center', fontWeight: 'bold' }}>{i + 1}</td>
+                                    <td style={{ padding: '8px 8px', textAlign: 'center', whiteSpace: 'nowrap', fontWeight: 'bold' }}>{r.date}</td>
+                                    <td style={{ padding: '8px 8px' }}>
                                         {r.workingStatus === 'Working' ? r.placeOfVisit : r.workingStatus}
                                     </td>
-                                    <td className="border border-black px-2 py-2 leading-tight text-black" style={{ fontSize: '11px' }}>
+                                    <td style={{ padding: '8px 8px', lineHeight: '1.2', fontSize: '11px' }}>
                                         {r.workingStatus === 'Working' ? r.purposeOfVisit : `REASON: ${r.reasonNotWorking}`}
                                     </td>
-                                    <td className="border border-black px-1 py-2 text-center font-black text-black">
+                                    <td style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '900' }}>
                                         {r.workingStatus === 'Working' ? r.workingHours : '0'}
                                     </td>
-                                    <td className="border border-black px-2 py-2 text-[10px] italic text-black">
+                                    <td style={{ padding: '8px 8px', fontSize: '10px', fontStyle: 'italic' }}>
                                         {r.outcomes}
                                     </td>
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan={6} className="border border-black p-10 text-center italic text-black">
+                                    <td colSpan={6} style={{ padding: '40px', textAlign: 'center', fontStyle: 'italic' }}>
                                         No data entries recorded.
                                     </td>
                                 </tr>
@@ -325,30 +385,30 @@ const ReportPage: React.FC = () => {
                             
                             {/* Summary Row */}
                             {filteredData.length > 0 && (
-                                <tr className="font-black bg-gray-100 text-black uppercase" style={{ pageBreakInside: 'avoid' }}>
-                                    <td colSpan={4} className="border border-black px-4 py-2 text-right text-black">Total Monthly Hours:</td>
-                                    <td className="border border-black px-1 py-2 text-center underline text-black">
+                                <tr className="pdf-bg-gray" style={{ fontWeight: '900', textTransform: 'uppercase', pageBreakInside: 'avoid' }}>
+                                    <td colSpan={4} style={{ padding: '8px 16px', textAlign: 'right' }}>Total Monthly Hours:</td>
+                                    <td style={{ padding: '8px 4px', textAlign: 'center', textDecoration: 'underline' }}>
                                         {filteredData.reduce((acc, curr) => acc + (parseFloat(curr.workingHours) || 0), 0).toFixed(1)}
                                     </td>
-                                    <td className="border border-black px-2 py-2"></td>
+                                    <td style={{ padding: '8px 8px' }}></td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
 
-                    {/* Footer / Signatures - Pushed to end with room */}
-                    <div className="mt-12 flex justify-around px-10 font-black text-xs uppercase text-black" style={{ pageBreakInside: 'avoid' }}>
-                        <div className="text-center">
-                            <div className="w-64 border-t-2 border-black mb-2"></div>
+                    {/* Footer / Signatures */}
+                    <div style={{ marginTop: '48px', display: 'flex', justifyContent: 'space-around', padding: '0 40px', fontWeight: '900', fontSize: '12px', textTransform: 'uppercase', pageBreakInside: 'avoid' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ width: '256px', borderTop: '2px solid #000000', marginBottom: '8px' }}></div>
                             <span>SIGNATURE OF THE STAFF</span>
                         </div>
-                        <div className="text-center">
-                            <div className="w-64 border-t-2 border-black mb-2"></div>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ width: '256px', borderTop: '2px solid #000000', marginBottom: '8px' }}></div>
                             <span>VERIFIED BY COORDINATOR</span>
                         </div>
                     </div>
                     
-                    <div className="mt-6 text-[9px] text-black text-center italic opacity-70">
+                    <div style={{ marginTop: '24px', fontSize: '9px', textAlign: 'center', fontStyle: 'italic', opacity: 0.7 }}>
                         Bhamini P1198 Field System • Generated: {new Date().toLocaleString()}
                     </div>
                 </div>

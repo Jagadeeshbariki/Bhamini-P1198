@@ -431,7 +431,7 @@ const AdminPage: React.FC = () => {
                             </div>
                         </div>
                         <div className="grid grid-cols-7 gap-2 mb-6">
-                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => <div key={d} className="text-center text-[10px] font-black text-gray-400 uppercase py-2">{d}</div>)}
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="text-center text-[10px] font-black text-gray-400 uppercase py-2">{d}</div>)}
                             {calendarDays.map((day, i) => {
                                 const dateKey = `${day.getDate().toString().padStart(2, '0')}/${(day.getMonth() + 1).toString().padStart(2, '0')}/${day.getFullYear()}`;
                                 const records = allAttendanceData.filter(r => r.name.toLowerCase() === selectedUsername.toLowerCase() && r.date === dateKey);

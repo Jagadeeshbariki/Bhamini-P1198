@@ -87,7 +87,6 @@ const BudgetTrackerPage: React.FC = () => {
         return allData.filter(d => {
             const matchesYear = selectedYear === 'All' || d.year === selectedYear;
             const matchesQuarter = selectedQuarter === 'All' || d.quarter === selectedQuarter;
-            const matchesHead = selectedHead === 'All' || d.budgetHead === selectedHead;
             const matchesSearch = d.budgetHead.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                  d.headCode.toLowerCase().includes(searchQuery.toLowerCase());
             return matchesYear && matchesQuarter && matchesSearch;
