@@ -182,9 +182,10 @@ const ReportPage: React.FC = () => {
                     background: white !important; 
                     color: black !important; 
                     font-family: 'Inter', sans-serif !important;
-                    width: 1080px !important;
-                    padding: 20px !important;
+                    width: 1000px !important;
+                    padding: 30px 50px !important;
                     display: block !important;
+                    box-sizing: border-box !important;
                 }
                 .telugu-font { font-family: 'Noto Sans Telugu', 'Inter', sans-serif !important; }
                 .pdf-header-box { 
@@ -205,7 +206,7 @@ const ReportPage: React.FC = () => {
             head.appendChild(pdfStyle);
 
             const opt = {
-                margin: [10, 5, 10, 5],
+                margin: [10, 10, 10, 10],
                 filename: `Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { 
@@ -213,7 +214,8 @@ const ReportPage: React.FC = () => {
                     useCORS: true, 
                     logging: false,
                     letterRendering: true,
-                    allowTaint: true
+                    allowTaint: true,
+                    width: 1000
                 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
                 pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
@@ -314,7 +316,7 @@ const ReportPage: React.FC = () => {
 
             {/* Hidden Official PDF Template Section */}
             <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-                <div ref={printRef} className="telugu-font pdf-print-container" style={{ width: '1080px', padding: '10px 20px', backgroundColor: '#ffffff', color: '#000000' }}>
+                <div ref={printRef} className="telugu-font pdf-print-container" style={{ width: '1000px', padding: '30px 50px', backgroundColor: '#ffffff', color: '#000000', boxSizing: 'border-box' }}>
                     
                     {/* Header Block Matching Image - LEAD TECHNICAL AGENCY */}
                     <div style={{ width: '100%', paddingTop: '4px', marginBottom: '0', borderTop: '4px solid #1e40af' }}>
