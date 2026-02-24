@@ -182,8 +182,8 @@ const ReportPage: React.FC = () => {
                     background: white !important; 
                     color: black !important; 
                     font-family: 'Inter', sans-serif !important;
-                    width: 1000px !important;
-                    padding: 30px 50px !important;
+                    width: 1080px !important;
+                    padding: 20px !important;
                     display: block !important;
                     box-sizing: border-box !important;
                 }
@@ -197,8 +197,9 @@ const ReportPage: React.FC = () => {
                     text-transform: uppercase !important; 
                 }
                 .pdf-bg-gray { background-color: #f3f4f6 !important; }
-                table { width: 100% !important; border-collapse: collapse !important; margin-top: 0 !important; font-size: 12px !important; }
-                th, td { border: 1px solid #000000 !important; color: #000000 !important; padding: 8px !important; }
+                table { width: 100% !important; border-collapse: collapse !important; margin-top: 0 !important; font-size: 12px !important; table-layout: fixed !important; }
+                th, td { border: 1px solid #000000 !important; color: #000000 !important; padding: 8px !important; word-wrap: break-word !important; }
+                tr { page-break-inside: avoid !important; break-inside: avoid !important; }
             `;
 
             // 3. STRIP ALL STYLES to prevent oklch parsing error in html2canvas
@@ -206,7 +207,7 @@ const ReportPage: React.FC = () => {
             head.appendChild(pdfStyle);
 
             const opt = {
-                margin: [10, 10, 10, 10],
+                margin: [5, 5, 5, 5],
                 filename: `Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { 
@@ -215,7 +216,8 @@ const ReportPage: React.FC = () => {
                     logging: false,
                     letterRendering: true,
                     allowTaint: true,
-                    width: 1000
+                    width: 1080,
+                    windowWidth: 1200
                 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
                 pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
@@ -316,7 +318,7 @@ const ReportPage: React.FC = () => {
 
             {/* Hidden Official PDF Template Section */}
             <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-                <div ref={printRef} className="telugu-font pdf-print-container" style={{ width: '1000px', padding: '30px 50px', backgroundColor: '#ffffff', color: '#000000', boxSizing: 'border-box' }}>
+                <div ref={printRef} className="telugu-font pdf-print-container" style={{ width: '1080px', padding: '20px', backgroundColor: '#ffffff', color: '#000000', boxSizing: 'border-box' }}>
                     
                     {/* Header Block Matching Image - LEAD TECHNICAL AGENCY */}
                     <div style={{ width: '100%', paddingTop: '4px', marginBottom: '0', borderTop: '4px solid #1e40af' }}>
@@ -399,14 +401,18 @@ const ReportPage: React.FC = () => {
                     </table>
 
                     {/* Footer / Signatures */}
-                    <div style={{ marginTop: '48px', display: 'flex', justifyContent: 'space-around', padding: '0 40px', fontWeight: '900', fontSize: '12px', textTransform: 'uppercase', pageBreakInside: 'avoid' }}>
+                    <div style={{ marginTop: '60px', display: 'flex', justifyContent: 'space-between', padding: '0 60px', fontWeight: '900', fontSize: '12px', textTransform: 'uppercase', pageBreakInside: 'avoid' }}>
                         <div style={{ textAlign: 'center' }}>
-                            <div style={{ width: '256px', borderTop: '2px solid #000000', marginBottom: '8px' }}></div>
-                            <span>SIGNATURE OF THE STAFF</span>
+                            <div style={{ width: '280px', borderTop: '2px solid #000000', marginBottom: '8px' }}></div>
+                            <div style={{ marginBottom: '4px' }}>SIGNATURE OF THE STAFF</div>
+                            <div style={{ fontSize: '10px', opacity: 0.8 }}>({user?.username})</div>
+                            <div style={{ fontSize: '9px', marginTop: '12px', textAlign: 'left' }}>Date: _________________</div>
+                            <div style={{ fontSize: '9px', marginTop: '4px', textAlign: 'left' }}>Place: _________________</div>
                         </div>
                         <div style={{ textAlign: 'center' }}>
-                            <div style={{ width: '256px', borderTop: '2px solid #000000', marginBottom: '8px' }}></div>
-                            <span>VERIFIED BY COORDINATOR</span>
+                            <div style={{ width: '280px', borderTop: '2px solid #000000', marginBottom: '8px' }}></div>
+                            <div style={{ marginBottom: '4px' }}>VERIFIED BY COORDINATOR</div>
+                            <div style={{ fontSize: '10px', opacity: 0.8 }}>(Name & Designation)</div>
                         </div>
                     </div>
                     
