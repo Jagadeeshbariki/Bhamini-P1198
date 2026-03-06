@@ -386,7 +386,7 @@ const ContributionPage: React.FC = () => {
                             {filteredData.map((row) => (
                                 <tr key={row.id} className="hover:bg-emerald-50/20 dark:hover:bg-emerald-900/10 transition-colors group">
                                     <td className="px-6 py-5">
-                                        <div className="font-black text-gray-900 dark:text-white text-sm group-hover:text-emerald-600 transition-colors telugu-font leading-tight">{row.name}</div>
+                                        <div className="font-black text-gray-900 dark:text-white text-sm group-hover:text-emerald-600 transition-colors leading-tight">{row.name}</div>
                                         <div className="flex flex-col mt-1">
                                             <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-tight">FID: {row.farmerId}</span>
                                             <span className="text-[9px] font-black text-gray-400 uppercase">{row.category}</span>

@@ -49,7 +49,3 @@
     @apply bg-gray-200 dark:bg-gray-800 rounded-full;
   }
 }
-
-.telugu-font {
-  font-family: 'Noto Sans Telugu', 'Inter', sans-serif;
-}

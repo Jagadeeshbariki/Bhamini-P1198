@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth';
 import { GOOGLE_SHEET_CSV_URL } from '../config';
 import AttendanceFormModal from './AttendanceFormModal';
+import { initializePdfMake } from '../utils/pdfMakeSetup';
 
 interface AttendanceRecord {
     timestamp: string;
@@ -22,6 +23,8 @@ const ReportPage: React.FC = () => {
     const [filteredData, setFilteredData] = useState<AttendanceRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [pdfError, setPdfError] = useState<string | null>(null);
+    const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
     const [editingRecord, setEditingRecord] = useState<{date: Date, data: AttendanceRecord} | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
 
@@ -157,83 +160,241 @@ const ReportPage: React.FC = () => {
     };
 
     const downloadPDF = async () => {
-        if (!user || !printRef.current) return;
-        
-        const html2pdf = (window as any).html2pdf;
-        if (!html2pdf) {
-            alert("PDF library is not loaded. Please refresh and try again.");
-            return;
-        }
-
+        if (!user || filteredData.length === 0) return;
         setIsGenerating(true);
-        
-        // 1. Capture the content and the head elements
-        const element = printRef.current;
-        const head = document.head;
-        const originalStyles = Array.from(head.querySelectorAll('style, link[rel="stylesheet"]'));
-        
+        setPdfError(null);
+
         try {
-            // 2. Create a "Safe" style for the PDF
-            const pdfStyle = document.createElement('style');
-            pdfStyle.id = "pdf-safe-style";
-            pdfStyle.innerHTML = `
-                @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Telugu:wght@400;700&family=Inter:wght@400;700;900&display=swap');
-                .pdf-print-container { 
-                    background: white !important; 
-                    color: black !important; 
-                    font-family: 'Inter', sans-serif !important;
-                    width: 1080px !important;
-                    padding: 20px !important;
-                    display: block !important;
-                    box-sizing: border-box !important;
-                }
-                .telugu-font { font-family: 'Noto Sans Telugu', 'Inter', sans-serif !important; }
-                .pdf-header-box { 
-                    border: 1px solid #000000 !important; 
-                    text-align: center !important; 
-                    padding: 8px 0 !important; 
-                    font-weight: 900 !important; 
-                    font-size: 24px !important; 
-                    text-transform: uppercase !important; 
-                }
-                .pdf-bg-gray { background-color: #f3f4f6 !important; }
-                table { width: 100% !important; border-collapse: collapse !important; margin-top: 0 !important; font-size: 12px !important; table-layout: fixed !important; }
-                th, td { border: 1px solid #000000 !important; color: #000000 !important; padding: 8px !important; word-wrap: break-word !important; }
-                tr { page-break-inside: avoid !important; break-inside: avoid !important; }
-            `;
+            // Get the configured pdfMake instance
+            const pdfMakeInstance = await initializePdfMake();
+            
+            // Defensive check: Ensure fonts are actually in the VFS
+            const vfs = (pdfMakeInstance as any).vfs || {};
+            const availableKeys = Object.keys(vfs);
+            console.log('📄 Generating PDF. VFS Keys available:', availableKeys);
+            
+            const requiredFonts = ['NotoSansTelugu-Regular.ttf', 'Roboto-Regular.ttf'];
+            const fontStats = requiredFonts.map(f => `${f}: ${vfs[f]?.length || 0} chars`);
+            console.log('📄 Font Stats:', fontStats);
+            
+            const missingFonts = requiredFonts.filter(f => !vfs[f] || vfs[f].length < 100);
+            
+            if (missingFonts.length > 0) {
+                console.error('❌ VFS Missing Fonts. Missing:', missingFonts, 'Keys found:', availableKeys);
+                const errorMsg = `Required fonts (${missingFonts.join(', ')}) could not be loaded correctly. This might be due to a slow internet connection. Please refresh the page and try again.`;
+                setPdfError(errorMsg);
+                throw new Error(errorMsg);
+            }
 
-            // 3. STRIP ALL STYLES to prevent oklch parsing error in html2canvas
-            originalStyles.forEach(s => s.remove());
-            head.appendChild(pdfStyle);
-
-            const opt = {
-                margin: [5, 5, 5, 5],
-                filename: `Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { 
-                    scale: 2, 
-                    useCORS: true, 
-                    logging: false,
-                    letterRendering: true,
-                    allowTaint: true,
-                    width: 1080,
-                    windowWidth: 1200
+            const docDefinition: any = {
+                pageOrientation: 'landscape',
+                pageSize: 'A4',
+                pageMargins: [15, 25, 15, 25],
+                // Use NotoSansTelugu as default as it's more likely to handle mixed content if it has Latin
+                defaultStyle: {
+                    font: 'NotoSansTelugu',
+                    fontSize: 10,
+                    lineHeight: 1.2
                 },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
-                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                header: (currentPage: number) => {
+                    if (currentPage === 1) return [];
+                    return [
+                        {
+                            canvas: [{ type: 'rect', x: 15, y: 10, w: 812, h: 20, color: '#1e40af' }]
+                        },
+                        {
+                            text: 'LEAD TECHNICAL AGENCY – WASSAN',
+                            style: 'headerBox',
+                            fontSize: 14,
+                            margin: [0, -17, 0, 0]
+                        }
+                    ];
+                },
+                content: [
+                    {
+                        canvas: [{ type: 'rect', x: 0, y: 0, w: 812, h: 25, color: '#1e40af' }]
+                    },
+                    {
+                        text: 'LEAD TECHNICAL AGENCY – WASSAN',
+                        style: 'headerBox',
+                        margin: [0, -22, 0, 10]
+                    },
+                    {
+                        table: {
+                            widths: ['*'],
+                            body: [
+                                [{ text: `HDFC PARIVARTAN PROJECT - Bhamini P1198`, style: 'subHeader' }],
+                                [{ text: 'WORK DONE REPORT', style: 'title', fillColor: '#f3f4f6' }]
+                            ]
+                        },
+                        layout: {
+                            hLineWidth: () => 0.5,
+                            vLineWidth: () => 0.5,
+                            hLineColor: () => '#aaaaaa',
+                            vLineColor: () => '#aaaaaa'
+                        }
+                    },
+                    {
+                        table: {
+                            widths: [100, '*', 120, '*'],
+                            body: [
+                                [
+                                    { text: 'Month:', bold: true, fillColor: '#f9fafb' }, 
+                                    { text: `${selectedMonth} ${selectedYear}` },
+                                    { text: 'Name of the Person:', bold: true, fillColor: '#f9fafb' }, 
+                                    { text: user.username.toUpperCase() }
+                                ],
+                                [
+                                    { text: 'Working GP:', bold: true, fillColor: '#f9fafb' }, 
+                                    { text: filteredData[0]?.placeOfVisit || 'Field Operations', colSpan: 3 },
+                                    {}, {}
+                                ]
+                            ]
+                        },
+                        layout: {
+                            hLineWidth: () => 0.5,
+                            vLineWidth: () => 0.5,
+                            hLineColor: () => '#aaaaaa',
+                            vLineColor: () => '#aaaaaa'
+                        },
+                        margin: [0, 5, 0, 10]
+                    },
+                    {
+                        table: {
+                            headerRows: 1,
+                            widths: [25, 65, 110, '*', 40, 140],
+                            dontBreakRows: true,
+                            body: [
+                                [
+                                    { text: 'S.No', style: 'tableHeader' },
+                                    { text: 'Date', style: 'tableHeader' },
+                                    { text: 'Place of Visit', style: 'tableHeader' },
+                                    { text: 'Purpose of visit/Work done', style: 'tableHeader' },
+                                    { text: 'Hours', style: 'tableHeader' },
+                                    { text: 'Outcome', style: 'tableHeader' }
+                                ],
+                                ...filteredData.map((r, i) => [
+                                    { text: (i + 1).toString(), alignment: 'center', fontSize: 9 },
+                                    { text: r.date, alignment: 'center', fontSize: 9 },
+                                    { text: r.workingStatus === 'Working' ? r.placeOfVisit : r.workingStatus, fontSize: 9 },
+                                    { text: r.workingStatus === 'Working' ? r.purposeOfVisit : `REASON: ${r.reasonNotWorking}`, fontSize: 9 },
+                                    { text: r.workingStatus === 'Working' ? r.workingHours : '0', alignment: 'center', bold: true, fontSize: 9 },
+                                    { text: r.outcomes, fontSize: 9 }
+                                ]),
+                                [
+                                    { text: 'Total Monthly Hours:', colSpan: 4, alignment: 'right', bold: true, fillColor: '#f3f4f6', fontSize: 9 },
+                                    {}, {}, {},
+                                    { 
+                                        text: filteredData.reduce((acc, curr) => acc + (parseFloat(curr.workingHours) || 0), 0).toFixed(1),
+                                        alignment: 'center',
+                                        bold: true,
+                                        fillColor: '#f3f4f6',
+                                        decoration: 'underline',
+                                        fontSize: 9
+                                    },
+                                    { text: '', fillColor: '#f3f4f6' }
+                                ]
+                            ]
+                        },
+                        layout: {
+                            hLineWidth: (i: number) => (i === 0) ? 1 : 0.5,
+                            vLineWidth: (i: number) => (i === 0) ? 1 : 0.5,
+                            hLineColor: () => '#444444',
+                            vLineColor: () => '#444444',
+                            paddingLeft: () => 4,
+                            paddingRight: () => 4,
+                            paddingTop: () => 4,
+                            paddingBottom: () => 4
+                        }
+                    },
+                    {
+                        columns: [
+                            {
+                                stack: [
+                                    { text: '', margin: [0, 25, 0, 0] },
+                                    { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 170, y2: 0, lineWidth: 0.5 }] },
+                                    { text: 'SIGNATURE OF THE STAFF', bold: true, margin: [0, 5, 0, 0], fontSize: 9 },
+                                    { text: `(${user.username})`, fontSize: 8 },
+                                    { text: 'Date: _________________', fontSize: 8, margin: [0, 6, 0, 0] },
+                                    { text: 'Place: _________________', fontSize: 8, margin: [0, 3, 0, 0] }
+                                ],
+                                alignment: 'center'
+                            },
+                            {
+                                stack: [
+                                    { text: '', margin: [0, 25, 0, 0] },
+                                    { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 170, y2: 0, lineWidth: 0.5 }] },
+                                    { text: 'VERIFIED BY COORDINATOR', bold: true, margin: [0, 5, 0, 0], fontSize: 9 },
+                                    { text: '(Name & Designation)', fontSize: 8 }
+                                ],
+                                alignment: 'center'
+                            }
+                        ],
+                        margin: [0, 25, 0, 0],
+                        unbreakable: true
+                    },
+                    {
+                        text: `Bhamini P1198 Field System • Generated: ${new Date().toLocaleString()}`,
+                        style: 'footer',
+                        alignment: 'center',
+                        margin: [0, 10, 0, 0]
+                    }
+                ],
+                styles: {
+                    headerBox: {
+                        fontSize: 18,
+                        bold: true,
+                        color: 'white',
+                        alignment: 'center'
+                    },
+                    subHeader: {
+                        fontSize: 14,
+                        bold: true,
+                        alignment: 'center',
+                        margin: [0, 3, 0, 3]
+                    },
+                    title: {
+                        fontSize: 12,
+                        bold: true,
+                        alignment: 'center',
+                        margin: [0, 2, 0, 2]
+                    },
+                    tableHeader: {
+                        bold: true,
+                        fontSize: 10,
+                        color: 'black',
+                        fillColor: '#f3f4f6',
+                        alignment: 'center',
+                        margin: [0, 3, 0, 3]
+                    },
+                    footer: {
+                        fontSize: 8,
+                        italics: true,
+                        opacity: 0.7
+                    }
+                }
             };
 
-            // 4. Generate PDF
-            await html2pdf().set(opt).from(element).save();
+            // Create PDF using the initialized instance
+            const pdf = pdfMakeInstance.createPdf(
+                docDefinition, 
+                undefined, 
+                (pdfMakeInstance as any).fonts, 
+                (pdfMakeInstance as any).vfs
+            );
             
-        } catch (err) {
+            // Download the PDF
+            pdf.download(`Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`);
+            
+            // Also generate a preview URL if needed
+            pdf.getDataUrl((dataUrl) => {
+                setPdfPreviewUrl(dataUrl);
+            });
+
+        } catch (err: any) {
             console.error('PDF Generation Error:', err);
-            alert("Failed to generate PDF. Please try again.");
+            setPdfError(err.message || "An unexpected error occurred while generating the PDF. Please try again.");
         } finally {
-            // 5. RESTORE ALL STYLES
-            const safeStyle = document.getElementById('pdf-safe-style');
-            if (safeStyle) safeStyle.remove();
-            originalStyles.forEach(s => head.appendChild(s));
             setIsGenerating(false);
         }
     };
@@ -261,12 +422,41 @@ const ReportPage: React.FC = () => {
                 <button
                     onClick={downloadPDF}
                     disabled={filteredData.length === 0 || isGenerating}
-                    className="flex-1 bg-blue-600 text-white font-black py-3 px-6 rounded-2xl shadow-lg shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                    className="flex-1 bg-blue-600 text-white font-black py-3 px-6 rounded-2xl shadow-lg shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
-                    {isGenerating ? 'Generating...' : 'Export Official PDF'}
+                    {isGenerating ? 'Generating PDF...' : 'Export Official PDF'}
                 </button>
             </div>
+
+            {pdfError && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-4 rounded-xl mb-6 flex items-start gap-3 animate-shake">
+                    <svg className="w-5 h-5 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <div>
+                        <p className="text-sm font-bold text-red-800 dark:text-red-200">PDF Generation Failed</p>
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">{pdfError}</p>
+                    </div>
+                </div>
+            )}
+
+            {pdfPreviewUrl && (
+                <div className="mb-8 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-gray-500">PDF Preview</h3>
+                        <button 
+                            onClick={() => setPdfPreviewUrl(null)}
+                            className="text-xs font-bold text-gray-400 hover:text-red-500"
+                        >
+                            Close Preview
+                        </button>
+                    </div>
+                    <iframe 
+                        src={pdfPreviewUrl} 
+                        className="w-full h-[500px] rounded-xl border border-gray-200 dark:border-gray-600 shadow-inner"
+                        title="PDF Preview"
+                    />
+                </div>
+            )}
             
             <div className="bg-blue-50 dark:bg-blue-900/10 p-2 rounded-lg mb-6 border border-blue-100 dark:border-blue-800">
                 <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold text-center italic">
@@ -274,8 +464,8 @@ const ReportPage: React.FC = () => {
                 </p>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-gray-100 dark:border-gray-700">
-                <table className="w-full text-left border-collapse telugu-font">
+            <div className="overflow-x-auto rounded-2xl border border-gray-100 dark:border-gray-700" ref={printRef}>
+                <table className="w-full text-left border-collapse">
                     <thead className="bg-gray-50 dark:bg-gray-700/50">
                         <tr>
                             <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400">Date</th>
@@ -315,112 +505,6 @@ const ReportPage: React.FC = () => {
                     onSubmitSuccess={() => { fetchData(); setEditingRecord(null); }}
                 />
             )}
-
-            {/* Hidden Official PDF Template Section */}
-            <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-                <div ref={printRef} className="telugu-font pdf-print-container" style={{ width: '1080px', padding: '20px', backgroundColor: '#ffffff', color: '#000000', boxSizing: 'border-box' }}>
-                    
-                    {/* Header Block Matching Image - LEAD TECHNICAL AGENCY */}
-                    <div style={{ width: '100%', paddingTop: '4px', marginBottom: '0', borderTop: '4px solid #1e40af' }}>
-                        <div className="pdf-header-box">
-                            LEAD TECHNICAL AGENCY – WASSAN
-                        </div>
-                    </div>
-                    
-                    <div style={{ borderLeft: '1px solid #000000', borderRight: '1px solid #000000' }}>
-                        <div style={{ borderBottom: '1px solid #000000', padding: '8px 16px', fontWeight: '900', textAlign: 'center', textTransform: 'uppercase', fontSize: '18px' }}>
-                            HDFC PARIVARTAN PROJECT - Bhamini P1198
-                        </div>
-                        <div className="pdf-bg-gray" style={{ borderBottom: '1px solid #000000', textAlign: 'center', padding: '4px 0', fontWeight: '900', textTransform: 'uppercase' }}>
-                            WORK DONE REPORT
-                        </div>
-                        
-                        <div style={{ borderBottom: '1px solid #000000', padding: '4px 16px', fontWeight: 'bold', display: 'flex', fontSize: '14px' }}>
-                            <span style={{ width: '250px' }}>Month:</span>
-                            <span style={{ flexGrow: 1 }}>{selectedMonth} {selectedYear}</span>
-                        </div>
-                        <div style={{ borderBottom: '1px solid #000000', padding: '4px 16px', fontWeight: 'bold', display: 'flex', fontSize: '14px' }}>
-                            <span style={{ width: '250px' }}>Name of the Person:</span>
-                            <span style={{ flexGrow: 1, textTransform: 'uppercase' }}>{user?.username}</span>
-                        </div>
-                        <div style={{ borderBottom: '1px solid #000000', padding: '4px 16px', fontWeight: 'bold', display: 'flex', fontSize: '14px' }}>
-                            <span style={{ width: '250px' }}>Working GP:</span>
-                            <span style={{ flexGrow: 1 }}>{filteredData[0]?.placeOfVisit || 'Field Operations'}</span>
-                        </div>
-                    </div>
-
-                    {/* Table Block */}
-                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0', fontSize: '12px' }}>
-                        <thead>
-                            <tr className="pdf-bg-gray" style={{ fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' }}>
-                                <th style={{ padding: '8px 4px', width: '40px' }}>S.No</th>
-                                <th style={{ padding: '8px 8px', width: '110px' }}>Date</th>
-                                <th style={{ padding: '8px 8px', width: '170px' }}>Place of Visit</th>
-                                <th style={{ padding: '8px 8px' }}>Purpose of visit/Work done</th>
-                                <th style={{ padding: '8px 4px', width: '80px' }}>Hours</th>
-                                <th style={{ padding: '8px 8px', width: '170px' }}>Outcome</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredData.length > 0 ? filteredData.map((r, i) => (
-                                <tr key={i} style={{ verticalAlign: 'top', pageBreakInside: 'avoid' }}>
-                                    <td style={{ padding: '8px 4px', textAlign: 'center', fontWeight: 'bold' }}>{i + 1}</td>
-                                    <td style={{ padding: '8px 8px', textAlign: 'center', whiteSpace: 'nowrap', fontWeight: 'bold' }}>{r.date}</td>
-                                    <td style={{ padding: '8px 8px' }}>
-                                        {r.workingStatus === 'Working' ? r.placeOfVisit : r.workingStatus}
-                                    </td>
-                                    <td style={{ padding: '8px 8px', lineHeight: '1.2', fontSize: '11px' }}>
-                                        {r.workingStatus === 'Working' ? r.purposeOfVisit : `REASON: ${r.reasonNotWorking}`}
-                                    </td>
-                                    <td style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '900' }}>
-                                        {r.workingStatus === 'Working' ? r.workingHours : '0'}
-                                    </td>
-                                    <td style={{ padding: '8px 8px', fontSize: '10px', fontStyle: 'italic' }}>
-                                        {r.outcomes}
-                                    </td>
-                                </tr>
-                            )) : (
-                                <tr>
-                                    <td colSpan={6} style={{ padding: '40px', textAlign: 'center', fontStyle: 'italic' }}>
-                                        No data entries recorded.
-                                    </td>
-                                </tr>
-                            )}
-                            
-                            {/* Summary Row */}
-                            {filteredData.length > 0 && (
-                                <tr className="pdf-bg-gray" style={{ fontWeight: '900', textTransform: 'uppercase', pageBreakInside: 'avoid' }}>
-                                    <td colSpan={4} style={{ padding: '8px 16px', textAlign: 'right' }}>Total Monthly Hours:</td>
-                                    <td style={{ padding: '8px 4px', textAlign: 'center', textDecoration: 'underline' }}>
-                                        {filteredData.reduce((acc, curr) => acc + (parseFloat(curr.workingHours) || 0), 0).toFixed(1)}
-                                    </td>
-                                    <td style={{ padding: '8px 8px' }}></td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-
-                    {/* Footer / Signatures */}
-                    <div style={{ marginTop: '60px', display: 'flex', justifyContent: 'space-between', padding: '0 60px', fontWeight: '900', fontSize: '12px', textTransform: 'uppercase', pageBreakInside: 'avoid' }}>
-                        <div style={{ textAlign: 'center' }}>
-                            <div style={{ width: '280px', borderTop: '2px solid #000000', marginBottom: '8px' }}></div>
-                            <div style={{ marginBottom: '4px' }}>SIGNATURE OF THE STAFF</div>
-                            <div style={{ fontSize: '10px', opacity: 0.8 }}>({user?.username})</div>
-                            <div style={{ fontSize: '9px', marginTop: '12px', textAlign: 'left' }}>Date: _________________</div>
-                            <div style={{ fontSize: '9px', marginTop: '4px', textAlign: 'left' }}>Place: _________________</div>
-                        </div>
-                        <div style={{ textAlign: 'center' }}>
-                            <div style={{ width: '280px', borderTop: '2px solid #000000', marginBottom: '8px' }}></div>
-                            <div style={{ marginBottom: '4px' }}>VERIFIED BY COORDINATOR</div>
-                            <div style={{ fontSize: '10px', opacity: 0.8 }}>(Name & Designation)</div>
-                        </div>
-                    </div>
-                    
-                    <div style={{ marginTop: '24px', fontSize: '9px', textAlign: 'center', fontStyle: 'italic', opacity: 0.7 }}>
-                        Bhamini P1198 Field System • Generated: {new Date().toLocaleString()}
-                    </div>
-                </div>
-            </div>
         </div>
     );
 };
