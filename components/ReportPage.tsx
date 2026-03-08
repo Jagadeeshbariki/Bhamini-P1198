@@ -1,9 +1,8 @@
-
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { GOOGLE_SHEET_CSV_URL } from '../config';
-import AttendanceFormModal from './AttendanceFormModal';
-import { initializePdfMake } from '../utils/pdfMakeSetup';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface AttendanceRecord {
     timestamp: string;
@@ -19,494 +18,597 @@ interface AttendanceRecord {
 
 const ReportPage: React.FC = () => {
     const { user } = useAuth();
-    const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
-    const [filteredData, setFilteredData] = useState<AttendanceRecord[]>([]);
+    const [records, setRecords] = useState<AttendanceRecord[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [pdfError, setPdfError] = useState<string | null>(null);
-    const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
-    const [editingRecord, setEditingRecord] = useState<{date: Date, data: AttendanceRecord} | null>(null);
-    const printRef = useRef<HTMLDivElement>(null);
+    const [filterMonth, setFilterMonth] = useState(new Date().getMonth());
+    const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+    const [language, setLanguage] = useState<'en' | 'te'>('en');
+    const [isDownloading, setIsDownloading] = useState(false);
+    const reportRef = useRef<HTMLDivElement>(null);
 
-    const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toLocaleString('default', { month: 'short' }));
-    const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
-
-    const years = useMemo(() => {
-        const currentYear = new Date().getFullYear();
-        return Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
-    }, []);
-
-    const months = useMemo(() => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], []);
-
-    const normalizeDateStr = (dateStr: string) => {
-        const p = dateStr.split('/');
-        if (p.length !== 3) return dateStr;
-        return `${p[0].padStart(2, '0')}/${p[1].padStart(2, '0')}/${p[2]}`;
+    // Robust date parser to handle DD/MM/YYYY, YYYY-MM-DD, and other formats
+    const parseDate = (dateStr: string): Date | null => {
+        if (!dateStr) return null;
+        const cleanStr = dateStr.trim();
+        
+        // Try DD/MM/YYYY or D/M/YYYY
+        if (cleanStr.includes('/')) {
+            const parts = cleanStr.split('/');
+            if (parts.length === 3) {
+                let year = parseInt(parts[2]);
+                if (year < 100) year += 2000; // Handle 2-digit year
+                // Check if valid numbers
+                const day = parseInt(parts[0]);
+                const month = parseInt(parts[1]);
+                if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                     return new Date(year, month - 1, day);
+                }
+            }
+        }
+        
+        // Try YYYY-MM-DD
+        if (cleanStr.includes('-')) {
+            const parts = cleanStr.split('-');
+            if (parts.length === 3) {
+                 const year = parseInt(parts[0]);
+                 const month = parseInt(parts[1]);
+                 const day = parseInt(parts[2]);
+                 if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                     return new Date(year, month - 1, day);
+                 }
+            }
+            // Fallback to standard parser
+            const d = new Date(cleanStr);
+            if (!isNaN(d.getTime())) return d;
+        }
+        
+        return null;
     };
 
-    const getTimestampMs = (ts: string) => {
-        if (!ts) return 0;
-        const d = new Date(ts);
-        return isNaN(d.getTime()) ? 0 : d.getTime();
+    const parseCSV = (csv: string): Record<string, string>[] => {
+        const lines = csv.split(/\r\n|\n/).filter(l => l);
+        if (lines.length < 1) return [];
+        const parseLine = (line: string): string[] => {
+            const values = [];
+            let inQuote = false, val = '';
+            for (let j = 0; j < line.length; j++) {
+                if (line[j] === '"') inQuote = !inQuote;
+                else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
+                else val += line[j];
+            }
+            values.push(val.trim());
+            return values;
+        };
+        const headers = parseLine(lines[0]);
+        return lines.slice(1).map(line => {
+            const vals = parseLine(line);
+            return headers.reduce((obj, h, i) => ({ ...obj, [h]: vals[i] || '' }), {});
+        });
     };
 
     const fetchData = useCallback(async () => {
+        if (!user) return;
         setLoading(true);
         try {
-            const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&_=${new Date().getTime()}`);
-            if (!response.ok) throw new Error(`Network error (${response.status})`);
+            const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&cb=${Date.now()}`);
             const csvText = await response.text();
+            const parsedData = parseCSV(csvText);
+            const currentUsernameLower = user.username.trim().toLowerCase();
             
-            const parseLine = (line: string): string[] => {
-                const values = [];
-                let inQuote = false, val = '';
-                for (let j = 0; j < line.length; j++) {
-                    if (line[j] === '"') inQuote = !inQuote;
-                    else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
-                    else val += line[j];
-                }
-                values.push(val.trim());
-                return values;
-            };
-
-            const lines = csvText.split(/\r\n|\n/).filter(l => l);
-            if (lines.length < 1) return;
-            const headers = parseLine(lines[0]);
+            // Get local data for instant feedback
+            const localKey = `bhamini_local_${user.username}`;
+            const localData = JSON.parse(localStorage.getItem(localKey) || '{}');
             
-            const remoteMapped: AttendanceRecord[] = lines.slice(1).map(line => {
-                const vals = parseLine(line);
-                const row: any = {};
-                headers.forEach((h, i) => row[h] = vals[i]);
-                return {
+            // Combine sheet data and local data
+            const combinedData = [...parsedData];
+            
+            // Map sheet data
+            const userRecords = combinedData
+                .filter(row => (row['SELECT YOUR NAME'] || row['Name'] || '').trim().toLowerCase() === currentUsernameLower)
+                .map(row => ({
                     timestamp: row['Timestamp'] || '',
-                    name: (row['SELECT YOUR NAME'] || '').trim(),
-                    date: row['CHOOSE DATE'] || '',
-                    workingStatus: row['WORKING/LEAVE/HOLIDAY'] || '',
+                    name: currentUsernameLower,
+                    date: row['CHOOSE DATE'] || row['Date'] || '',
+                    workingStatus: row['WORKING/LEAVE/HOLIDAY'] || 'Working',
                     reasonNotWorking: row['WRITE THE REASON FOR NOT WORKING'] || '',
                     placeOfVisit: row['PLACE OF VISIT'] || '',
                     purposeOfVisit: row['PURPOSE OF VISIT'] || '',
-                    workingHours: row['WORKING HOURS'] || '',
+                    workingHours: row['WORKING HOURS'] || '0',
                     outcomes: row['OUTCOME'] || '',
-                };
+                }));
+
+            // Add local records if not already present (based on date)
+            Object.keys(localData).forEach(dateKey => {
+                const exists = userRecords.some(r => r.date === dateKey);
+                if (!exists) {
+                    const localEntry = localData[dateKey];
+                    userRecords.push({
+                        timestamp: localEntry.timestamp,
+                        name: currentUsernameLower,
+                        date: dateKey,
+                        workingStatus: localEntry.workingStatus,
+                        reasonNotWorking: localEntry.reasonNotWorking,
+                        placeOfVisit: localEntry.placeOfVisit,
+                        purposeOfVisit: localEntry.purposeOfVisit,
+                        workingHours: localEntry.workingHours,
+                        outcomes: localEntry.outcomes || localEntry.outcome,
+                    });
+                }
             });
 
-            if (user) {
-                const localKey = `bhamini_local_${user.username}`;
-                const localSubmissions = JSON.parse(localStorage.getItem(localKey) || '{}');
-                const uniqueDatesMap = new Map<string, AttendanceRecord>();
+            const sortedRecords = userRecords.sort((a, b) => {
+                const dateA = parseDate(a.date);
+                const dateB = parseDate(b.date);
+                if (dateA && dateB) {
+                    return dateA.getTime() - dateB.getTime();
+                }
+                return 0;
+            });
                 
-                remoteMapped.forEach(r => {
-                    if (r.name.toLowerCase() === user.username.toLowerCase()) {
-                        const normalized = normalizeDateStr(r.date);
-                        const existing = uniqueDatesMap.get(normalized);
-                        if (!existing || getTimestampMs(r.timestamp) >= getTimestampMs(existing.timestamp)) {
-                            uniqueDatesMap.set(normalized, r);
-                        }
-                    }
-                });
-
-                Object.keys(localSubmissions).forEach(d => {
-                    const localRec = localSubmissions[d];
-                    const normalized = normalizeDateStr(d);
-                    const existing = uniqueDatesMap.get(normalized);
-                    if (!existing || getTimestampMs(localRec.timestamp) >= getTimestampMs(existing.timestamp)) {
-                        uniqueDatesMap.set(normalized, localRec);
-                    }
-                });
-
-                setAttendanceData(Array.from(uniqueDatesMap.values()));
-            } else {
-                setAttendanceData(remoteMapped);
-            }
-
+            setRecords(sortedRecords);
         } catch (err) {
-            console.error('Failed to sync data:', err);
+            console.error('Failed to load report data:', err);
         } finally {
             setLoading(false);
         }
     }, [user]);
 
-    useEffect(() => { if (user) fetchData(); }, [user, fetchData]);
-
     useEffect(() => {
-        if (user && attendanceData.length > 0) {
-            const userName = user.username.trim().toLowerCase();
-            const monthIdx = months.indexOf(selectedMonth);
-            const yearNum = parseInt(selectedYear);
+        fetchData();
+    }, [fetchData]);
 
-            const start = new Date(yearNum, monthIdx - 1, 26, 0, 0, 0).getTime();
-            const end = new Date(yearNum, monthIdx, 25, 23, 59, 59).getTime();
-
-            const filtered = attendanceData.filter(r => {
-                if (r.name.trim().toLowerCase() !== userName) return false;
-                const p = r.date.split('/');
-                if (p.length !== 3) return false;
-                const rd = new Date(+p[2], +p[1]-1, +p[0]).getTime();
-                return rd >= start && rd <= end;
-            }).sort((a, b) => {
-                const pa = a.date.split('/'), pb = b.date.split('/');
-                return new Date(+pa[2], +pa[1]-1, +pa[0]).getTime() - new Date(+pb[2], +pb[1]-1, +pb[0]).getTime();
-            });
-            setFilteredData(filtered);
-        } else if (attendanceData.length === 0) {
-            setFilteredData([]);
+    const reportPeriod = useMemo(() => {
+        // End date: 25th of selected month/year
+        const endDate = new Date(filterYear, filterMonth, 25);
+        // Start date: 26th of previous month
+        const startDate = new Date(filterYear, filterMonth - 1, 26);
+        
+        const days: Date[] = [];
+        const curr = new Date(startDate);
+        while (curr <= endDate) {
+            days.push(new Date(curr));
+            curr.setDate(curr.getDate() + 1);
         }
-    }, [user, attendanceData, selectedMonth, selectedYear, months]);
+        return { startDate, endDate, days };
+    }, [filterMonth, filterYear]);
 
-    const handleEdit = (record: AttendanceRecord) => {
-        const p = record.date.split('/');
-        const d = new Date(+p[2], +p[1]-1, +p[0]);
-        setEditingRecord({ date: d, data: record });
-    };
+    const filteredRecords = useMemo(() => {
+        const { startDate, endDate } = reportPeriod;
+        return records.filter(r => {
+            const d = parseDate(r.date);
+            if (!d) return false;
+            // Set hours to 0 for accurate date comparison
+            d.setHours(0, 0, 0, 0);
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);
+            end.setHours(0, 0, 0, 0);
+            
+            return d >= start && d <= end;
+        });
+    }, [records, reportPeriod]);
 
-    const downloadPDF = async () => {
-        if (!user || filteredData.length === 0) return;
-        setIsGenerating(true);
-        setPdfError(null);
+    const stats = useMemo(() => {
+        const working = filteredRecords.filter(r => r.workingStatus === 'Working').length;
+        const leave = filteredRecords.filter(r => r.workingStatus === 'Leave').length;
+        const holiday = filteredRecords.filter(r => r.workingStatus === 'Holiday').length;
+        const totalHours = filteredRecords.reduce((acc, r) => acc + (parseFloat(r.workingHours) || 0), 0);
+        
+        return { working, leave, holiday, totalHours };
+    }, [filteredRecords]);
 
+    const handleDownload = async () => {
+        if (!reportRef.current) return;
+        setIsDownloading(true);
         try {
-            // Get the configured pdfMake instance
-            const pdfMakeInstance = await initializePdfMake();
-            
-            // Defensive check: Ensure fonts are actually in the VFS
-            const vfs = (pdfMakeInstance as any).vfs || {};
-            const availableKeys = Object.keys(vfs);
-            console.log('📄 Generating PDF. VFS Keys available:', availableKeys);
-            
-            const requiredFonts = ['NotoSansTelugu-Regular.ttf', 'Roboto-Regular.ttf'];
-            const fontStats = requiredFonts.map(f => `${f}: ${vfs[f]?.length || 0} chars`);
-            console.log('📄 Font Stats:', fontStats);
-            
-            const missingFonts = requiredFonts.filter(f => !vfs[f] || vfs[f].length < 100);
-            
-            if (missingFonts.length > 0) {
-                console.error('❌ VFS Missing Fonts. Missing:', missingFonts, 'Keys found:', availableKeys);
-                const errorMsg = `Required fonts (${missingFonts.join(', ')}) could not be loaded correctly. This might be due to a slow internet connection. Please refresh the page and try again.`;
-                setPdfError(errorMsg);
-                throw new Error(errorMsg);
-            }
+            const canvas = await html2canvas(reportRef.current, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                onclone: (clonedDoc) => {
+                    const styles = clonedDoc.getElementsByTagName('style');
+                    const links = clonedDoc.getElementsByTagName('link');
+                    for (let i = styles.length - 1; i >= 0; i--) styles[i].parentNode?.removeChild(styles[i]);
+                    for (let i = links.length - 1; i >= 0; i--) links[i].parentNode?.removeChild(links[i]);
 
-            const docDefinition: any = {
-                pageOrientation: 'landscape',
-                pageSize: 'A4',
-                pageMargins: [15, 25, 15, 25],
-                // Use NotoSansTelugu as default as it's more likely to handle mixed content if it has Latin
-                defaultStyle: {
-                    font: 'NotoSansTelugu',
-                    fontSize: 10,
-                    lineHeight: 1.2
-                },
-                header: (currentPage: number) => {
-                    if (currentPage === 1) return [];
-                    return [
-                        {
-                            canvas: [{ type: 'rect', x: 15, y: 10, w: 812, h: 20, color: '#1e40af' }]
-                        },
-                        {
-                            text: 'LEAD TECHNICAL AGENCY – WASSAN',
-                            style: 'headerBox',
-                            fontSize: 14,
-                            margin: [0, -17, 0, 0]
-                        }
-                    ];
-                },
-                content: [
-                    {
-                        canvas: [{ type: 'rect', x: 0, y: 0, w: 812, h: 25, color: '#1e40af' }]
-                    },
-                    {
-                        text: 'LEAD TECHNICAL AGENCY – WASSAN',
-                        style: 'headerBox',
-                        margin: [0, -22, 0, 10]
-                    },
-                    {
-                        table: {
-                            widths: ['*'],
-                            body: [
-                                [{ text: `HDFC PARIVARTAN PROJECT - Bhamini P1198`, style: 'subHeader' }],
-                                [{ text: 'WORK DONE REPORT', style: 'title', fillColor: '#f3f4f6' }]
-                            ]
-                        },
-                        layout: {
-                            hLineWidth: () => 0.5,
-                            vLineWidth: () => 0.5,
-                            hLineColor: () => '#aaaaaa',
-                            vLineColor: () => '#aaaaaa'
-                        }
-                    },
-                    {
-                        table: {
-                            widths: [100, '*', 120, '*'],
-                            body: [
-                                [
-                                    { text: 'Month:', bold: true, fillColor: '#f9fafb' }, 
-                                    { text: `${selectedMonth} ${selectedYear}` },
-                                    { text: 'Name of the Person:', bold: true, fillColor: '#f9fafb' }, 
-                                    { text: user.username.toUpperCase() }
-                                ],
-                                [
-                                    { text: 'Working GP:', bold: true, fillColor: '#f9fafb' }, 
-                                    { text: filteredData[0]?.placeOfVisit || 'Field Operations', colSpan: 3 },
-                                    {}, {}
-                                ]
-                            ]
-                        },
-                        layout: {
-                            hLineWidth: () => 0.5,
-                            vLineWidth: () => 0.5,
-                            hLineColor: () => '#aaaaaa',
-                            vLineColor: () => '#aaaaaa'
-                        },
-                        margin: [0, 5, 0, 10]
-                    },
-                    {
-                        table: {
-                            headerRows: 1,
-                            widths: [25, 65, 110, '*', 40, 140],
-                            dontBreakRows: true,
-                            body: [
-                                [
-                                    { text: 'S.No', style: 'tableHeader' },
-                                    { text: 'Date', style: 'tableHeader' },
-                                    { text: 'Place of Visit', style: 'tableHeader' },
-                                    { text: 'Purpose of visit/Work done', style: 'tableHeader' },
-                                    { text: 'Hours', style: 'tableHeader' },
-                                    { text: 'Outcome', style: 'tableHeader' }
-                                ],
-                                ...filteredData.map((r, i) => [
-                                    { text: (i + 1).toString(), alignment: 'center', fontSize: 9 },
-                                    { text: r.date, alignment: 'center', fontSize: 9 },
-                                    { text: r.workingStatus === 'Working' ? r.placeOfVisit : r.workingStatus, fontSize: 9 },
-                                    { text: r.workingStatus === 'Working' ? r.purposeOfVisit : `REASON: ${r.reasonNotWorking}`, fontSize: 9 },
-                                    { text: r.workingStatus === 'Working' ? r.workingHours : '0', alignment: 'center', bold: true, fontSize: 9 },
-                                    { text: r.outcomes, fontSize: 9 }
-                                ]),
-                                [
-                                    { text: 'Total Monthly Hours:', colSpan: 4, alignment: 'right', bold: true, fillColor: '#f3f4f6', fontSize: 9 },
-                                    {}, {}, {},
-                                    { 
-                                        text: filteredData.reduce((acc, curr) => acc + (parseFloat(curr.workingHours) || 0), 0).toFixed(1),
-                                        alignment: 'center',
-                                        bold: true,
-                                        fillColor: '#f3f4f6',
-                                        decoration: 'underline',
-                                        fontSize: 9
-                                    },
-                                    { text: '', fillColor: '#f3f4f6' }
-                                ]
-                            ]
-                        },
-                        layout: {
-                            hLineWidth: (i: number) => (i === 0) ? 1 : 0.5,
-                            vLineWidth: (i: number) => (i === 0) ? 1 : 0.5,
-                            hLineColor: () => '#444444',
-                            vLineColor: () => '#444444',
-                            paddingLeft: () => 4,
-                            paddingRight: () => 4,
-                            paddingTop: () => 4,
-                            paddingBottom: () => 4
-                        }
-                    },
-                    {
-                        columns: [
-                            {
-                                stack: [
-                                    { text: '', margin: [0, 25, 0, 0] },
-                                    { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 170, y2: 0, lineWidth: 0.5 }] },
-                                    { text: 'SIGNATURE OF THE STAFF', bold: true, margin: [0, 5, 0, 0], fontSize: 9 },
-                                    { text: `(${user.username})`, fontSize: 8 },
-                                    { text: 'Date: _________________', fontSize: 8, margin: [0, 6, 0, 0] },
-                                    { text: 'Place: _________________', fontSize: 8, margin: [0, 3, 0, 0] }
-                                ],
-                                alignment: 'center'
-                            },
-                            {
-                                stack: [
-                                    { text: '', margin: [0, 25, 0, 0] },
-                                    { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 170, y2: 0, lineWidth: 0.5 }] },
-                                    { text: 'VERIFIED BY COORDINATOR', bold: true, margin: [0, 5, 0, 0], fontSize: 9 },
-                                    { text: '(Name & Designation)', fontSize: 8 }
-                                ],
-                                alignment: 'center'
-                            }
-                        ],
-                        margin: [0, 25, 0, 0],
-                        unbreakable: true
-                    },
-                    {
-                        text: `Bhamini P1198 Field System • Generated: ${new Date().toLocaleString()}`,
-                        style: 'footer',
-                        alignment: 'center',
-                        margin: [0, 10, 0, 0]
-                    }
-                ],
-                styles: {
-                    headerBox: {
-                        fontSize: 18,
-                        bold: true,
-                        color: 'white',
-                        alignment: 'center'
-                    },
-                    subHeader: {
-                        fontSize: 14,
-                        bold: true,
-                        alignment: 'center',
-                        margin: [0, 3, 0, 3]
-                    },
-                    title: {
-                        fontSize: 12,
-                        bold: true,
-                        alignment: 'center',
-                        margin: [0, 2, 0, 2]
-                    },
-                    tableHeader: {
-                        bold: true,
-                        fontSize: 10,
-                        color: 'black',
-                        fillColor: '#f3f4f6',
-                        alignment: 'center',
-                        margin: [0, 3, 0, 3]
-                    },
-                    footer: {
-                        fontSize: 8,
-                        italics: true,
-                        opacity: 0.7
+                    const style = clonedDoc.createElement('style');
+                    style.innerHTML = `
+                        @font-face { font-family: 'sans-serif'; src: local('Arial'), local('Helvetica'), local('sans-serif'); }
+                        * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
+                        body { margin: 0; padding: 0; background: white; }
+                    `;
+                    clonedDoc.head.appendChild(style);
+                }
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('l', 'mm', 'a4');
+            const pdfPageWidth = pdf.internal.pageSize.getWidth();
+            const pdfPageHeight = pdf.internal.pageSize.getHeight();
+            
+            const imgWidth = pdfPageWidth;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            
+            // Calculate ratio to convert DOM pixels to PDF mm
+            const domWidth = reportRef.current.offsetWidth;
+            const pxToMm = pdfPageWidth / domWidth;
+            const containerRect = reportRef.current.getBoundingClientRect();
+            const rows = reportRef.current.querySelectorAll('tr');
+
+            const splitPoints: number[] = [0];
+            let currentSplit = 0;
+
+            // Calculate split points based on row positions
+            while (currentSplit + pdfPageHeight < imgHeight) {
+                const naiveCutMm = currentSplit + pdfPageHeight;
+                let cutMm = naiveCutMm;
+                
+                // Find if any row is crossing the naive cut line
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+                    const rowRect = row.getBoundingClientRect();
+                    const rowTopRel = rowRect.top - containerRect.top;
+                    const rowBottomRel = rowRect.bottom - containerRect.top;
+                    
+                    const rowTopMm = rowTopRel * pxToMm;
+                    const rowBottomMm = rowBottomRel * pxToMm;
+                    
+                    // If row starts before the cut and ends after the cut
+                    if (rowTopMm < naiveCutMm && rowBottomMm > naiveCutMm) {
+                        // Cut before this row starts
+                        cutMm = rowTopMm;
+                        break;
                     }
                 }
-            };
+                
+                // Safety check: if cutMm didn't advance (row taller than page?), force advance
+                if (cutMm <= currentSplit) {
+                    cutMm = naiveCutMm;
+                }
+                
+                splitPoints.push(cutMm);
+                currentSplit = cutMm;
+            }
 
-            // Create PDF using the initialized instance
-            const pdf = pdfMakeInstance.createPdf(
-                docDefinition, 
-                undefined, 
-                (pdfMakeInstance as any).fonts, 
-                (pdfMakeInstance as any).vfs
-            );
-            
-            // Download the PDF
-            pdf.download(`Work_Done_Report_${user.username}_${selectedMonth}_${selectedYear}.pdf`);
-            
-            // Also generate a preview URL if needed
-            pdf.getDataUrl((dataUrl) => {
-                setPdfPreviewUrl(dataUrl);
+            // Generate PDF pages
+            splitPoints.forEach((splitY, index) => {
+                if (index > 0) pdf.addPage();
+                // We place the image shifted up by splitY (negative Y offset)
+                pdf.addImage(imgData, 'PNG', 0, -splitY, imgWidth, imgHeight);
             });
 
-        } catch (err: any) {
-            console.error('PDF Generation Error:', err);
-            setPdfError(err.message || "An unexpected error occurred while generating the PDF. Please try again.");
+            pdf.save(`Work_Report_${user?.username}_${filterMonth + 1}_${filterYear}.pdf`);
+        } catch (err) {
+            console.error('Download failed:', err);
+            alert('Download failed. Please try again.');
         } finally {
-            setIsGenerating(false);
+            setIsDownloading(false);
         }
     };
 
-    if (loading) return <div className="text-center p-20 animate-pulse text-blue-600 font-bold">Checking local & remote records...</div>;
+    const t = {
+        en: {
+            title: 'Monthly Performance Report',
+            sub: 'Attendance & Activity Summary',
+            download: 'Download PDF',
+            lang: 'Telugu',
+            stats: {
+                worked: 'Days Worked',
+                leave: 'Leave Taken',
+                holiday: 'Holidays',
+                hours: 'Total Hours'
+            },
+            table: {
+                date: 'Date',
+                status: 'Status',
+                place: 'Place',
+                purpose: 'Purpose',
+                hours: 'Hours'
+            },
+            report: {
+                agency: 'LEAD TECHNICAL AGENCY – WASSAN',
+                project: 'HDFC Parivarthan',
+                type: 'WORK DONE REPORT',
+                month: 'Month:',
+                name: 'Name of the Person:',
+                gp: 'Working GP:',
+                sno: 'S. No',
+                date: 'Date',
+                place: 'Place of Visit',
+                purpose: 'Purpose of visit/Work done',
+                hours: 'No of Hours Working',
+                outcome: 'Outcome from work',
+                total_hours: 'TOTAL MONTHLY HOURS:',
+                staff_sig: 'SIGNATURE OF THE STAFF',
+                coord_sig: 'VERIFIED BY COORDINATOR',
+                name_designation: '(NAME & DESIGNATION)',
+                place_label: 'PLACE:',
+                date_label: 'DATE:',
+                signature_label: 'Signature of the Person'
+            }
+        },
+        te: {
+            title: 'నెలవారీ పనితీరు నివేదిక',
+            sub: 'హాజరు మరియు కార్యకలాపాల సారాంశం',
+            download: 'PDF డౌన్‌లోడ్ చేయండి',
+            lang: 'English',
+            stats: {
+                worked: 'పని చేసిన రోజులు',
+                leave: 'తీసుకున్న సెలవులు',
+                holiday: 'సెలవు దినాలు',
+                hours: 'మొత్తం గంటలు'
+            },
+            table: {
+                date: 'తేదీ',
+                status: 'స్థితి',
+                place: 'ప్రదేశం',
+                purpose: 'ఉద్దేశ్యం',
+                hours: 'గంటలు'
+            },
+            report: {
+                agency: 'లీడ్ టెక్నికల్ ఏజెన్సీ - వాసన్',
+                project: 'హెచ్‌డిఎఫ్‌సి పరివర్తన్',
+                type: 'పని నివేదిక (WORK DONE REPORT)',
+                month: 'నెల (Month):',
+                name: 'వ్యక్తి పేరు (Name):',
+                gp: 'పని చేస్తున్న జిపి (Working GP):',
+                sno: 'వరుస సంఖ్య',
+                date: 'తేదీ',
+                place: 'సందర్శించిన ప్రదేశం',
+                purpose: 'సందర్శన ఉద్దేశ్యం/చేసిన పని',
+                hours: 'పని గంటల సంఖ్య',
+                outcome: 'పని ఫలితం',
+                total_hours: 'మొత్తం నెలవారీ గంటలు (TOTAL MONTHLY HOURS):',
+                staff_sig: 'సిబ్బంది సంతకం (SIGNATURE OF THE STAFF)',
+                coord_sig: 'కోఆర్డినేటర్ ద్వారా ధృవీకరించబడింది (VERIFIED BY COORDINATOR)',
+                name_designation: '(పేరు & హోదా)',
+                place_label: 'ప్రదేశం (PLACE):',
+                date_label: 'తేదీ (DATE):',
+                signature_label: 'వ్యక్తి సంతకం (Signature of the Person)'
+            }
+        }
+    };
+
+    const currentT = t[language];
+
+    if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[50vh]">
+                <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                <p className="mt-4 text-xs font-black uppercase text-gray-400 tracking-widest">Generating Report...</p>
+            </div>
+        );
+    }
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div className="flex flex-col gap-6 animate-fade-in pb-20">
+            {/* Header Controls */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
                 <div>
-                    <h1 className="text-3xl font-black text-gray-800 dark:text-white">Reporting</h1>
-                    <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-1">Monthly Work Statement</p>
+                    <h1 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">{currentT.title}</h1>
+                    <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1">{currentT.sub}</p>
                 </div>
-                <div className="flex gap-2">
-                    <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-gray-50 dark:bg-gray-700 px-4 py-2 rounded-xl font-bold border-none ring-1 ring-gray-200 dark:ring-gray-600">
-                        {months.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                    <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="bg-gray-50 dark:bg-gray-700 px-4 py-2 rounded-xl font-bold border-none ring-1 ring-gray-200 dark:ring-gray-600">
-                        {years.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4 mb-2">
-                <button
-                    onClick={downloadPDF}
-                    disabled={filteredData.length === 0 || isGenerating}
-                    className="flex-1 bg-blue-600 text-white font-black py-3 px-6 rounded-2xl shadow-lg shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
-                    {isGenerating ? 'Generating PDF...' : 'Export Official PDF'}
-                </button>
-            </div>
-
-            {pdfError && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-4 rounded-xl mb-6 flex items-start gap-3 animate-shake">
-                    <svg className="w-5 h-5 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <div>
-                        <p className="text-sm font-bold text-red-800 dark:text-red-200">PDF Generation Failed</p>
-                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">{pdfError}</p>
-                    </div>
-                </div>
-            )}
-
-            {pdfPreviewUrl && (
-                <div className="mb-8 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-sm font-black uppercase tracking-widest text-gray-500">PDF Preview</h3>
-                        <button 
-                            onClick={() => setPdfPreviewUrl(null)}
-                            className="text-xs font-bold text-gray-400 hover:text-red-500"
-                        >
-                            Close Preview
-                        </button>
-                    </div>
-                    <iframe 
-                        src={pdfPreviewUrl} 
-                        className="w-full h-[500px] rounded-xl border border-gray-200 dark:border-gray-600 shadow-inner"
-                        title="PDF Preview"
-                    />
-                </div>
-            )}
-            
-            <div className="bg-blue-50 dark:bg-blue-900/10 p-2 rounded-lg mb-6 border border-blue-100 dark:border-blue-800">
-                <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold text-center italic">
-                    Deduplication Active: Only your latest entry for each date is displayed.
-                </p>
-            </div>
-
-            <div className="overflow-x-auto rounded-2xl border border-gray-100 dark:border-gray-700" ref={printRef}>
-                <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-50 dark:bg-gray-700/50">
-                        <tr>
-                            <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400">Date</th>
-                            <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400">Activity / Place</th>
-                            <th className="px-4 py-4 text-[10px] font-black uppercase text-gray-400 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                        {filteredData.map((record, index) => (
-                            <tr key={index} className="group hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors text-gray-800 dark:text-gray-200">
-                                <td className="px-4 py-4 font-bold text-sm whitespace-nowrap">{record.date}</td>
-                                <td className="px-4 py-4 text-sm">
-                                    <div className="font-bold">{record.workingStatus === 'Working' ? record.placeOfVisit : record.workingStatus}</div>
-                                    <div className="text-xs text-gray-500 line-clamp-1">{record.workingStatus === 'Working' ? record.purposeOfVisit : record.reasonNotWorking}</div>
-                                </td>
-                                <td className="px-4 py-4 text-right">
-                                    <button 
-                                        onClick={() => handleEdit(record)}
-                                        className="text-gray-400 hover:text-blue-600 p-2 rounded-lg transition-colors"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                                    </button>
-                                </td>
-                            </tr>
+                
+                <div className="flex flex-wrap items-center gap-2">
+                    <button 
+                        onClick={() => setLanguage(language === 'en' ? 'te' : 'en')}
+                        className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-xl text-[10px] font-black uppercase border border-indigo-100 dark:border-indigo-800 hover:bg-indigo-600 hover:text-white transition-all"
+                    >
+                        {currentT.lang}
+                    </button>
+                    
+                    <select 
+                        value={filterMonth} 
+                        onChange={(e) => setFilterMonth(parseInt(e.target.value))}
+                        className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer"
+                    >
+                        {Array.from({ length: 12 }).map((_, i) => (
+                            <option key={i} value={i}>{new Date(0, i).toLocaleString('default', { month: 'long' })}</option>
                         ))}
-                    </tbody>
-                </table>
-                {filteredData.length === 0 && <div className="p-20 text-center text-gray-400 italic">No records found for the selected 26th-25th period.</div>}
+                    </select>
+                    
+                    <select 
+                        value={filterYear} 
+                        onChange={(e) => setFilterYear(parseInt(e.target.value))}
+                        className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer"
+                    >
+                        {[2024, 2025, 2026].map(y => (
+                            <option key={y} value={y}>{y}</option>
+                        ))}
+                    </select>
+
+                    <button 
+                        onClick={handleDownload}
+                        disabled={isDownloading}
+                        className={`flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition-all ${isDownloading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        {isDownloading ? (
+                            <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        )}
+                        {currentT.download}
+                    </button>
+                </div>
             </div>
 
-            {editingRecord && user && (
-                <AttendanceFormModal 
-                    user={user} 
-                    date={editingRecord.date} 
-                    initialData={editingRecord.data}
-                    onClose={() => setEditingRecord(null)}
-                    onSubmitSuccess={() => { fetchData(); setEditingRecord(null); }}
-                />
-            )}
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <StatCard label={currentT.stats.worked} value={stats.working} color="bg-emerald-600" />
+                <StatCard label={currentT.stats.leave} value={stats.leave} color="bg-red-600" />
+                <StatCard label={currentT.stats.holiday} value={stats.holiday} color="bg-indigo-600" />
+                <StatCard label={currentT.stats.hours} value={stats.totalHours.toFixed(1)} color="bg-gray-900" />
+            </div>
+
+            {/* Main Table View */}
+            <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-gray-100 dark:border-gray-700">
+                    <h2 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest">{language === 'en' ? 'Detailed Activity Log' : 'వివరణాత్మక కార్యాచరణ లాగ్'}</h2>
+                </div>
+                
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-900/50">
+                                <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400">{currentT.table.date}</th>
+                                <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400">{currentT.table.status}</th>
+                                <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400">{currentT.table.place}</th>
+                                <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400">{currentT.table.purpose}</th>
+                                <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400">{currentT.table.hours}</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                            {filteredRecords.length > 0 ? (
+                                filteredRecords.map((r, i) => (
+                                    <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                        <td className="px-6 py-4 text-[11px] font-bold text-gray-900 dark:text-white">{r.date}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`text-[8px] font-black px-2 py-1 rounded-full uppercase ${
+                                                r.workingStatus === 'Working' ? 'bg-emerald-100 text-emerald-600' : 
+                                                r.workingStatus === 'Leave' ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'
+                                            }`}>
+                                                {r.workingStatus}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-[11px] text-gray-500 dark:text-gray-400 uppercase font-bold">{r.placeOfVisit || '-'}</td>
+                                        <td className="px-6 py-4 text-[11px] text-gray-500 dark:text-gray-400 font-medium">{r.purposeOfVisit || '-'}</td>
+                                        <td className="px-6 py-4 text-[11px] font-black text-gray-900 dark:text-white">{r.workingHours}</td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-12 text-center text-[10px] font-black uppercase text-gray-400 tracking-widest">
+                                        {language === 'en' ? 'No records found for this period' : 'ఈ కాలానికి రికార్డులు ఏవీ లేవు'}
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Hidden Report Template for PDF Generation */}
+            <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+                <div 
+                    ref={reportRef} 
+                    style={{ 
+                        width: '297mm', 
+                        minHeight: '210mm', 
+                        padding: '10mm', 
+                        backgroundColor: '#ffffff', 
+                        color: '#000000', 
+                        fontFamily: 'sans-serif' 
+                    }}
+                >
+                    {/* Header Section */}
+                    <div style={{ textAlign: 'center', borderBottom: '2px solid #000000', paddingBottom: '16px', marginBottom: '16px' }}>
+                        <h1 style={{ fontSize: '20px', fontWeight: 'bold', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{currentT.report.agency}</h1>
+                        <h2 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{currentT.report.project}</h2>
+                        <h3 style={{ fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', margin: '8px 0 0 0' }}>{currentT.report.type}</h3>
+                    </div>
+
+                    {/* Info Section */}
+                    <div style={{ marginBottom: '24px' }}>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', padding: '4px 0' }}>
+                            <span style={{ width: '192px', fontWeight: 'bold' }}>{currentT.report.month}</span>
+                            <span>{new Date(0, filterMonth).toLocaleString('default', { month: 'long' })} {filterYear}</span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', padding: '4px 0' }}>
+                            <span style={{ width: '192px', fontWeight: 'bold' }}>{currentT.report.name}</span>
+                            <span style={{ textTransform: 'uppercase' }}>{user?.username}</span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', padding: '4px 0' }}>
+                            <span style={{ width: '192px', fontWeight: 'bold' }}>{currentT.report.gp}</span>
+                            <span>{filteredRecords[0]?.placeOfVisit || 'N/A'}</span>
+                        </div>
+                    </div>
+
+                    {/* Table Section */}
+                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #000000' }}>
+                        <thead>
+                            <tr style={{ backgroundColor: '#f3f4f6' }}>
+                                <th style={{ border: '2px solid #000000', padding: '8px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', width: '10mm' }}>{currentT.report.sno}</th>
+                                <th style={{ border: '2px solid #000000', padding: '8px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', width: '25mm' }}>{currentT.report.date}</th>
+                                <th style={{ border: '2px solid #000000', padding: '8px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', width: '35mm' }}>{currentT.report.place}</th>
+                                <th style={{ border: '2px solid #000000', padding: '8px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>{currentT.report.purpose}</th>
+                                <th style={{ border: '2px solid #000000', padding: '8px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', width: '25mm' }}>{currentT.report.hours}</th>
+                                <th style={{ border: '2px solid #000000', padding: '8px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', width: '35mm' }}>{currentT.report.outcome}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {reportPeriod.days.map((day, i) => {
+                                const dateStr = `${day.getDate().toString().padStart(2, '0')}/${(day.getMonth() + 1).toString().padStart(2, '0')}/${day.getFullYear()}`;
+                                
+                                // Find record using robust date comparison
+                                const record = filteredRecords.find(r => {
+                                    const rDate = parseDate(r.date);
+                                    if (!rDate) return false;
+                                    return rDate.getDate() === day.getDate() && 
+                                           rDate.getMonth() === day.getMonth() && 
+                                           rDate.getFullYear() === day.getFullYear();
+                                });
+
+                                return (
+                                    <tr key={i}>
+                                        <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px', textAlign: 'center' }}>{i + 1}</td>
+                                        <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px', textAlign: 'center' }}>{dateStr}</td>
+                                        <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px', textTransform: 'uppercase' }}>{record?.placeOfVisit || ''}</td>
+                                        <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px' }}>{record?.purposeOfVisit || ''}</td>
+                                        <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px', textAlign: 'center' }}>{record?.workingHours || ''}</td>
+                                        <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px' }}>{record?.outcomes || ''}</td>
+                                    </tr>
+                                );
+                            })}
+                            {/* Total Hours Row */}
+                            <tr style={{ backgroundColor: '#f3f4f6' }}>
+                                <td colSpan={4} style={{ border: '2px solid #000000', padding: '8px', fontSize: '12px', fontWeight: 'bold', textAlign: 'right' }}>
+                                    {currentT.report.total_hours}
+                                </td>
+                                <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>
+                                    {stats.totalHours.toFixed(1)}
+                                </td>
+                                <td style={{ border: '2px solid #000000', padding: '8px' }}></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    {/* Footer / Signature Section */}
+                    <div style={{ marginTop: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        {/* Left Side: Staff Signature */}
+                        <div style={{ textAlign: 'center', minWidth: '300px' }}>
+                            <div style={{ borderTop: '2px solid #000000', width: '100%', marginBottom: '8px' }}></div>
+                            <div style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>{currentT.report.staff_sig}</div>
+                            <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', marginTop: '4px' }}>({user?.username})</div>
+                            <div style={{ textAlign: 'left', marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ fontSize: '10px', fontWeight: 'bold' }}>{currentT.report.date_label} ________________</div>
+                                <div style={{ fontSize: '10px', fontWeight: 'bold' }}>{currentT.report.place_label} ________________</div>
+                            </div>
+                        </div>
+
+                        {/* Right Side: Coordinator Signature */}
+                        <div style={{ textAlign: 'center', minWidth: '300px' }}>
+                            <div style={{ borderTop: '2px solid #000000', width: '100%', marginBottom: '8px' }}></div>
+                            <div style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>{currentT.report.coord_sig}</div>
+                            <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', marginTop: '4px' }}>{currentT.report.name_designation}</div>
+                        </div>
+                    </div>
+
+                    {/* System Generation Info */}
+                    <div style={{ marginTop: '40px', textAlign: 'center', fontSize: '10px', color: '#666666', fontStyle: 'italic' }}>
+                        Bhamini P1198 Field System • Generated: {new Date().toLocaleString()}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
+
+const StatCard: React.FC<{ label: string; value: any; color: string }> = ({ label, value, color }) => (
+    <div className={`${color} p-6 rounded-3xl text-white shadow-lg`}>
+        <p className="text-[9px] font-black uppercase opacity-60 tracking-widest mb-1">{label}</p>
+        <p className="text-3xl font-black">{value}</p>
+    </div>
+);
 
 export default ReportPage;

@@ -10,10 +10,13 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@fontsource/noto-sans-telugu": "^5.2.8",
+    "@fontsource/roboto": "^5.2.10",
     "@tailwindcss/vite": "^4.2.0",
     "clsx": "^2.1.1",
-    "jspdf": "^3.0.3",
-    "jspdf-autotable": "^5.0.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.575.0",
     "pdfmake": "^0.2.15",
     "react": "^19.2.0",
