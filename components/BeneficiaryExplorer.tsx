@@ -7,7 +7,8 @@ import {
 import { 
     Users, MapPin, Filter, Search, 
     Download, X, ArrowUpDown,
-    Activity as ActivityIcon, UserCheck
+    Activity as ActivityIcon, UserCheck,
+    ChevronDown, ChevronUp
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -44,6 +45,17 @@ const BeneficiaryExplorer: React.FC = () => {
     const [filterActivity, setFilterActivity] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: keyof Beneficiary; direction: 'asc' | 'desc' } | null>(null);
+    const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+    const toggleRow = (index: number) => {
+        const newExpanded = new Set(expandedRows);
+        if (newExpanded.has(index)) {
+            newExpanded.delete(index);
+        } else {
+            newExpanded.add(index);
+        }
+        setExpandedRows(newExpanded);
+    };
 
     const parseCSV = (csv: string): Beneficiary[] => {
         const lines = csv.trim().split(/\r?\n/);
@@ -62,15 +74,17 @@ const BeneficiaryExplorer: React.FC = () => {
         };
 
         const headers = parseLine(lines[0]);
-        const cleanHeaders = headers.map(h => h.toUpperCase().replace(/\s+/g, ''));
+        // Normalize headers for easier matching (remove spaces, lowercase)
+        const normalize = (h: string) => h.toLowerCase().trim();
+        const normalizedHeaders = headers.map(normalize);
 
         const getVal = (row: string[], search: string) => {
-            const searchClean = search.toUpperCase().replace(/\s+/g, '');
-            // Try exact match first to avoid partial matches (e.g., 'Activity' matching 'Activity Registration Date')
-            let idx = cleanHeaders.findIndex(h => h === searchClean);
+            const searchNorm = normalize(search);
+            // Try exact match
+            let idx = normalizedHeaders.findIndex(h => h === searchNorm);
             if (idx === -1) {
-                // Fallback to includes only if exact match fails
-                idx = cleanHeaders.findIndex(h => h.includes(searchClean));
+                // Try finding header that contains the search string (more loose)
+                idx = normalizedHeaders.findIndex(h => h.includes(searchNorm));
             }
             return idx !== -1 ? row[idx] : '';
         };
@@ -79,20 +93,27 @@ const BeneficiaryExplorer: React.FC = () => {
             const row = parseLine(line);
             if (row.length < 5) return null;
 
+            // Mapping based on user provided headings
+            // location-farmer_id -> HH Id
+            // location-farmer_name -> HH Head Name
+            // activity_registration-activity -> Activity
+            // bnf_section_-bnf_name_ OR bnf_section-bnf_name -> Beneficiary Name
+            // ... and so on
+
             return {
-                hhId: getVal(row, 'HH Id') || getVal(row, 'HHID') || getVal(row, 'House Hold ID'),
-                hhHeadName: getVal(row, 'HH Head Name') || getVal(row, 'HHHEADNAME') || getVal(row, 'HH Head Name'),
-                activity: getVal(row, 'Activity') || getVal(row, 'activity_registration-activity'),
-                beneficiaryName: getVal(row, 'Beneficiary Name') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'location-show_farmer_name'),
-                beneficiaryId: getVal(row, 'Beneficiary ID') || getVal(row, 'bnf_section-adhaar_number') || getVal(row, 'bnf_section_-adhaar_number_') || getVal(row, 'location-show_farmer_id'),
-                age: parseInt(getVal(row, 'Age') || getVal(row, 'bnf_section-age') || getVal(row, 'bnf_section_-age_')) || 0,
-                gender: getVal(row, 'Gender') || getVal(row, 'bnf_section-gender') || getVal(row, 'bnf_section_-gender_'),
-                phoneNumber: getVal(row, 'phone number') || getVal(row, 'bnf_section-phone_number') || getVal(row, 'bnf_section_-phone_number_'),
-                cluster: getVal(row, 'cluster') || getVal(row, 'CLUSTER'),
-                gp: getVal(row, 'GP'),
-                village: getVal(row, 'village'),
+                hhId: getVal(row, 'location-farmer_id') || getVal(row, 'location-show_farmer_id') || getVal(row, 'HH Id'),
+                hhHeadName: getVal(row, 'location-farmer_name') || getVal(row, 'location-show_farmer_name') || getVal(row, 'HH Head Name'),
+                activity: getVal(row, 'activity_registration-activity') || getVal(row, 'Activity'),
+                beneficiaryName: getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'Beneficiary Name'),
+                beneficiaryId: getVal(row, 'bnf_section_-adhaar_number_') || getVal(row, 'bnf_section-adhaar_number') || getVal(row, 'Beneficiary ID'),
+                age: parseInt(getVal(row, 'bnf_section_-age_') || getVal(row, 'bnf_section-age') || getVal(row, 'Age')) || 0,
+                gender: getVal(row, 'bnf_section_-gender_') || getVal(row, 'bnf_section-gender') || getVal(row, 'Gender'),
+                phoneNumber: getVal(row, 'bnf_section_-phone_number_') || getVal(row, 'bnf_section-phone_number') || getVal(row, 'phone number'),
+                cluster: getVal(row, 'cluster') || getVal(row, 'location-block') || getVal(row, 'CLUSTER'),
+                gp: getVal(row, 'location-gp') || getVal(row, 'GP'),
+                village: getVal(row, 'location-village') || getVal(row, 'village'),
             };
-        }).filter((b): b is Beneficiary => !!b && !!b.beneficiaryName);
+        }).filter((b): b is Beneficiary => !!b && (!!b.beneficiaryName || !!b.hhHeadName));
     };
 
     useEffect(() => {
@@ -188,7 +209,19 @@ const BeneficiaryExplorer: React.FC = () => {
         const uniqueVillages = new Set(filteredData.map(d => d.village)).size;
         const uniqueGPs = new Set(filteredData.map(d => d.gp)).size;
 
-        return { total, activityData, genderData, averageAge, uniqueVillages, uniqueGPs };
+        const clusterCounts: Record<string, number> = {};
+        filteredData.forEach(d => {
+            const c = d.cluster || 'Unknown';
+            clusterCounts[c] = (clusterCounts[c] || 0) + 1;
+        });
+
+        const clusterData = Object.entries(clusterCounts).map(([name, value]) => ({
+            name,
+            value,
+            percent: total > 0 ? (value / total) * 100 : 0
+        })).sort((a, b) => b.value - a.value);
+
+        return { total, activityData, genderData, averageAge, uniqueVillages, uniqueGPs, clusterData };
     }, [filteredData]);
 
     const clearFilters = () => {
@@ -342,14 +375,14 @@ const BeneficiaryExplorer: React.FC = () => {
                 </div>
 
                 {/* Activity Distribution Chart */}
-                <div className="lg:col-span-5 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                <div className="lg:col-span-4 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Activity Distribution</h3>
                         <ActivityIcon className="w-4 h-4 text-indigo-500" />
                     </div>
                     <div className="flex-grow min-h-[200px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stats.activityData.slice(0, 6)} layout="vertical" margin={{ left: -20, right: 20 }}>
+                            <BarChart data={stats.activityData.slice(0, 6)} layout="vertical" margin={{ left: -20, right: 30 }}>
                                 <XAxis type="number" hide />
                                 <YAxis 
                                     dataKey="name" 
@@ -363,7 +396,11 @@ const BeneficiaryExplorer: React.FC = () => {
                                     cursor={{ fill: 'transparent' }}
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }}
                                 />
-                                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                                <Bar 
+                                    dataKey="value" 
+                                    radius={[0, 4, 4, 0]}
+                                    label={{ position: 'right', fill: '#6b7280', fontSize: 9, fontWeight: 900 }}
+                                >
                                     {stats.activityData.map((_, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
@@ -373,8 +410,40 @@ const BeneficiaryExplorer: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Cluster Distribution Chart */}
+                <div className="lg:col-span-4 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Cluster Distribution</h3>
+                        <MapPin className="w-4 h-4 text-emerald-500" />
+                    </div>
+                    <div className="flex-grow min-h-[160px] relative">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={stats.clusterData}
+                                    innerRadius={45}
+                                    outerRadius={65}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                    label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                                    labelLine={true}
+                                >
+                                    {stats.clusterData.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className="text-lg font-black text-gray-900 dark:text-white">{stats.uniqueGPs}</span>
+                            <span className="text-[7px] font-black uppercase text-gray-400">GPs</span>
+                        </div>
+                    </div>
+                </div>
+
                 {/* Gender Split Chart */}
-                <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                <div className="lg:col-span-4 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Gender Split</h3>
                         <Users className="w-4 h-4 text-pink-500" />
@@ -388,6 +457,8 @@ const BeneficiaryExplorer: React.FC = () => {
                                     outerRadius={65}
                                     paddingAngle={5}
                                     dataKey="value"
+                                    label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                                    labelLine={true}
                                 >
                                     {stats.genderData.map((_, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -425,7 +496,8 @@ const BeneficiaryExplorer: React.FC = () => {
                     </div>
                 </div>
                 
-                <div className="overflow-x-auto">
+                {/* Desktop View */}
+                <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800">
@@ -522,6 +594,79 @@ const BeneficiaryExplorer: React.FC = () => {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Mobile View (Cards) */}
+                <div className="md:hidden">
+                    {sortedData.length > 0 ? (
+                        <div className="divide-y divide-gray-50 dark:divide-gray-800">
+                            {sortedData.map((b, i) => (
+                                <div key={i} className="p-4 hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
+                                    <div className="flex justify-between items-start gap-4" onClick={() => toggleRow(i)}>
+                                        <div className="space-y-2 flex-1">
+                                            {/* HH Head Name */}
+                                            <div>
+                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">HH Head</p>
+                                                <p className="text-sm font-black text-gray-900 dark:text-white uppercase">{b.hhHeadName}</p>
+                                            </div>
+                                            
+                                            {/* Activity */}
+                                            <div>
+                                                <span className="inline-flex items-center px-2 py-1 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-md text-[8px] font-black uppercase tracking-widest border border-indigo-100/50 dark:border-indigo-900/50">
+                                                    {b.activity}
+                                                </span>
+                                            </div>
+
+                                            {/* Beneficiary Name */}
+                                            <div>
+                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Beneficiary</p>
+                                                <p className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">{b.beneficiaryName}</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <button 
+                                            className="p-2 text-gray-400 hover:text-indigo-500 transition-colors"
+                                        >
+                                            {expandedRows.has(i) ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+
+                                    {/* Expanded Details */}
+                                    {expandedRows.has(i) && (
+                                        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 grid grid-cols-2 gap-4 animate-fade-in">
+                                            <div>
+                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">HH ID</p>
+                                                <p className="text-[10px] font-bold text-gray-700 dark:text-gray-300 font-mono">{b.hhId}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Beneficiary ID</p>
+                                                <p className="text-[10px] font-bold text-gray-700 dark:text-gray-300 font-mono">{b.beneficiaryId}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Age / Gender</p>
+                                                <p className="text-[10px] font-bold text-gray-700 dark:text-gray-300">{b.age} Yrs / {b.gender}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Phone</p>
+                                                <p className="text-[10px] font-bold text-gray-700 dark:text-gray-300 font-mono">{b.phoneNumber}</p>
+                                            </div>
+                                            <div className="col-span-2">
+                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Location</p>
+                                                <p className="text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase">{b.village}, {b.gp}, {b.cluster}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="p-12 text-center">
+                            <div className="flex flex-col items-center gap-3 opacity-30">
+                                <Search className="w-10 h-10" />
+                                <p className="text-[10px] font-black uppercase tracking-[0.3em]">No records found</p>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
