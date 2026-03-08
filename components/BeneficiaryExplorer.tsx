@@ -202,7 +202,7 @@ const BeneficiaryExplorer: React.FC = () => {
         const genderData = Object.entries(genderCounts).map(([name, value]) => ({
             name,
             value,
-            percent: total > 0 ? (value / total) * 100 : 0
+            percentage: total > 0 ? (value / total) * 100 : 0
         }));
 
         const averageAge = total > 0 ? filteredData.reduce((acc, d) => acc + d.age, 0) / total : 0;
@@ -218,7 +218,7 @@ const BeneficiaryExplorer: React.FC = () => {
         const clusterData = Object.entries(clusterCounts).map(([name, value]) => ({
             name,
             value,
-            percent: total > 0 ? (value / total) * 100 : 0
+            percentage: total > 0 ? (value / total) * 100 : 0
         })).sort((a, b) => b.value - a.value);
 
         return { total, activityData, genderData, averageAge, uniqueVillages, uniqueGPs, clusterData };
@@ -476,7 +476,7 @@ const BeneficiaryExplorer: React.FC = () => {
                         {stats.genderData.map((g, idx) => (
                             <div key={idx} className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full" style={{ background: COLORS[idx % COLORS.length] }}></div>
-                                <span className="text-[8px] font-black uppercase text-gray-500">{g.name} {g.percent.toFixed(0)}%</span>
+                                <span className="text-[8px] font-black uppercase text-gray-500">{g.name} {g.percentage.toFixed(0)}%</span>
                             </div>
                         ))}
                     </div>

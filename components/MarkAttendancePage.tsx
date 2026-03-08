@@ -73,6 +73,7 @@ const MarkAttendancePage: React.FC = () => {
             const recordMap = new Map<string, AttendanceRecord>();
             const currentUsernameLower = user.username.trim().toLowerCase();
             
+            // 1. Process CSV Data
             parsedData.forEach(row => {
                 const rowName = (row['SELECT YOUR NAME'] || row['Name'] || '').trim().toLowerCase();
                 if (rowName === currentUsernameLower) {
@@ -90,6 +91,7 @@ const MarkAttendancePage: React.FC = () => {
                             workingHours: row['WORKING HOURS'] || '0',
                             outcomes: row['OUTCOME'] || '',
                         };
+                        // CSV data: use latest timestamp if duplicates
                         const existing = recordMap.get(key);
                         if (!existing || new Date(record.timestamp).getTime() >= new Date(existing.timestamp).getTime()) {
                             recordMap.set(key, record);
@@ -97,6 +99,35 @@ const MarkAttendancePage: React.FC = () => {
                     }
                 }
             });
+
+            // 2. Process Local Storage Data (Optimistic Updates)
+            // This overrides CSV data for the same date, ensuring immediate feedback
+            const localKey = `bhamini_local_${user.username}`;
+            try {
+                const localData = JSON.parse(localStorage.getItem(localKey) || '{}');
+                Object.values(localData).forEach((localRecord: any) => {
+                    // localRecord.date is in D/M/YYYY format from AttendanceFormModal
+                    const key = normalizeDateToKey(localRecord.date);
+                    if (key) {
+                        const record: AttendanceRecord = {
+                            timestamp: localRecord.timestamp || new Date().toISOString(),
+                            name: localRecord.name,
+                            date: localRecord.date,
+                            workingStatus: localRecord.workingStatus,
+                            reasonNotWorking: localRecord.reasonNotWorking,
+                            placeOfVisit: localRecord.placeOfVisit,
+                            purposeOfVisit: localRecord.purposeOfVisit,
+                            workingHours: localRecord.workingHours,
+                            outcomes: localRecord.outcomes || localRecord.outcome || '',
+                        };
+                        // Always overwrite with local data as it is the most recent user action
+                        recordMap.set(key, record);
+                    }
+                });
+            } catch (e) {
+                console.error("Error parsing local storage attendance:", e);
+            }
+
             setMarkedRecords(recordMap);
         } catch (err) {
             console.error('Failed to load data:', err);
@@ -113,6 +144,11 @@ const MarkAttendancePage: React.FC = () => {
     const navigateMonth = (direction: number) => {
         const next = new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1);
         setCurrentDate(next);
+    };
+
+    const handleSubmissionSuccess = (data: any) => {
+        // Immediately trigger a re-fetch which now includes local storage
+        fetchMarkedDates();
     };
 
     return (
@@ -207,7 +243,7 @@ const MarkAttendancePage: React.FC = () => {
                     user={user} 
                     date={selectedDate} 
                     onClose={() => setIsModalOpen(false)}
-                    onSubmitSuccess={fetchMarkedDates}
+                    onSubmitSuccess={handleSubmissionSuccess}
                 />
             )}
         </div>

@@ -554,7 +554,11 @@ const ReportPage: React.FC = () => {
                                         <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px', textAlign: 'center' }}>{i + 1}</td>
                                         <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px', textAlign: 'center' }}>{dateStr}</td>
                                         <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px', textTransform: 'uppercase' }}>{record?.placeOfVisit || ''}</td>
-                                        <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px' }}>{record?.purposeOfVisit || ''}</td>
+                                        <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px' }}>
+                                            {record?.workingStatus === 'Working' 
+                                                ? (record?.purposeOfVisit || '') 
+                                                : (record ? `${record.workingStatus}${record.reasonNotWorking ? ` - ${record.reasonNotWorking}` : ''}` : '')}
+                                        </td>
                                         <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px', textAlign: 'center' }}>{record?.workingHours || ''}</td>
                                         <td style={{ border: '2px solid #000000', padding: '8px', fontSize: '10px' }}>{record?.outcomes || ''}</td>
                                     </tr>
