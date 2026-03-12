@@ -12,10 +12,19 @@ import {
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { BENEFICIARY_DATA_URL } from '../config';
+import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL } from '../config';
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
+}
+
+interface Asset {
+    code: string;
+    label: string;
+    count: number;
+    unit: string;
+    date: string;
+    distributor: string;
 }
 
 interface Beneficiary {
@@ -30,6 +39,7 @@ interface Beneficiary {
     cluster: string;
     gp: string;
     village: string;
+    assets: Asset[];
 }
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#f43f5e'];
@@ -57,7 +67,7 @@ const BeneficiaryExplorer: React.FC = () => {
         setExpandedRows(newExpanded);
     };
 
-    const parseCSV = (csv: string): Beneficiary[] => {
+    const parseCSV = (csv: string, sourceName: string): Beneficiary[] => {
         const lines = csv.trim().split(/\r?\n/);
         if (lines.length < 1) return [];
 
@@ -74,55 +84,115 @@ const BeneficiaryExplorer: React.FC = () => {
         };
 
         const headers = parseLine(lines[0]);
-        // Normalize headers for easier matching (remove spaces, lowercase)
-        const normalize = (h: string) => h.toLowerCase().trim();
+        const normalize = (h: string) => h.toLowerCase().trim().replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '');
         const normalizedHeaders = headers.map(normalize);
 
         const getVal = (row: string[], search: string) => {
             const searchNorm = normalize(search);
-            // Try exact match
             let idx = normalizedHeaders.findIndex(h => h === searchNorm);
             if (idx === -1) {
-                // Try finding header that contains the search string (more loose)
                 idx = normalizedHeaders.findIndex(h => h.includes(searchNorm));
             }
             return idx !== -1 ? row[idx] : '';
         };
 
-        return lines.slice(1).map(line => {
+        const beneficiaryMap = new Map<string, Beneficiary>();
+
+        lines.slice(1).forEach(line => {
             const row = parseLine(line);
-            if (row.length < 5) return null;
+            if (row.length < 3) return;
 
-            // Mapping based on user provided headings
-            // location-farmer_id -> HH Id
-            // location-farmer_name -> HH Head Name
-            // activity_registration-activity -> Activity
-            // bnf_section_-bnf_name_ OR bnf_section-bnf_name -> Beneficiary Name
-            // ... and so on
+            const bId = getVal(row, 'Ben_Id') || getVal(row, 'bnf_section_-adhaar_number_') || getVal(row, 'bnf_section-adhaar_number') || getVal(row, 'Beneficiary ID') || getVal(row, 'adhaar');
+            const hhId = getVal(row, 'Farmer ID') || getVal(row, 'location-farmer_id') || getVal(row, 'location-show_farmer_id') || getVal(row, 'HH Id') || getVal(row, 'farmer_id');
+            
+            if (!bId && !hhId) return;
 
-            return {
-                hhId: getVal(row, 'location-farmer_id') || getVal(row, 'location-show_farmer_id') || getVal(row, 'HH Id'),
-                hhHeadName: getVal(row, 'location-farmer_name') || getVal(row, 'location-show_farmer_name') || getVal(row, 'HH Head Name'),
-                activity: getVal(row, 'activity_registration-activity') || getVal(row, 'Activity'),
-                beneficiaryName: getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'Beneficiary Name'),
-                beneficiaryId: getVal(row, 'bnf_section_-adhaar_number_') || getVal(row, 'bnf_section-adhaar_number') || getVal(row, 'Beneficiary ID'),
-                age: parseInt(getVal(row, 'bnf_section_-age_') || getVal(row, 'bnf_section-age') || getVal(row, 'Age')) || 0,
-                gender: getVal(row, 'bnf_section_-gender_') || getVal(row, 'bnf_section-gender') || getVal(row, 'Gender'),
-                phoneNumber: getVal(row, 'bnf_section_-phone_number_') || getVal(row, 'bnf_section-phone_number') || getVal(row, 'phone number'),
-                cluster: getVal(row, 'cluster') || getVal(row, 'location-block') || getVal(row, 'CLUSTER'),
-                gp: getVal(row, 'location-gp') || getVal(row, 'GP'),
-                village: getVal(row, 'location-village') || getVal(row, 'village'),
+            const key = (bId || hhId).trim();
+            if (!key) return;
+            
+            const asset: Asset = {
+                code: getVal(row, 'this_material_code'),
+                label: getVal(row, 'this_material_label'),
+                count: parseFloat(getVal(row, 'materials_details-material_count')) || 0,
+                unit: getVal(row, 'materials_details-material_unit'),
+                date: getVal(row, 'materials_details-distributed_date'),
+                distributor: getVal(row, 'materials_details-destributor_name'),
             };
-        }).filter((b): b is Beneficiary => !!b && (!!b.beneficiaryName || !!b.hhHeadName));
+
+            if (beneficiaryMap.has(key)) {
+                const existing = beneficiaryMap.get(key)!;
+                if (asset.label) {
+                    existing.assets.push(asset);
+                }
+            } else {
+                beneficiaryMap.set(key, {
+                    hhId: hhId,
+                    hhHeadName: getVal(row, 'location-farmer_name') || getVal(row, 'location-show_farmer_name') || getVal(row, 'HH Head Name') || getVal(row, 'Beneficiary name') || getVal(row, 'farmer_name'),
+                    activity: getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || getVal(row, 'activity'),
+                    beneficiaryName: getVal(row, 'Beneficiary name') || getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'Beneficiary Name') || getVal(row, 'bnf_name'),
+                    beneficiaryId: bId,
+                    age: parseInt(getVal(row, 'Age') || getVal(row, 'bnf_section_-age_') || getVal(row, 'bnf_section-age') || getVal(row, 'Age')) || 0,
+                    gender: getVal(row, 'Gender') || getVal(row, 'bnf_section_-gender_') || getVal(row, 'bnf_section-gender') || getVal(row, 'Gender'),
+                    phoneNumber: getVal(row, 'Ben_phone') || getVal(row, 'bnf_section_-phone_number_') || getVal(row, 'bnf_section-phone_number') || getVal(row, 'phone number'),
+                    cluster: getVal(row, 'Cluster') || getVal(row, 'cluster') || getVal(row, 'location-block') || getVal(row, 'CLUSTER'),
+                    gp: getVal(row, 'GP') || getVal(row, 'location-gp') || getVal(row, 'GP'),
+                    village: getVal(row, 'Village') || getVal(row, 'location-village') || getVal(row, 'village'),
+                    assets: asset.label ? [asset] : [],
+                });
+            }
+        });
+
+        console.log(`Parsed ${beneficiaryMap.size} unique beneficiaries from ${sourceName}`);
+        return Array.from(beneficiaryMap.values());
     };
 
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const response = await fetch(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`);
-                const text = await response.text();
-                setData(parseCSV(text));
+                // Fetch Master List
+                const masterRes = await fetch(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`);
+                const masterText = await masterRes.text();
+                const masterData = parseCSV(masterText, 'Master List');
+
+                // Fetch Distribution List
+                const distRes = await fetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`);
+                const distText = await distRes.text();
+                const distData = parseCSV(distText, 'Distribution List');
+
+                // Merge Data
+                const mergedMap = new Map<string, Beneficiary>();
+                
+                // Add all from master first
+                masterData.forEach(b => {
+                    const key = b.beneficiaryId || b.hhId;
+                    if (key) mergedMap.set(key, b);
+                });
+
+                // Merge distribution data
+                distData.forEach(b => {
+                    const key = b.beneficiaryId || b.hhId;
+                    if (key) {
+                        if (mergedMap.has(key)) {
+                            const existing = mergedMap.get(key)!;
+                            // Add assets from distribution list
+                            if (b.assets.length > 0) {
+                                // Avoid duplicates if any
+                                b.assets.forEach(newAsset => {
+                                    const isDuplicate = existing.assets.some(a => 
+                                        a.label === newAsset.label && a.date === newAsset.date
+                                    );
+                                    if (!isDuplicate) existing.assets.push(newAsset);
+                                });
+                            }
+                        } else {
+                            // If not in master, add as new (though usually they should be in master)
+                            mergedMap.set(key, b);
+                        }
+                    }
+                });
+
+                setData(Array.from(mergedMap.values()));
             } catch (err) {
                 console.error("Beneficiary fetch failed", err);
             } finally {
@@ -425,7 +495,7 @@ const BeneficiaryExplorer: React.FC = () => {
                                     outerRadius={65}
                                     paddingAngle={5}
                                     dataKey="value"
-                                    label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                                     labelLine={true}
                                 >
                                     {stats.clusterData.map((_, index) => (
@@ -457,7 +527,7 @@ const BeneficiaryExplorer: React.FC = () => {
                                     outerRadius={65}
                                     paddingAngle={5}
                                     dataKey="value"
-                                    label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                                     labelLine={true}
                                 >
                                     {stats.genderData.map((_, index) => (
@@ -546,42 +616,85 @@ const BeneficiaryExplorer: React.FC = () => {
                                         <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'village' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
                                     </div>
                                 </th>
+                                <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest">
+                                    More
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                             {sortedData.length > 0 ? sortedData.map((b, i) => (
-                                <tr key={i} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors group">
-                                    <td className="px-6 py-4">
-                                        <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase group-hover:text-indigo-600 transition-colors">{b.hhId}</div>
-                                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">{b.hhHeadName}</div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className="inline-flex items-center px-2.5 py-1 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg text-[8px] font-black uppercase tracking-widest border border-indigo-100/50 dark:border-indigo-900/50">
-                                            {b.activity}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{b.beneficiaryName}</div>
-                                        <div className="text-[9px] font-bold text-indigo-500 uppercase tracking-tighter opacity-80">{b.beneficiaryId}</div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[11px] font-black text-gray-700 dark:text-gray-300">{b.age} Yrs</span>
-                                            <span className={cn(
-                                                "px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest",
-                                                b.gender?.toLowerCase().startsWith('m') 
-                                                    ? 'bg-blue-50 text-blue-600 border border-blue-100' 
-                                                    : 'bg-pink-50 text-pink-600 border border-pink-100'
-                                            )}>
-                                                {b.gender}
+                                <React.Fragment key={i}>
+                                    <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors group">
+                                        <td className="px-6 py-4">
+                                            <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase group-hover:text-indigo-600 transition-colors">{b.hhId}</div>
+                                            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">{b.hhHeadName}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="inline-flex items-center px-2.5 py-1 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg text-[8px] font-black uppercase tracking-widest border border-indigo-100/50 dark:border-indigo-900/50">
+                                                {b.activity}
                                             </span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="text-[11px] font-black text-gray-600 dark:text-gray-400 font-mono tracking-tighter">{b.phoneNumber}</div>
-                                        <div className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">{b.village}, {b.gp}</div>
-                                    </td>
-                                </tr>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{b.beneficiaryName}</div>
+                                            <div className="text-[9px] font-bold text-indigo-500 uppercase tracking-tighter opacity-80">{b.beneficiaryId}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[11px] font-black text-gray-700 dark:text-gray-300">{b.age} Yrs</span>
+                                                <span className={cn(
+                                                    "px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest",
+                                                    b.gender?.toLowerCase().startsWith('m') 
+                                                        ? 'bg-blue-50 text-blue-600 border border-blue-100' 
+                                                        : 'bg-pink-50 text-pink-600 border border-pink-100'
+                                                )}>
+                                                    {b.gender}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="text-[11px] font-black text-gray-600 dark:text-gray-400 font-mono tracking-tighter">{b.phoneNumber}</div>
+                                            <div className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">{b.village}, {b.gp}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <button 
+                                                onClick={() => toggleRow(i)}
+                                                className="flex items-center gap-1 px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg text-[9px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-300 hover:bg-indigo-600 hover:text-white transition-all"
+                                            >
+                                                {expandedRows.has(i) ? 'Less' : 'More'}
+                                                {expandedRows.has(i) ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {expandedRows.has(i) && (
+                                        <tr className="bg-gray-50/30 dark:bg-gray-900/20">
+                                            <td colSpan={6} className="px-6 py-4">
+                                                <div className="animate-fade-in">
+                                                    <h4 className="text-[10px] font-black uppercase text-indigo-500 tracking-widest mb-3">Distributed Assets</h4>
+                                                    {b.assets.length > 0 ? (
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                            {b.assets.map((asset, idx) => (
+                                                                <div key={idx} className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                                                                    <div className="flex justify-between items-start mb-1">
+                                                                        <span className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{asset.label}</span>
+                                                                        <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded text-[9px] font-black uppercase">
+                                                                            {asset.count} {asset.unit}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex justify-between items-center mt-2">
+                                                                        <span className="text-[8px] font-bold text-gray-400 uppercase">{asset.date}</span>
+                                                                        <span className="text-[8px] font-bold text-indigo-400 uppercase">{asset.distributor}</span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[10px] font-bold text-gray-400 uppercase italic">No material distributed till now</p>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
                             )) : (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-20 text-center">
@@ -653,6 +766,31 @@ const BeneficiaryExplorer: React.FC = () => {
                                             <div className="col-span-2">
                                                 <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Location</p>
                                                 <p className="text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase">{b.village}, {b.gp}, {b.cluster}</p>
+                                            </div>
+
+                                            {/* Assets List */}
+                                            <div className="col-span-2 mt-2 pt-4 border-t border-gray-100 dark:border-gray-800">
+                                                <p className="text-[8px] font-black uppercase text-indigo-500 tracking-widest mb-3">Distributed Assets</p>
+                                                {b.assets.length > 0 ? (
+                                                    <div className="space-y-3">
+                                                        {b.assets.map((asset, idx) => (
+                                                            <div key={idx} className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
+                                                                <div className="flex justify-between items-start mb-1">
+                                                                    <span className="text-[10px] font-black text-gray-900 dark:text-white uppercase">{asset.label}</span>
+                                                                    <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded text-[8px] font-black uppercase">
+                                                                        {asset.count} {asset.unit}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center mt-2">
+                                                                    <span className="text-[7px] font-bold text-gray-400 uppercase">{asset.date}</span>
+                                                                    <span className="text-[7px] font-bold text-indigo-400 uppercase">{asset.distributor}</span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-[9px] font-bold text-gray-400 uppercase italic">No material distributed till now</p>
+                                                )}
                                             </div>
                                         </div>
                                     )}

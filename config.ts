@@ -31,8 +31,11 @@ export const ASSETS_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1
 // 8. CONTRIBUTION DATA (New)
 export const CONTRIBUTION_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRDbPYgtli_sy1l6FFZPG1-FHxb1Xc0GXrK2Sc6RnQQ3SjtXZmQpUl3q2wQjMWDgP8VyORvNmBo_CPi/pub?gid=978234209&single=true&output=csv';
 
-// 10. BENEFICIARY DATA
+// 10. BENEFICIARY DATA (Master List)
 export const BENEFICIARY_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS0e9wD0FOCBjNgdCArE9EuVsm4-wJNZLJZEkzDldWq2nW3dwnOjqhy7tZ3t-gLnJOLXiRiWwF1I3Qe/pub?gid=0&single=true&output=csv';
+
+// 11. ASSET DISTRIBUTION DATA
+export const ASSET_DISTRIBUTION_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRnf96Py7icFx4_-yDw0a6xp9_pDOIfDJNHk5nUpBFDeJohuIq5RpbhShAlZlG7k4M8xTHarmZqmPX-/pub?gid=1409614466&single=true&output=csv';
 
 // 9. SYSTEM ENDPOINT
 export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby4omIqQ9ANnowOT75v9b-7LJmrZ1_Fb1iZGfSNRVo8TbkmsuGv4Mf9h36MMwVPkjaiVw/exec';
