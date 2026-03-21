@@ -12,6 +12,7 @@
   "dependencies": {
     "@fontsource/noto-sans-telugu": "^5.2.8",
     "@fontsource/roboto": "^5.2.10",
+    "@googlemaps/markerclusterer": "^2.6.2",
     "@tailwindcss/vite": "^4.2.0",
     "clsx": "^2.1.1",
     "html2canvas": "^1.4.1",

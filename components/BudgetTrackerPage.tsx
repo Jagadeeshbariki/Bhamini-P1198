@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { 
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
-    CartesianGrid, Tooltip, Cell 
+    CartesianGrid, Tooltip, Cell, Legend 
 } from 'recharts';
 
 const BUDGET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQgIQP5-BbSLrJRyN-E___LfrW-uQlNa3iZ4AbFfKM3Ne_FHlFeRXbHG2Xk5JYQhh9o_HLekVTmwsh6/pub?gid=1547578809&single=true&output=csv';
@@ -142,37 +142,71 @@ const BudgetTrackerPage: React.FC = () => {
         const totalSpent = filteredData.reduce((acc, d) => acc + d.spentAmount, 0);
         const totalPending = Math.max(0, totalAmount - totalSpent);
         
-        const headCodeMap = new Map<string, { target: number, spent: number, pending: number, name: string }>();
+        const headCodeMap = new Map<string, { target: number, spent: number, pending: number, name: string, unitsTarget: number, unitsAchievement: number }>();
         filteredData.forEach(d => {
-            const current = headCodeMap.get(d.headCode) || { target: 0, spent: 0, pending: 0, name: d.budgetHead };
+            const current = headCodeMap.get(d.headCode) || { target: 0, spent: 0, pending: 0, name: d.budgetHead, unitsTarget: 0, unitsAchievement: 0 };
             const newTarget = current.target + d.targetAmount;
             const newSpent = current.spent + d.spentAmount;
+            const newUnitsTarget = current.unitsTarget + d.unitsToCover;
+            const newUnitsAchievement = current.unitsAchievement + d.unitsCovered;
+            
             headCodeMap.set(d.headCode, { 
                 target: newTarget,
                 spent: newSpent,
                 pending: Math.max(0, newTarget - newSpent),
-                name: d.budgetHead 
+                name: d.budgetHead,
+                unitsTarget: newUnitsTarget,
+                unitsAchievement: newUnitsAchievement
             });
         });
 
         const budgetAnalysisData = Array.from(headCodeMap.entries())
             .map(([code, data]) => ({ 
                 name: code,
+                fullName: data.name,
                 Target: data.target,
-                Utilized: data.spent,
-                Pending: data.pending
+                Achievement: data.spent,
+                Pending: data.pending,
+                UnitsTarget: data.unitsTarget,
+                UnitsAchievement: data.unitsAchievement
             }))
             .sort((a, b) => b.Target - a.Target)
             .slice(0, 15);
 
         const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
-        const qData = quarters.map(q => ({
-            name: q,
-            amount: filteredData.filter(d => d.quarter.includes(q)).reduce((acc, d) => acc + d.targetAmount, 0)
-        }));
-        const maxQ = Math.max(...qData.map(q => q.amount)) || 1;
+        const qData = quarters.map(q => {
+            const qRows = filteredData.filter(d => d.quarter.includes(q));
+            return {
+                name: q,
+                target: qRows.reduce((acc, d) => acc + d.targetAmount, 0),
+                spent: qRows.reduce((acc, d) => acc + d.spentAmount, 0),
+                unitsTarget: qRows.reduce((acc, d) => acc + d.unitsToCover, 0),
+                unitsAchievement: qRows.reduce((acc, d) => acc + d.unitsCovered, 0)
+            };
+        });
+        const maxQ = Math.max(...qData.map(q => Math.max(q.target, q.spent))) || 1;
+        const maxQUnits = Math.max(...qData.map(q => Math.max(q.unitsTarget, q.unitsAchievement))) || 1;
 
-        return { totalAmount, totalUnits, totalSpent, totalPending, qData, maxQ, budgetAnalysisData };
+        const activityQuarterlyData = Array.from(headCodeMap.entries())
+            .map(([code, data]) => {
+                const activityRows = filteredData.filter(d => d.headCode === code);
+                const qBreakdown: any = { 
+                    name: code, 
+                    fullName: data.name,
+                    totalTarget: data.unitsTarget,
+                    totalAchievement: data.unitsAchievement
+                };
+                ['Q1', 'Q2', 'Q3', 'Q4'].forEach(q => {
+                    const qRows = activityRows.filter(d => d.quarter.includes(q));
+                    qBreakdown[`${q}_Target`] = qRows.reduce((acc, d) => acc + d.unitsToCover, 0);
+                    qBreakdown[`${q}_Achievement`] = qRows.reduce((acc, d) => acc + d.unitsCovered, 0);
+                });
+                return qBreakdown;
+            })
+            .sort((a, b) => b.totalTarget - a.totalTarget)
+            .slice(0, 6); // Top 6 for readability in clustered view
+
+        return { totalAmount, totalUnits, totalSpent, totalPending, qData, maxQ, maxQUnits, budgetAnalysisData, activityQuarterlyData };
     }, [filteredData]);
 
     if (loading) return (
@@ -201,14 +235,14 @@ const BudgetTrackerPage: React.FC = () => {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                         <div>
                             <h1 className="text-2xl font-bold text-slate-900">Budget Analysis Dashboard</h1>
-                            <p className="text-slate-50 text-sm">Monitor budget allocation and utilization across activities</p>
+                            <p className="text-slate-500 text-sm">Monitor budget allocation and utilization across activities</p>
                         </div>
                         <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-200 w-full md:w-auto">
                             <Search className="w-4 h-4 text-slate-400 ml-2" />
                             <input
                                 type="text"
                                 placeholder="Search activity..."
-                                className="bg-transparent border-none focus:ring-0 text-sm w-full md:w-64"
+                                className="bg-transparent border-none focus:ring-0 text-sm text-slate-700 w-full md:w-64"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -221,11 +255,11 @@ const BudgetTrackerPage: React.FC = () => {
                             <div className="relative">
                                 <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <select
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
                                     value={selectedYear}
                                     onChange={(e) => setSelectedYear(e.target.value)}
                                 >
-                                    {filterOptions.years.map(y => <option key={y} value={y}>{y}</option>)}
+                                    {filterOptions.years.map(y => <option key={y} value={y} className="bg-white dark:bg-gray-800 text-slate-900 dark:text-white">{y}</option>)}
                                 </select>
                             </div>
                         </div>
@@ -235,11 +269,11 @@ const BudgetTrackerPage: React.FC = () => {
                             <div className="relative">
                                 <Activity className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <select
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
                                     value={selectedActivity}
                                     onChange={(e) => setSelectedActivity(e.target.value)}
                                 >
-                                    {filterOptions.activities.map(a => <option key={a} value={a}>{a}</option>)}
+                                    {filterOptions.activities.map(a => <option key={a} value={a} className="bg-white dark:bg-gray-800 text-slate-900 dark:text-white">{a}</option>)}
                                 </select>
                             </div>
                         </div>
@@ -249,11 +283,11 @@ const BudgetTrackerPage: React.FC = () => {
                             <div className="relative">
                                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <select
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
                                     value={selectedMonth}
                                     onChange={(e) => setSelectedMonth(e.target.value)}
                                 >
-                                    {filterOptions.months.map(m => <option key={m} value={m}>{m}</option>)}
+                                    {filterOptions.months.map(m => <option key={m} value={m} className="bg-white dark:bg-gray-800 text-slate-900 dark:text-white">{m}</option>)}
                                 </select>
                             </div>
                         </div>
@@ -263,11 +297,11 @@ const BudgetTrackerPage: React.FC = () => {
                             <div className="relative">
                                 <PieChartIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <select
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
                                     value={selectedQuarter}
                                     onChange={(e) => setSelectedQuarter(e.target.value)}
                                 >
-                                    {filterOptions.quarters.map(q => <option key={q} value={q}>{q}</option>)}
+                                    {filterOptions.quarters.map(q => <option key={q} value={q} className="bg-white dark:bg-gray-800 text-slate-900 dark:text-white">{q}</option>)}
                                 </select>
                             </div>
                         </div>
@@ -328,12 +362,12 @@ const BudgetTrackerPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Budget Analysis Chart */}
+                {/* Budget Analysis Chart (Amount) */}
                 <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm mb-8">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
-                            <h3 className="font-bold text-slate-900 text-lg">Budget Utilization by Activity</h3>
-                            <p className="text-slate-500 text-xs mt-1">Comparing Target, Utilized, and Pending amounts</p>
+                            <h3 className="font-bold text-slate-900 text-lg">Budget Utilization by Activity (Amount)</h3>
+                            <p className="text-slate-500 text-xs mt-1">Comparing Target, Achievement, and Pending amounts (by Head Code)</p>
                         </div>
                         <div className="flex items-center gap-6">
                             <div className="flex items-center gap-2">
@@ -342,7 +376,7 @@ const BudgetTrackerPage: React.FC = () => {
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Utilized</span>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Achievement</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="w-3 h-3 rounded-full bg-amber-500"></div>
@@ -351,15 +385,15 @@ const BudgetTrackerPage: React.FC = () => {
                         </div>
                     </div>
                     
-                    <div className="h-[450px] w-full">
+                    <div className="h-[400px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stats.budgetAnalysisData} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
+                            <BarChart data={stats.budgetAnalysisData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis 
                                     dataKey="name" 
                                     axisLine={false}
                                     tickLine={false}
-                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }}
+                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
                                     interval={0}
                                     angle={-45}
                                     textAnchor="end"
@@ -375,87 +409,142 @@ const BudgetTrackerPage: React.FC = () => {
                                     contentStyle={{ 
                                         borderRadius: '16px', 
                                         border: 'none', 
-                                        boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
+                                        boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
                                         padding: '16px'
                                     }}
                                     formatter={(value: number) => [formatCurrency(value), '']}
                                 />
-                                <Bar dataKey="Target" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={16} />
-                                <Bar dataKey="Utilized" fill="#10b981" radius={[6, 6, 0, 0]} barSize={16} />
-                                <Bar dataKey="Pending" fill="#f59e0b" radius={[6, 6, 0, 0]} barSize={16} />
+                                <Bar dataKey="Target" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={16} />
+                                <Bar dataKey="Achievement" fill="#10b981" radius={[4, 4, 0, 0]} barSize={16} />
+                                <Bar dataKey="Pending" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={16} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Quarterly Breakdown */}
-                    <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
-                        <h3 className="font-bold text-slate-900 mb-8 uppercase tracking-wider text-sm">Quarterly Allocation</h3>
-                        <div className="space-y-8">
-                            {stats.qData.map((q) => (
-                                <div key={q.name} className="space-y-3">
-                                    <div className="flex justify-between items-end">
-                                        <span className="text-sm font-bold text-slate-700">{q.name}</span>
-                                        <span className="text-xs font-bold text-indigo-600">{formatCurrency(q.amount)}</span>
+                {/* Units Analysis Charts Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                    {/* Activity-wise Units Clustered Chart */}
+                    <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                            <div>
+                                <h3 className="font-bold text-slate-900 text-lg">Activity-wise Units Achievement (Quarterly)</h3>
+                                <p className="text-slate-500 text-xs mt-1">Clustered comparison of Target vs Achievement by Quarter (Top Activities)</p>
+                            </div>
+                        </div>
+                        
+                        <div className="h-[450px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={stats.activityQuarterlyData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis 
+                                        dataKey="name" 
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                        interval={0}
+                                        angle={-45}
+                                        textAnchor="end"
+                                    />
+                                    <YAxis 
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }}
+                                    />
+                                    <Tooltip 
+                                        cursor={{ fill: '#f8fafc' }}
+                                        contentStyle={{ 
+                                            borderRadius: '16px', 
+                                            border: 'none', 
+                                            boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
+                                            padding: '16px'
+                                        }}
+                                    />
+                                    <Legend 
+                                        verticalAlign="top" 
+                                        height={36}
+                                        iconType="circle"
+                                        wrapperStyle={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                                    />
+                                    {/* Q1 */}
+                                    <Bar dataKey="Q1_Target" name="Q1 Target" fill="#6366f1" radius={[2, 2, 0, 0]} barSize={8} />
+                                    <Bar dataKey="Q1_Achievement" name="Q1 Achieved" fill="#818cf8" radius={[2, 2, 0, 0]} barSize={8} />
+                                    {/* Q2 */}
+                                    <Bar dataKey="Q2_Target" name="Q2 Target" fill="#10b981" radius={[2, 2, 0, 0]} barSize={8} />
+                                    <Bar dataKey="Q2_Achievement" name="Q2 Achieved" fill="#34d399" radius={[2, 2, 0, 0]} barSize={8} />
+                                    {/* Q3 */}
+                                    <Bar dataKey="Q3_Target" name="Q3 Target" fill="#f59e0b" radius={[2, 2, 0, 0]} barSize={8} />
+                                    <Bar dataKey="Q3_Achievement" name="Q3 Achieved" fill="#fbbf24" radius={[2, 2, 0, 0]} barSize={8} />
+                                    {/* Q4 */}
+                                    <Bar dataKey="Q4_Target" name="Q4 Target" fill="#ef4444" radius={[2, 2, 0, 0]} barSize={8} />
+                                    <Bar dataKey="Q4_Achievement" name="Q4 Achieved" fill="#f87171" radius={[2, 2, 0, 0]} barSize={8} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Activity Legend */}
+                    <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                        <h3 className="font-bold text-slate-900 mb-6 uppercase tracking-wider text-xs border-b border-slate-100 pb-4">Activity Code Legend</h3>
+                        <div className="flex-1 overflow-y-auto pr-2 space-y-4 custom-scrollbar">
+                            {stats.budgetAnalysisData.map((item) => (
+                                <div key={item.name} className="flex gap-3 group">
+                                    <div className="flex-shrink-0 w-12 h-6 bg-slate-50 rounded flex items-center justify-center border border-slate-100 group-hover:bg-indigo-50 transition-colors">
+                                        <span className="text-[10px] font-bold text-indigo-600 font-mono">{item.name}</span>
                                     </div>
-                                    <div className="h-2.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
-                                        <div 
-                                            className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-1000"
-                                            style={{ width: `${(q.amount / stats.maxQ) * 100}%` }}
-                                        />
-                                    </div>
+                                    <span className="text-[11px] text-slate-600 leading-tight font-medium group-hover:text-slate-900 transition-colors">{item.fullName}</span>
                                 </div>
                             ))}
                         </div>
                     </div>
+                </div>
 
-                    {/* Detailed Activity Table */}
-                    <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                            <h3 className="font-bold text-slate-900 uppercase tracking-wider text-sm">Activity Details</h3>
-                            <span className="text-[10px] font-bold text-slate-400 bg-white px-3 py-1 rounded-full border border-slate-200">
-                                {filteredData.length} Activities
-                            </span>
+                {/* Quarter-wise Units Chart */}
+                <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm mb-8">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="font-bold text-slate-900 uppercase tracking-wider text-sm">Quarterly Units Target vs Achievement</h3>
+                            <p className="text-slate-500 text-[10px] mt-1">Units progress across financial quarters</p>
                         </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-white border-b border-slate-100">
-                                        <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Activity & Code</th>
-                                        <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Target</th>
-                                        <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Utilized</th>
-                                        <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Pending</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-50">
-                                    {filteredData.slice(0, 15).map((row, idx) => (
-                                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
-                                            <td className="px-6 py-5">
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1">{row.budgetHead}</span>
-                                                    <span className="text-[10px] font-bold text-slate-400 font-mono">{row.headCode}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5 text-right">
-                                                <span className="text-sm font-bold text-slate-700">{formatCurrency(row.targetAmount)}</span>
-                                            </td>
-                                            <td className="px-6 py-5 text-right">
-                                                <span className="text-sm font-bold text-emerald-600">{formatCurrency(row.spentAmount)}</span>
-                                            </td>
-                                            <td className="px-6 py-5 text-right">
-                                                <span className="text-sm font-bold text-amber-600">{formatCurrency(row.targetAmount - row.spentAmount)}</span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        {filteredData.length > 15 && (
-                            <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Showing top 15 activities</p>
+                        <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Target</span>
                             </div>
-                        )}
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Achievement</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={stats.qData} margin={{ top: 10, right: 30, left: 20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis 
+                                    dataKey="name" 
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
+                                />
+                                <YAxis 
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }}
+                                />
+                                <Tooltip 
+                                    cursor={{ fill: '#f8fafc' }}
+                                    contentStyle={{ 
+                                        borderRadius: '12px', 
+                                        border: 'none', 
+                                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                                        padding: '12px'
+                                    }}
+                                />
+                                <Bar dataKey="unitsTarget" name="Target Units" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={40} />
+                                <Bar dataKey="unitsAchievement" name="Achieved Units" fill="#10b981" radius={[6, 6, 0, 0]} barSize={40} />
+                            </BarChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
             </div>

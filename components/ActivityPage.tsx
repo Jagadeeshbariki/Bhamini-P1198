@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import Dashboard from './Dashboard';
 import AssetTrackingDashboard from './AssetTrackingDashboard';
 import BeneficiaryExplorer from './BeneficiaryExplorer';
+import EcoFarmpondPage from './EcoFarmpondPage';
 
 export interface ActivityType {
     id: string;
@@ -13,6 +14,7 @@ export interface ActivityType {
 const ACTIVITIES: ActivityType[] = [
     { id: 'assets', name: 'Asset Tracking System', description: 'Interactive inventory, procurement ledger, and stock point monitoring.' },
     { id: 'beneficiary', name: 'Beneficiary Explorer', description: 'Detailed explorer for project beneficiaries and demographics.' },
+    { id: 'eco-farmpond', name: 'Eco-farmpond', description: 'Project monitoring and contribution analysis for farmpond beneficiaries.' },
 ];
 
 const ActivityPage: React.FC = () => {
@@ -30,6 +32,9 @@ const ActivityPage: React.FC = () => {
         }
         if (selectedActivity.id === 'beneficiary') {
             return <BeneficiaryExplorer />;
+        }
+        if (selectedActivity.id === 'eco-farmpond') {
+            return <EcoFarmpondPage />;
         }
         return <Dashboard activityId={selectedActivity.id} />;
     };
@@ -56,20 +61,23 @@ const ActivityPage: React.FC = () => {
                     </button>
 
                     {isPickerOpen && (
-                        <div className="absolute z-50 mt-2 w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[60vh] overflow-y-auto">
+                        <div className="absolute z-[100] mt-2 w-full md:w-[400px] bg-white dark:bg-gray-800 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-gray-200 dark:border-gray-700 max-h-[70vh] overflow-y-auto ring-1 ring-black/5">
+                            <div className="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Select Dashboard</p>
+                            </div>
                             <nav className="p-2 space-y-1">
                                 {ACTIVITIES.map(activity => (
                                     <button
                                         key={activity.id}
                                         onClick={() => handleSelect(activity)}
-                                        className={`w-full text-left px-4 py-3 rounded-lg transition-colors group ${
+                                        className={`w-full text-left px-4 py-4 rounded-xl transition-all group ${
                                             selectedActivity.id === activity.id
-                                                ? 'bg-blue-600 text-white'
-                                                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 dark:shadow-none'
+                                                : 'hover:bg-blue-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100'
                                         }`}
                                     >
-                                        <div className="font-bold">{activity.name}</div>
-                                        <div className={`text-xs mt-0.5 ${selectedActivity.id === activity.id ? 'text-blue-100' : 'text-gray-500'}`}>
+                                        <div className="font-black text-sm uppercase tracking-tight">{activity.name}</div>
+                                        <div className={`text-[10px] mt-1 font-medium leading-relaxed ${selectedActivity.id === activity.id ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'}`}>
                                             {activity.description}
                                         </div>
                                     </button>
