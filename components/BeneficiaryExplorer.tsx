@@ -44,6 +44,27 @@ interface Beneficiary {
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#f43f5e'];
 
+const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        return (
+            <div className="bg-white dark:bg-gray-800 p-3 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700">
+                <p className="text-[10px] font-black uppercase text-gray-400 mb-1">{data.name}</p>
+                <div className="flex items-baseline gap-2">
+                    <p className="text-lg font-black text-indigo-600 dark:text-indigo-400">
+                        {data.value.toLocaleString()}
+                    </p>
+                    {data.percentage !== undefined && (
+                        <p className="text-[10px] font-black text-gray-400">({data.percentage.toFixed(1)}%)</p>
+                    )}
+                </div>
+                <p className="text-[8px] font-black uppercase text-gray-400 mt-1 italic">Click to filter</p>
+            </div>
+        );
+    }
+    return null;
+};
+
 const BeneficiaryExplorer: React.FC = () => {
     const [data, setData] = useState<Beneficiary[]>([]);
     const [loading, setLoading] = useState(true);
@@ -53,6 +74,7 @@ const BeneficiaryExplorer: React.FC = () => {
     const [filterGP, setFilterGP] = useState('All');
     const [filterVillage, setFilterVillage] = useState('All');
     const [filterActivity, setFilterActivity] = useState('All');
+    const [filterGender, setFilterGender] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: keyof Beneficiary; direction: 'asc' | 'desc' } | null>(null);
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -214,13 +236,18 @@ const BeneficiaryExplorer: React.FC = () => {
             const matchesGP = filterGP === 'All' || d.gp === filterGP;
             const matchesVillage = filterVillage === 'All' || d.village === filterVillage;
             const matchesActivity = filterActivity === 'All' || d.activity === filterActivity;
+            const matchesGender = filterGender === 'All' || (() => {
+                const g = d.gender?.trim().toLowerCase() || 'unknown';
+                const label = g.startsWith('m') ? 'Male' : g.startsWith('f') ? 'Female' : 'Other';
+                return label === filterGender;
+            })();
             const matchesSearch = d.beneficiaryName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                  d.beneficiaryId.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                  d.hhHeadName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                  d.hhId.toLowerCase().includes(searchQuery.toLowerCase());
-            return matchesCluster && matchesGP && matchesVillage && matchesActivity && matchesSearch;
+            return matchesCluster && matchesGP && matchesVillage && matchesActivity && matchesGender && matchesSearch;
         });
-    }, [data, filterCluster, filterGP, filterVillage, filterActivity, searchQuery]);
+    }, [data, filterCluster, filterGP, filterVillage, filterActivity, filterGender, searchQuery]);
 
     const sortedData = useMemo(() => {
         const sortableItems = [...filteredData];
@@ -259,7 +286,11 @@ const BeneficiaryExplorer: React.FC = () => {
         });
 
         const activityData = Object.entries(activityCounts)
-            .map(([name, value]) => ({ name, value }))
+            .map(([name, value]) => ({ 
+                name, 
+                value,
+                percentage: total > 0 ? (value / total) * 100 : 0
+            }))
             .sort((a, b) => b.value - a.value);
 
         const genderCounts: Record<string, number> = {};
@@ -299,6 +330,7 @@ const BeneficiaryExplorer: React.FC = () => {
         setFilterGP('All');
         setFilterVillage('All');
         setFilterActivity('All');
+        setFilterGender('All');
         setSearchQuery('');
     };
 
@@ -350,7 +382,7 @@ const BeneficiaryExplorer: React.FC = () => {
                         <Download className="w-3.5 h-3.5" />
                         Export Data
                     </button>
-                    {(filterCluster !== 'All' || filterGP !== 'All' || filterVillage !== 'All' || filterActivity !== 'All' || searchQuery !== '') && (
+                    {(filterCluster !== 'All' || filterGP !== 'All' || filterVillage !== 'All' || filterActivity !== 'All' || filterGender !== 'All' || searchQuery !== '') && (
                         <button 
                             onClick={clearFilters}
                             className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-400 hover:bg-red-100 transition-all"
@@ -403,7 +435,7 @@ const BeneficiaryExplorer: React.FC = () => {
                     <div className="relative">
                         <input 
                             type="text" 
-                            placeholder="NAME / ID / HHID..." 
+                            placeholder="NAME / ID / AADHAR..." 
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             className="w-full bg-gray-50 dark:bg-gray-900 pl-4 pr-10 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none focus:ring-2 focus:ring-indigo-500 transition-all"
@@ -462,14 +494,13 @@ const BeneficiaryExplorer: React.FC = () => {
                                     width={100}
                                     tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af' }}
                                 />
-                                <Tooltip 
-                                    cursor={{ fill: 'transparent' }}
-                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }}
-                                />
+                                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
                                 <Bar 
                                     dataKey="value" 
                                     radius={[0, 4, 4, 0]}
                                     label={{ position: 'right', fill: '#6b7280', fontSize: 9, fontWeight: 900 }}
+                                    onClick={(data) => setFilterActivity(data.name)}
+                                    style={{ cursor: 'pointer' }}
                                 >
                                     {stats.activityData.map((_, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -497,12 +528,14 @@ const BeneficiaryExplorer: React.FC = () => {
                                     dataKey="value"
                                     label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                                     labelLine={true}
+                                    onClick={(data) => setFilterCluster(data.name)}
+                                    style={{ cursor: 'pointer' }}
                                 >
                                     {stats.clusterData.map((_, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
                                     ))}
                                 </Pie>
-                                <Tooltip />
+                                <Tooltip content={<CustomTooltip />} />
                             </PieChart>
                         </ResponsiveContainer>
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -529,12 +562,14 @@ const BeneficiaryExplorer: React.FC = () => {
                                     dataKey="value"
                                     label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                                     labelLine={true}
+                                    onClick={(data) => setFilterGender(data.name)}
+                                    style={{ cursor: 'pointer' }}
                                 >
                                     {stats.genderData.map((_, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Pie>
-                                <Tooltip />
+                                <Tooltip content={<CustomTooltip />} />
                             </PieChart>
                         </ResponsiveContainer>
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -544,10 +579,17 @@ const BeneficiaryExplorer: React.FC = () => {
                     </div>
                     <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2">
                         {stats.genderData.map((g, idx) => (
-                            <div key={idx} className="flex items-center gap-1.5">
+                            <button 
+                                key={idx} 
+                                onClick={() => setFilterGender(g.name)}
+                                className={cn(
+                                    "flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all",
+                                    filterGender === g.name ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200" : "hover:bg-gray-50 dark:hover:bg-gray-700"
+                                )}
+                            >
                                 <div className="w-2 h-2 rounded-full" style={{ background: COLORS[idx % COLORS.length] }}></div>
                                 <span className="text-[8px] font-black uppercase text-gray-500">{g.name} {g.percentage.toFixed(0)}%</span>
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </div>
@@ -555,14 +597,26 @@ const BeneficiaryExplorer: React.FC = () => {
 
             {/* 4. DETAILED TABLE */}
             <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-6 border-b border-gray-50 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50 dark:bg-gray-900/20">
+                <div className="p-6 border-b border-gray-50 dark:border-gray-700 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-gray-50/50 dark:bg-gray-900/20">
                     <div>
                         <h2 className="text-lg font-black text-gray-800 dark:text-white uppercase tracking-tight">Beneficiary Registry</h2>
                         <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">Detailed Demographics & Activity Log</p>
                     </div>
-                    <div className="flex items-center gap-2 px-4 py-1.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full text-[9px] font-black uppercase tracking-widest">
-                        <UserCheck className="w-3 h-3" />
-                        {filteredData.length.toLocaleString()} Records
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
+                        <div className="relative flex-1 sm:flex-none">
+                            <input 
+                                type="text" 
+                                placeholder="QUICK SEARCH (NAME/ID/AADHAR)..." 
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="w-full sm:w-72 bg-white dark:bg-gray-800 pl-4 pr-10 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                            />
+                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                        </div>
+                        <div className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
+                            <UserCheck className="w-3 h-3" />
+                            {filteredData.length.toLocaleString()} Records
+                        </div>
                     </div>
                 </div>
                 

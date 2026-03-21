@@ -205,7 +205,11 @@ const AdminPage: React.FC = () => {
             })).filter(r => r.url).reverse());
 
             const misCsv = await misRes.text();
-            const misT = parseCSVToObjects(misCsv).map(row => ({ id: row['ID'], name: row['NAME'], uom: row['UOM'] })).filter(t => t.id);
+            const misT = parseCSVToObjects(misCsv).map(row => ({ 
+                id: getFuzzy(row, ['HEAD_CODE', 'HEADCODE', 'ID']), 
+                name: getFuzzy(row, ['BUDGET HEAD', 'BUDGETHEAD', 'NAME']), 
+                uom: getFuzzy(row, ['UOM']) || 'Units' 
+            })).filter(t => t.id);
             setMisTargets(misT);
             if (misT.length > 0 && !selectedActivityId) setSelectedActivityId(misT[0].id);
 
@@ -278,6 +282,17 @@ const AdminPage: React.FC = () => {
             return new Date(+pa[2], +pa[1]-1, +pa[0]).getTime() - new Date(+pb[2], +pb[1]-1, +pb[0]).getTime();
         });
     }, [allAttendanceData, selectedUsername, selectedMonth, selectedYear, months]);
+
+    const attendanceStats = useMemo(() => {
+        return filteredWorkLog.reduce((acc, r) => {
+            const status = (r.workingStatus || '').toLowerCase();
+            if (status.includes('working')) acc.working++;
+            else if (status.includes('leave')) acc.leave++;
+            else if (status.includes('holiday')) acc.holiday++;
+            acc.total++;
+            return acc;
+        }, { total: 0, working: 0, leave: 0, holiday: 0 });
+    }, [filteredWorkLog]);
 
     const handleUploadMedia = async () => {
         if (selectedFiles.length === 0 || !photoActivity) {
@@ -447,6 +462,27 @@ const AdminPage: React.FC = () => {
                             })}
                         </div>
                     </div>
+
+                    {/* Attendance Summary Section */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700">
+                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Total Records</p>
+                            <p className="text-2xl font-black text-gray-900 dark:text-white">{attendanceStats.total}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700">
+                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Working Days</p>
+                            <p className="text-2xl font-black text-emerald-600">{attendanceStats.working}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700">
+                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Leave Days</p>
+                            <p className="text-2xl font-black text-red-500">{attendanceStats.leave}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700">
+                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Holidays</p>
+                            <p className="text-2xl font-black text-amber-500">{attendanceStats.holiday}</p>
+                        </div>
+                    </div>
+
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-700">
                         <h2 className="text-xl font-black text-gray-800 dark:text-white uppercase mb-8">Work Record Ledger</h2>
                         <div className="space-y-4">
