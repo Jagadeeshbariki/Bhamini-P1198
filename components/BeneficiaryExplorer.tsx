@@ -25,6 +25,8 @@ interface Asset {
     unit: string;
     date: string;
     distributor: string;
+    photo?: string;
+    parentKey?: string;
 }
 
 interface Beneficiary {
@@ -139,6 +141,8 @@ const BeneficiaryExplorer: React.FC = () => {
                 unit: getVal(row, 'materials_details-material_unit'),
                 date: getVal(row, 'materials_details-distributed_date'),
                 distributor: getVal(row, 'materials_details-destributor_name'),
+                photo: getVal(row, 'Photo'),
+                parentKey: getVal(row, 'PARENT_KEY'),
             };
 
             if (beneficiaryMap.has(key)) {
@@ -727,17 +731,35 @@ const BeneficiaryExplorer: React.FC = () => {
                                                     {b.assets.length > 0 ? (
                                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                                             {b.assets.map((asset, idx) => (
-                                                                <div key={idx} className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                                                                    <div className="flex justify-between items-start mb-1">
+                                                                <div key={idx} className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-2">
+                                                                    <div className="flex justify-between items-start">
                                                                         <span className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{asset.label}</span>
                                                                         <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded text-[9px] font-black uppercase">
                                                                             {asset.count} {asset.unit}
                                                                         </span>
                                                                     </div>
-                                                                    <div className="flex justify-between items-center mt-2">
+                                                                    <div className="flex justify-between items-center">
                                                                         <span className="text-[8px] font-bold text-gray-400 uppercase">{asset.date}</span>
                                                                         <span className="text-[8px] font-bold text-indigo-400 uppercase">{asset.distributor}</span>
                                                                     </div>
+                                                                    {asset.photo && asset.parentKey && (
+                                                                        <div className="mt-2 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 aspect-video relative group">
+                                                                            <img 
+                                                                                src={`/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey)}&filename=${encodeURIComponent(asset.photo)}`} 
+                                                                                alt={asset.label}
+                                                                                className="w-full h-full object-cover"
+                                                                                referrerPolicy="no-referrer"
+                                                                                onError={(e) => {
+                                                                                    e.currentTarget.style.display = 'none';
+                                                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                                }}
+                                                                            />
+                                                                            <div className="hidden absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                                                                                <span className="text-[10px] font-bold text-gray-500">Image Protected</span>
+                                                                                <span className="text-[8px] text-gray-400 mt-1">Requires ODK Central Login</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -828,17 +850,35 @@ const BeneficiaryExplorer: React.FC = () => {
                                                 {b.assets.length > 0 ? (
                                                     <div className="space-y-3">
                                                         {b.assets.map((asset, idx) => (
-                                                            <div key={idx} className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
-                                                                <div className="flex justify-between items-start mb-1">
+                                                            <div key={idx} className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 flex flex-col gap-2">
+                                                                <div className="flex justify-between items-start">
                                                                     <span className="text-[10px] font-black text-gray-900 dark:text-white uppercase">{asset.label}</span>
                                                                     <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded text-[8px] font-black uppercase">
                                                                         {asset.count} {asset.unit}
                                                                     </span>
                                                                 </div>
-                                                                <div className="flex justify-between items-center mt-2">
+                                                                <div className="flex justify-between items-center">
                                                                     <span className="text-[7px] font-bold text-gray-400 uppercase">{asset.date}</span>
                                                                     <span className="text-[7px] font-bold text-indigo-400 uppercase">{asset.distributor}</span>
                                                                 </div>
+                                                                {asset.photo && asset.parentKey && (
+                                                                    <div className="mt-2 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 aspect-video relative group">
+                                                                        <img 
+                                                                            src={`/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey)}&filename=${encodeURIComponent(asset.photo)}`} 
+                                                                            alt={asset.label}
+                                                                            className="w-full h-full object-cover"
+                                                                            referrerPolicy="no-referrer"
+                                                                            onError={(e) => {
+                                                                                e.currentTarget.style.display = 'none';
+                                                                                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                            }}
+                                                                        />
+                                                                        <div className="hidden absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                                                                            <span className="text-[10px] font-bold text-gray-500">Image Protected</span>
+                                                                            <span className="text-[8px] text-gray-400 mt-1">Requires ODK Central Login</span>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         ))}
                                                     </div>
