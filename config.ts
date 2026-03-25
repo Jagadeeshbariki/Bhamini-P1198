@@ -41,7 +41,13 @@ export const BUDGET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1v
 // 12. ECO-FARMPOND DATA
 export const ECO_FARMPOND_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS0e9wD0FOCBjNgdCArE9EuVsm4-wJNZLJZEkzDldWq2nW3dwnOjqhy7tZ3t-gLnJOLXiRiWwF1I3Qe/pub?gid=1343892079&single=true&output=csv';
 
+// 13. BYP POULTRY DATA
+export const BYP_POULTRY_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS0e9wD0FOCBjNgdCArE9EuVsm4-wJNZLJZEkzDldWq2nW3dwnOjqhy7tZ3t-gLnJOLXiRiWwF1I3Qe/pub?gid=1277904807&single=true&output=csv';
+
+// 14. ELEVATED GOAT SHED DATA
+export const ELEVATED_GOAT_SHED_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS0e9wD0FOCBjNgdCArE9EuVsm4-wJNZLJZEkzDldWq2nW3dwnOjqhy7tZ3t-gLnJOLXiRiWwF1I3Qe/pub?gid=1249026473&single=true&output=csv';
+
 // 9. SYSTEM ENDPOINT
-export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby_zBsEc4CD3YjhipaAw1ngO19fTnLH3glszHJOlLVx2xahJ40B-pRNbXJhuwzhepe2/exec';
+export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby4omIqQ9ANnowOT75v9b-7LJmrZ1_Fb1iZGfSNRVo8TbkmsuGv4Mf9h36MMwVPkjaiVw/exec';
 
 export const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200';

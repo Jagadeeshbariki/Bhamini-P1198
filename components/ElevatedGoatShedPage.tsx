@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { 
-    Search, Filter, PieChart as PieChartIcon, 
-    Target, TrendingUp, Users, IndianRupee, MapPin, Globe, Camera, RefreshCw
+    Search, Filter, PieChart as PieChartIcon, BarChart as BarChartIcon,
+    Target, TrendingUp, Users, MapPin, Globe, Camera, RefreshCw, IndianRupee
 } from 'lucide-react';
 import { 
     ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
-    Legend
+    Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { ECO_FARMPOND_URL, CONTRIBUTION_DATA_URL } from '../config';
-import AddFarmpondPhotoModal from './AddFarmpondPhotoModal';
+import { ELEVATED_GOAT_SHED_URL, CONTRIBUTION_DATA_URL } from '../config';
 
 declare global {
   interface Window {
@@ -18,7 +17,7 @@ declare global {
   }
 }
 
-interface FarmpondRecord {
+interface GoatShedRecord {
     hhId: string;
     name: string;
     gp: string;
@@ -26,6 +25,7 @@ interface FarmpondRecord {
     age: string;
     benId: string;
     cluster: string;
+    activity: string;
     lat: number;
     lng: number;
     photo: string;
@@ -34,9 +34,9 @@ interface FarmpondRecord {
 
 const CHART_COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#f97316'];
 
-const EcoFarmpondPage: React.FC = () => {
+const ElevatedGoatShedPage: React.FC = () => {
     const { user } = useAuth();
-    const [data, setData] = useState<FarmpondRecord[]>([]);
+    const [data, setData] = useState<GoatShedRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const mapRef = useRef<HTMLDivElement>(null);
@@ -44,8 +44,8 @@ const EcoFarmpondPage: React.FC = () => {
     
     // Filters
     const [selectedCluster, setSelectedCluster] = useState('All');
+    const [selectedActivity, setSelectedActivity] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
-    const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
     const parseCSV = (csv: string): any[] => {
         const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
@@ -76,15 +76,6 @@ const EcoFarmpondPage: React.FC = () => {
         });
     };
 
-    const normalizeId = (id: any): string => {
-        if (!id) return '';
-        const str = id.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-        if (/^\d+$/.test(str)) {
-            return parseInt(str, 10).toString();
-        }
-        return str;
-    };
-
     const getFuzzyValue = (row: any, keys: string[]) => {
         const rowKeys = Object.keys(row);
         for (const k of keys) {
@@ -92,6 +83,15 @@ const EcoFarmpondPage: React.FC = () => {
             if (match) return row[match];
         }
         return '';
+    };
+
+    const normalizeId = (id: any): string => {
+        if (!id) return '';
+        const str = id.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (/^\d+$/.test(str)) {
+            return parseInt(str, 10).toString();
+        }
+        return str;
     };
 
     const getGoogleDriveThumbnail = (url: string) => {
@@ -113,37 +113,55 @@ const EcoFarmpondPage: React.FC = () => {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [pondRes, contribRes] = await Promise.all([
-                fetch(`${ECO_FARMPOND_URL}&cb=${Date.now()}`),
+            const [bypRes, contribRes] = await Promise.all([
+                fetch(`${ELEVATED_GOAT_SHED_URL}&cb=${Date.now()}`),
                 fetch(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)
             ]);
 
-            if (!pondRes.ok || !contribRes.ok) throw new Error("Failed to fetch data.");
+            if (!bypRes.ok || !contribRes.ok) throw new Error("Failed to fetch data.");
 
-            const pondText = await pondRes.text();
+            const bypText = await bypRes.text();
             const contribText = await contribRes.text();
 
-            const rawPonds = parseCSV(pondText);
+            const rawData = parseCSV(bypText);
             const rawContribs = parseCSV(contribText);
 
-            const contribMap = new Map<string, number>();
+            const contribMap = new Map<string, any[]>();
             rawContribs.forEach(row => {
                 const rawId = getFuzzyValue(row, ['FARMERID', 'FID', 'ID', 'FARMER ID', 'HH_id', 'HH ID', 'HHID']);
                 const normId = normalizeId(rawId);
-                
-                const pondCol = Object.keys(row).find(k => k.toUpperCase().includes('ECO-FARMPOND') || k.toUpperCase().includes('FARMPOND'));
-                
-                if (normId && pondCol) {
-                    const amount = parseFloat(row[pondCol].toString().replace(/[^0-9.]/g, '')) || 0;
-                    if (amount > 0) {
-                        contribMap.set(normId, (contribMap.get(normId) || 0) + amount);
-                    }
+                if (normId) {
+                    if (!contribMap.has(normId)) contribMap.set(normId, []);
+                    contribMap.get(normId)!.push(row);
                 }
             });
 
-            const parsedPonds: FarmpondRecord[] = rawPonds.map(row => {
+            const parsedData: GoatShedRecord[] = rawData.map(row => {
                 const hhId = getFuzzyValue(row, ['HH_id', 'HH ID', 'HHID', 'Farmer ID', 'FARMERID']) || '';
                 const normHhId = normalizeId(hhId);
+                const activity = getFuzzyValue(row, ['Activity']) || 'Goat Shed';
+                
+                let contribution = 0;
+                const contribRows = contribMap.get(normHhId) || [];
+                
+                for (const cRow of contribRows) {
+                    const rowActivity = getFuzzyValue(cRow, ['Activity', 'Intervention']);
+                    
+                    // Robust matching for Goat Shed / Goatery
+                    const isGoatActivity = activity.toUpperCase().includes('GOAT');
+                    const isRowGoatActivity = rowActivity && rowActivity.toUpperCase().includes('GOAT');
+                    
+                    if ((rowActivity && rowActivity.toUpperCase().includes(activity.toUpperCase())) || (isGoatActivity && isRowGoatActivity)) {
+                        const amount = parseFloat(getFuzzyValue(cRow, ['Amount', 'Contribution', 'Total']).toString().replace(/[^0-9.]/g, '')) || 0;
+                        contribution += amount;
+                    } else {
+                        const activityCol = Object.keys(cRow).find(k => k.toUpperCase().includes(activity.toUpperCase()) || (isGoatActivity && k.toUpperCase().includes('GOAT')));
+                        if (activityCol) {
+                            const amount = parseFloat(cRow[activityCol].toString().replace(/[^0-9.]/g, '')) || 0;
+                            contribution += amount;
+                        }
+                    }
+                }
                 
                 return {
                     hhId: hhId,
@@ -153,14 +171,15 @@ const EcoFarmpondPage: React.FC = () => {
                     age: getFuzzyValue(row, ['Beneficiary_age', 'Age']) || '',
                     benId: getFuzzyValue(row, ['Ben_id', 'ID']) || '',
                     cluster: getFuzzyValue(row, ['COL_6', 'Cluster']) || 'Unknown',
+                    activity: activity,
                     lat: parseFloat(getFuzzyValue(row, ['Lat', 'Latitude'])) || 0,
                     lng: parseFloat(getFuzzyValue(row, ['long', 'Longitude', 'Long'])) || 0,
-                    photo: getFuzzyValue(row, ['Photo_link', 'Photo', 'PHOTO_LINK', 'PHOTO', 'IMAGE', 'PICTURE', 'FARM_PHOTO', 'FARMPOND_PHOTO']) || '',
-                    contribution: contribMap.get(normHhId) || 0
+                    photo: getFuzzyValue(row, ['Photo_link', 'Photo', 'PHOTO_LINK', 'PHOTO', 'IMAGE', 'PICTURE']) || '',
+                    contribution: contribution
                 };
             }).filter(p => p.hhId);
 
-            setData(parsedPonds);
+            setData(parsedData);
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -191,22 +210,29 @@ const EcoFarmpondPage: React.FC = () => {
     const filteredData = useMemo(() => {
         return data.filter(d => {
             const matchesCluster = selectedCluster === 'All' || d.cluster === selectedCluster;
+            const matchesActivity = selectedActivity === 'All' || d.activity === selectedActivity;
             const matchesSearch = d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                  d.hhId.toLowerCase().includes(searchQuery.toLowerCase());
-            return matchesCluster && matchesSearch;
+            return matchesCluster && matchesActivity && matchesSearch;
         });
-    }, [data, selectedCluster, searchQuery]);
+    }, [data, selectedCluster, selectedActivity, searchQuery]);
 
     const stats = useMemo(() => {
-        const target = 62;
+        const target = 100;
         const achieved = filteredData.length;
         const totalContribution = filteredData.reduce((sum, d) => sum + (d.contribution || 0), 0);
         
         const clusterMap: Record<string, number> = {};
+        const activityMap: Record<string, number> = {};
+
         filteredData.forEach(d => {
             clusterMap[d.cluster] = (clusterMap[d.cluster] || 0) + 1;
+            const act = d.activity || 'Unknown';
+            activityMap[act] = (activityMap[act] || 0) + 1;
         });
+
         const clusterDist = Object.entries(clusterMap).map(([name, value]) => ({ name, value }));
+        const activityDist = Object.entries(activityMap).map(([name, value]) => ({ name, value }));
 
         const mapPoints = filteredData
             .filter(d => d.lat !== 0 && d.lng !== 0)
@@ -220,7 +246,7 @@ const EcoFarmpondPage: React.FC = () => {
                 hhId: d.hhId
             }));
 
-        return { target, achieved, totalContribution, clusterDist, mapPoints };
+        return { target, achieved, totalContribution, clusterDist, activityDist, mapPoints };
     }, [filteredData]);
 
     // Initialize Map
@@ -284,11 +310,12 @@ const EcoFarmpondPage: React.FC = () => {
     }, [mapLoaded, stats.mapPoints]);
 
     const clusters = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.cluster)))], [data]);
+    const activities = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.activity)))], [data]);
 
     if (loading) return (
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-sm font-medium text-gray-500">Loading Farmpond Data...</p>
+            <p className="text-sm font-medium text-gray-500">Loading Goat Shed Data...</p>
         </div>
     );
 
@@ -308,8 +335,8 @@ const EcoFarmpondPage: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Eco-farmpond Dashboard</h1>
-                    <p className="text-sm text-gray-500 mt-1">Project Monitoring & Contribution Analysis</p>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Elevated Goat Sheds Dashboard</h1>
+                    <p className="text-sm text-gray-500 mt-1">Project Monitoring & Activity Analysis</p>
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-3">
@@ -321,16 +348,6 @@ const EcoFarmpondPage: React.FC = () => {
                     >
                         <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                     </button>
-
-                    {user?.isAdmin && (
-                        <button 
-                            onClick={() => setIsPhotoModalOpen(true)}
-                            className="flex items-center gap-2 bg-indigo-600 px-4 py-2 rounded-lg text-white text-sm font-medium hover:bg-indigo-700 transition-colors"
-                        >
-                            <Camera className="w-4 h-4" />
-                            Add Photo
-                        </button>
-                    )}
 
                     <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm">
                         <Search className="w-4 h-4 text-gray-400" />
@@ -353,6 +370,17 @@ const EcoFarmpondPage: React.FC = () => {
                             {clusters.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     </div>
+
+                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm">
+                        <Filter className="w-4 h-4 text-gray-400" />
+                        <select 
+                            className="bg-transparent border-none focus:ring-0 text-sm cursor-pointer"
+                            value={selectedActivity}
+                            onChange={(e) => setSelectedActivity(e.target.value)}
+                        >
+                            {activities.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -363,7 +391,7 @@ const EcoFarmpondPage: React.FC = () => {
                         <div className="p-2 bg-indigo-50 rounded-lg">
                             <Target className="w-5 h-5 text-indigo-600" />
                         </div>
-                        <span className="text-sm font-medium text-gray-500">Total Target</span>
+                        <span className="text-sm font-medium text-gray-500">Total Target (Sheds)</span>
                     </div>
                     <div className="text-2xl font-bold text-gray-900">{stats.target}</div>
                 </div>
@@ -405,10 +433,10 @@ const EcoFarmpondPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Charts & Map Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Cluster Distribution */}
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm lg:col-span-1">
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                     <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                         <PieChartIcon className="w-5 h-5 text-indigo-600" />
                         Cluster Distribution
@@ -438,20 +466,51 @@ const EcoFarmpondPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Map Section */}
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm lg:col-span-2">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                            <Globe className="w-5 h-5 text-indigo-600" />
-                            Live Beneficiary Map
-                        </h3>
+                {/* Activity Distribution */}
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                        <BarChartIcon className="w-5 h-5 text-indigo-600" />
+                        Activity Distribution
+                    </h3>
+                    <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={stats.activityDist}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                <XAxis 
+                                    dataKey="name" 
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 12, fill: '#6b7280' }}
+                                />
+                                <YAxis 
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 12, fill: '#6b7280' }}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: '#f3f4f6' }}
+                                    contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                />
+                                <Bar dataKey="value" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={40} />
+                            </BarChart>
+                        </ResponsiveContainer>
                     </div>
-                    <div className="relative rounded-lg overflow-hidden border border-gray-200">
-                        <div 
-                            ref={mapRef} 
-                            className="w-full h-[300px] bg-gray-100"
-                        />
-                    </div>
+                </div>
+            </div>
+
+            {/* Map Section */}
+            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <Globe className="w-5 h-5 text-indigo-600" />
+                        Live Beneficiary Map
+                    </h3>
+                </div>
+                <div className="relative rounded-lg overflow-hidden border border-gray-200">
+                    <div 
+                        ref={mapRef} 
+                        className="w-full h-[400px] bg-gray-100"
+                    />
                 </div>
             </div>
 
@@ -472,6 +531,7 @@ const EcoFarmpondPage: React.FC = () => {
                                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Cluster</th>
                                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">GP / Village</th>
+                                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Activity</th>
                                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">Contribution</th>
                                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Photo</th>
                                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Location</th>
@@ -499,6 +559,9 @@ const EcoFarmpondPage: React.FC = () => {
                                             <span className="text-sm text-gray-900">{row.gp}</span>
                                             <span className="text-xs text-gray-500">{row.village}</span>
                                         </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <span className="text-sm text-gray-900">{row.activity}</span>
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                         <span className={`text-sm font-medium ${row.contribution ? 'text-emerald-600' : 'text-gray-400'}`}>
@@ -555,18 +618,8 @@ const EcoFarmpondPage: React.FC = () => {
                     </table>
                 </div>
             </div>
-
-            {isPhotoModalOpen && (
-                <AddFarmpondPhotoModal 
-                    data={data}
-                    onClose={() => setIsPhotoModalOpen(false)}
-                    onSuccess={() => {
-                        fetchData();
-                    }}
-                />
-            )}
         </div>
     );
 };
 
-export default EcoFarmpondPage;
+export default ElevatedGoatShedPage;

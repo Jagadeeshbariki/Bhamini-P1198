@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { ChevronDown, LayoutDashboard, Users, Database, Droplets } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, Users, Database, Droplets, Bird, Home } from 'lucide-react';
 
 interface HeaderProps {
     currentPage: string;
@@ -65,7 +65,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const dashboardPages = ['activity', 'beneficiary-explorer', 'asset-tracking', 'eco-farmpond'];
+    const dashboardPages = ['activity', 'beneficiary-explorer', 'asset-tracking', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed'];
     const isDashboardActive = dashboardPages.includes(currentPage);
 
     return (
@@ -164,6 +164,32 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                                 <div className="text-left">
                                                     <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">Eco-farmpond</p>
                                                     <p className="text-[8px] font-bold text-gray-400 uppercase">GPS Map & Contributions</p>
+                                                </div>
+                                            </button>
+
+                                            <button
+                                                onClick={() => { onNavigate('byp-poultry'); setIsDashboardDropdownOpen(false); }}
+                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group"
+                                            >
+                                                <div className="p-2 bg-orange-50 dark:bg-orange-900/40 rounded-lg group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                                                    <Bird className="w-4 h-4" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">BYP Poultry</p>
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase">Project Monitoring</p>
+                                                </div>
+                                            </button>
+
+                                            <button
+                                                onClick={() => { onNavigate('elevated-goat-shed'); setIsDashboardDropdownOpen(false); }}
+                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group"
+                                            >
+                                                <div className="p-2 bg-purple-50 dark:bg-purple-900/40 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                                                    <Home className="w-4 h-4" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">Elevated Goat Shed</p>
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase">Project Monitoring</p>
                                                 </div>
                                             </button>
                                         </div>

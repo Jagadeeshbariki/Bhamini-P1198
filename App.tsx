@@ -16,10 +16,12 @@ import ContributionPage from './components/ContributionPage';
 import BeneficiaryExplorer from './components/BeneficiaryExplorer';
 import AssetTrackingDashboard from './components/AssetTrackingDashboard';
 import EcoFarmpondPage from './components/EcoFarmpondPage';
+import BYPPage from './components/BYPPage';
+import ElevatedGoatShedPage from './components/ElevatedGoatShedPage';
 import AutoInstallBanner from './components/AutoInstallBanner';
 import { APP_VERSION } from './config';
 
-type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'eco-farmpond' | 'beneficiary-explorer' | 'asset-tracking';
+type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'eco-farmpond' | 'byp-poultry' | 'elevated-goat-shed' | 'beneficiary-explorer' | 'asset-tracking';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>('home');
@@ -37,7 +39,7 @@ const AppContent: React.FC = () => {
     }, [user, logout]);
 
     useEffect(() => {
-        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'beneficiary-explorer', 'asset-tracking'];
+        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking'];
         
         // Handle unauthenticated access to protected pages
         if (!user && protectedPages.includes(page)) {
@@ -56,7 +58,7 @@ const AppContent: React.FC = () => {
 
             if (isField) {
                 // Field staff: Allow Gallery, Attendance, Reports, MIS, Baseline, Contribution
-                const restrictedPages: Page[] = ['activity', 'budget-tracker', 'admin', 'eco-farmpond', 'beneficiary-explorer', 'asset-tracking'];
+                const restrictedPages: Page[] = ['activity', 'budget-tracker', 'admin', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking'];
                 if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
             } else if (isProject) {
                 // Project staff: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution
@@ -111,6 +113,10 @@ const AppContent: React.FC = () => {
                 return <ContributionPage />;
             case 'eco-farmpond':
                 return <EcoFarmpondPage />;
+            case 'byp-poultry':
+                return <BYPPage />;
+            case 'elevated-goat-shed':
+                return <ElevatedGoatShedPage />;
             case 'beneficiary-explorer':
                 return <BeneficiaryExplorer />;
             case 'asset-tracking':
