@@ -101,7 +101,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const authUser: AuthUser = {
           username: foundUser.USERNAME,
           role: role,
-          isAdmin: role === 'admin'
+          isAdmin: role === 'admin',
+          project: foundUser.PROJECT || ''
         };
 
         const session: Session = { 

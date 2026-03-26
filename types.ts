@@ -4,6 +4,7 @@ export interface AuthUser {
   email?: string;
   isAdmin?: boolean;
   role: 'field' | 'project' | 'admin' | 'da';
+  project?: string;
   token?: string;
 }
 

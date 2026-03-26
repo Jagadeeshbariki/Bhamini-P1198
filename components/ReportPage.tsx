@@ -308,7 +308,7 @@ const ReportPage: React.FC = () => {
             },
             report: {
                 agency: 'LEAD TECHNICAL AGENCY – WASSAN',
-                project: 'HDFC Parivarthan',
+                project: 'HDFC Parivartan',
                 type: 'WORK DONE REPORT',
                 month: 'Month:',
                 name: 'Name of the Person:',
@@ -504,7 +504,11 @@ const ReportPage: React.FC = () => {
                     {/* Header Section */}
                     <div style={{ textAlign: 'center', borderBottom: '2px solid #000000', paddingBottom: '16px', marginBottom: '16px' }}>
                         <h1 style={{ fontSize: '20px', fontWeight: 'bold', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{currentT.report.agency}</h1>
-                        <h2 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{currentT.report.project}</h2>
+                        <h2 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', margin: '0 0 4px 0' }}>
+                            {user?.project?.toUpperCase() === 'HDFC' ? (language === 'en' ? 'HDFC Parivartan' : 'హెచ్‌డిఎఫ్‌సి పరివర్తన్') : 
+                             user?.project?.toUpperCase() === 'GAME' ? 'GAME' : 
+                             currentT.report.project}
+                        </h2>
                         <h3 style={{ fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', margin: '8px 0 0 0' }}>{currentT.report.type}</h3>
                     </div>
 
