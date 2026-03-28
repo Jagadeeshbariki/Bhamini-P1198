@@ -20,6 +20,9 @@ interface HouseholdData {
     aadharNumber: string;
     totalFamilyMembers: string;
     annualIncome: string;
+    incomeSource: string;
+    livestockIncome: string;
+    otherIncome: string;
 }
 
 const BaselinePage: React.FC = () => {
@@ -38,15 +41,37 @@ const BaselinePage: React.FC = () => {
         if (lines.length < 1) return [];
         
         const parseLine = (line: string): string[] => {
+            // Simple split as fallback if line is clearly malformed or has unclosed quotes
+            const commaCount = (line.match(/,/g) || []).length;
+            const simpleSplit = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+            
             const values = [];
             let inQuote = false, val = '';
             for (let j = 0; j < line.length; j++) {
-                if (line[j] === '"') inQuote = !inQuote;
-                else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
-                else val += line[j];
+                const char = line[j];
+                if (char === '"') {
+                    if (inQuote && line[j + 1] === '"') {
+                        val += '"';
+                        j++;
+                    } else {
+                        inQuote = !inQuote;
+                    }
+                } else if (char === ',' && !inQuote) {
+                    values.push(val.trim());
+                    val = '';
+                } else {
+                    val += char;
+                }
             }
-            values.push(val.trim().replace(/^"|"$/g, ''));
-            return values;
+            values.push(val.trim());
+            
+            // If the complex parser failed to find enough columns but there are many commas,
+            // or if we ended with an open quote, use the simple split.
+            if (inQuote || (values.length < 5 && commaCount > 10)) {
+                return simpleSplit;
+            }
+            
+            return values.map(v => v.replace(/^"|"$/g, '').trim());
         };
 
         const rawHeaders = parseLine(lines[0]);
@@ -54,61 +79,141 @@ const BaselinePage: React.FC = () => {
         const headersMap: Record<string, string> = {
             'FARMERID': 'farmerId',
             'FID': 'farmerId',
+            'FARMER_ID': 'farmerId',
+            'FARMER ID': 'farmerId',
             'SUBMISSIONDATE': 'submissionDate',
             'DATE': 'submissionDate',
+            'SUBMISSION_DATE': 'submissionDate',
+            'SUBMISSION_TIME': 'submissionDate',
             'DISTRICT': 'district',
+            'DIST': 'district',
             'BLOCK': 'block',
             'CLUSTER': 'cluster',
             'GP': 'gp',
             'GRAMPANCHAYAT': 'gp',
+            'GRAM_PANCHAYAT': 'gp',
+            'GRAM PANCHAYAT': 'gp',
             'VILLAGE': 'village',
             'HHHEADNAME': 'hhHeadName',
             'FARMERNAME': 'hhHeadName',
+            'FARMER_NAME': 'hhHeadName',
+            'FARMER NAME': 'hhHeadName',
             'NAME': 'hhHeadName',
+            'HH_HEAD_NAME': 'hhHeadName',
+            'HH HEAD NAME': 'hhHeadName',
             'FATHER/HUSBANDNAME': 'spouseName',
+            'FATHER_HUSBAND_NAME': 'spouseName',
+            'FATHER HUSBAND NAME': 'spouseName',
             'GUARDIANNAME': 'spouseName',
+            'GUARDIAN_NAME': 'spouseName',
+            'GUARDIAN NAME': 'spouseName',
             'SPOUSENAME': 'spouseName',
+            'SPOUSE_NAME': 'spouseName',
+            'SPOUSE NAME': 'spouseName',
+            'FATHERNAME': 'spouseName',
+            'FATHER NAME': 'spouseName',
+            'HUSBANDNAME': 'spouseName',
+            'HUSBAND NAME': 'spouseName',
             'AGE': 'age',
             'GENDER': 'gender',
             'SEX': 'gender',
             'CATEGORY': 'category',
             'CASTE': 'category',
+            'SOCIAL_CATEGORY': 'category',
+            'SOCIAL CATEGORY': 'category',
             'TRIBE_NAME': 'tribeName',
             'TRIBE': 'tribeName',
+            'TRIBE NAME': 'tribeName',
             'PHONENUMBER': 'phoneNumber',
+            'PHONE_NUMBER': 'phoneNumber',
+            'PHONE NUMBER': 'phoneNumber',
             'MOBILE': 'phoneNumber',
+            'MOBILENUMBER': 'phoneNumber',
+            'MOBILE_NUMBER': 'phoneNumber',
             'CONTACT': 'phoneNumber',
             'AADHARNUMBER': 'aadharNumber',
+            'AADHAR_NUMBER': 'aadharNumber',
+            'AADHAR NUMBER': 'aadharNumber',
             'AADHAR': 'aadharNumber',
             'AADHARNO': 'aadharNumber',
+            'AADHAR_NO': 'aadharNumber',
             'ADHAR': 'aadharNumber',
             'ADHARNO': 'aadharNumber',
+            'ADHAR_NO': 'aadharNumber',
             'ADHARNUMBER': 'aadharNumber',
+            'ADHAR_NUMBER': 'aadharNumber',
             'UID': 'aadharNumber',
             'UIDNO': 'aadharNumber',
+            'UID_NO': 'aadharNumber',
             'TOTALFAMILYMEMBERS': 'totalFamilyMembers',
+            'TOTAL_FAMILY_MEMBERS': 'totalFamilyMembers',
+            'TOTAL FAMILY MEMBERS': 'totalFamilyMembers',
             'FAMILYMEMBERS': 'totalFamilyMembers',
+            'FAMILY_MEMBERS': 'totalFamilyMembers',
+            'FAMILY MEMBERS': 'totalFamilyMembers',
             'FAMILYSIZE': 'totalFamilyMembers',
+            'FAMILY_SIZE': 'totalFamilyMembers',
+            'FAMILY SIZE': 'totalFamilyMembers',
             'HHSIZE': 'totalFamilyMembers',
+            'HH_SIZE': 'totalFamilyMembers',
+            'HH SIZE': 'totalFamilyMembers',
             'TOTALMEMBERS': 'totalFamilyMembers',
+            'TOTAL_MEMBERS': 'totalFamilyMembers',
+            'TOTAL MEMBERS': 'totalFamilyMembers',
             'TOTALMEMBERSINHH': 'totalFamilyMembers',
+            'TOTAL_MEMBERS_IN_HH': 'totalFamilyMembers',
+            'TOTAL MEMBERS IN HH': 'totalFamilyMembers',
+            'TOTALMEMBERS': 'totalFamilyMembers',
+            'TOTAL MEMBERS': 'totalFamilyMembers',
+            'TOTAL_MEMBERS': 'totalFamilyMembers',
+            'HH_TOTAL_MEMBERS': 'totalFamilyMembers',
+            'HH TOTAL MEMBERS': 'totalFamilyMembers',
             'ANNUALINCOME': 'annualIncome',
+            'ANNUAL_INCOME': 'annualIncome',
+            'ANNUAL INCOME': 'annualIncome',
             'INCOME': 'annualIncome',
             'HOUSEHOLDINCOME': 'annualIncome',
-            'YEARLYINCOME': 'annualIncome'
+            'HOUSEHOLD_INCOME': 'annualIncome',
+            'HOUSEHOLD INCOME': 'annualIncome',
+            'YEARLYINCOME': 'annualIncome',
+            'YEARLY_INCOME': 'annualIncome',
+            'YEARLY INCOME': 'annualIncome',
+            'TOTALINCOME': 'annualIncome',
+            'TOTAL_INCOME': 'annualIncome',
+            'TOTAL INCOME': 'annualIncome',
+            'HHINCOMESOURCE': 'incomeSource',
+            'HH_INCOME_SOURCE': 'incomeSource',
+            'HH INCOME SOURCE': 'incomeSource',
+            'LIVESTOCKINCOME': 'livestockIncome',
+            'LIVESTOCK_INCOME': 'livestockIncome',
+            'LIVESTOCK INCOME': 'livestockIncome',
+            'HHINCOMEOTHERS': 'otherIncome',
+            'HH_INCOME_OTHERS': 'otherIncome',
+            'HH INCOME OTHERS': 'otherIncome'
         };
 
-        const cleanHeaders = rawHeaders.map(h => h.toUpperCase().replace(/[^A-Z]/g, ''));
+        const clean = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const normalizedMap: Record<string, string> = {};
+        Object.keys(headersMap).forEach(k => {
+            normalizedMap[clean(k)] = headersMap[k];
+        });
 
-        return lines.slice(1).map(line => {
+        const cleanHeaders = rawHeaders.map(h => clean(h));
+        console.log("Raw Headers:", rawHeaders);
+        console.log("Clean Headers:", cleanHeaders);
+
+        const parsedData = lines.slice(1).map(line => {
             const vals = parseLine(line);
             const row: any = {};
             cleanHeaders.forEach((h, i) => {
-                const key = headersMap[h];
+                const key = normalizedMap[h];
                 if (key) row[key] = (vals[i] || '').toString().trim();
             });
             return row as HouseholdData;
         });
+
+        console.log("Parsed sample:", parsedData.slice(0, 5));
+        return parsedData;
     };
 
     useEffect(() => {
@@ -159,7 +264,7 @@ const BaselinePage: React.FC = () => {
         });
     }, [allData, selectedCluster, selectedGP, selectedVillage, searchQuery]);
 
-    if (loading) return (
+    if (loading && allData.length === 0) return (
         <div className="flex flex-col items-center justify-center min-h-[50vh]">
             <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
             <p className="text-gray-400 font-black uppercase tracking-widest text-[10px]">Loading Household Registry...</p>
@@ -235,7 +340,7 @@ const BaselinePage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                            {filteredData.slice(0, 300).map((row, i) => (
+                            {filteredData.slice(0, 1000).map((row, i) => (
                                 <tr key={i} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-900/10 transition-colors group">
                                     <td className="px-6 py-5">
                                         <div className="font-black text-gray-900 dark:text-white text-sm group-hover:text-indigo-600 transition-colors">{row.hhHeadName}</div>
@@ -268,7 +373,7 @@ const BaselinePage: React.FC = () => {
                 </div>
 
                 <div className="md:hidden grid grid-cols-1 gap-4">
-                    {filteredData.slice(0, 100).map((row, i) => (
+                    {filteredData.slice(0, 500).map((row, i) => (
                         <div 
                             key={i} 
                             onClick={() => setSelectedBeneficiary(row)}
@@ -299,22 +404,24 @@ const BaselinePage: React.FC = () => {
 
             {/* Redesigned Detail Modal Overlay */}
             {selectedBeneficiary && (
-                <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" onClick={() => setSelectedBeneficiary(null)}>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+                    {/* Backdrop */}
                     <div 
-                        className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-t-[2.5rem] sm:rounded-[3rem] shadow-2xl flex flex-col max-h-[95vh] overflow-hidden transform transition-all animate-slide-up"
+                        className="absolute inset-0 bg-black/60 backdrop-blur-md animate-fade-in" 
+                        onClick={() => setSelectedBeneficiary(null)}
+                    />
+                    
+                    {/* Modal Content */}
+                    <div 
+                        className="relative bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-scale-in z-[101]"
                         onClick={e => e.stopPropagation()}
                     >
-                        {/* Mobile Handle */}
-                        <div className="sm:hidden flex justify-center py-2.5">
-                            <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full opacity-50"></div>
-                        </div>
-
-                        {/* Static Header (Always Visible) */}
+                        {/* Static Header */}
                         <div className="px-6 py-5 sm:px-10 sm:py-8 border-b border-gray-100 dark:border-gray-800 flex justify-between items-start bg-white dark:bg-gray-900">
                             <div className="space-y-1.5">
                                 <div className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest inline-block mb-1">Household Profile</div>
                                 <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white leading-tight uppercase pr-4">
-                                    {selectedBeneficiary.hhHeadName}
+                                    {selectedBeneficiary.hhHeadName || 'Unknown Beneficiary'}
                                 </h2>
                                 <div className="flex flex-col gap-0.5">
                                     <p className="text-[11px] font-bold text-indigo-500 tracking-tighter uppercase">Farmer ID: {selectedBeneficiary.farmerId || '---'}</p>
@@ -323,7 +430,7 @@ const BaselinePage: React.FC = () => {
                             </div>
                             <button 
                                 onClick={() => setSelectedBeneficiary(null)}
-                                className="p-3 bg-gray-50 dark:bg-gray-800 rounded-2xl hover:bg-gray-100 transition-colors flex-shrink-0"
+                                className="p-3 bg-gray-50 dark:bg-gray-800 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
                             >
                                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
@@ -338,6 +445,9 @@ const BaselinePage: React.FC = () => {
                                 <DetailItem label="Age & Gender" value={`${selectedBeneficiary.age} Years • ${selectedBeneficiary.gender}`} />
                                 <DetailItem label="Total Family Members" value={selectedBeneficiary.totalFamilyMembers || '---'} highlight />
                                 <DetailItem label="Annual Income" value={selectedBeneficiary.annualIncome ? `₹${selectedBeneficiary.annualIncome}` : '---'} highlight />
+                                <DetailItem label="Income Source" value={selectedBeneficiary.incomeSource || '---'} />
+                                <DetailItem label="Livestock Income" value={selectedBeneficiary.livestockIncome ? `₹${selectedBeneficiary.livestockIncome}` : '---'} />
+                                <DetailItem label="Other Income" value={selectedBeneficiary.otherIncome ? `₹${selectedBeneficiary.otherIncome}` : '---'} />
                                 <DetailItem label="Category" value={selectedBeneficiary.category} />
                                 <DetailItem label="Tribe Name" value={selectedBeneficiary.tribeName} />
                                 <DetailItem label="Village" value={selectedBeneficiary.village} />
@@ -361,10 +471,16 @@ const BaselinePage: React.FC = () => {
             )}
 
             <style>{`
-                @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
-                .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-                @media (min-width: 640px) {
-                    .animate-slide-up { animation: fade-in 0.4s ease-out forwards; }
+                .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
+                .animate-scale-in { animation: scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                
+                @keyframes fade-in {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes scale-in {
+                    from { transform: scale(0.95); opacity: 0; }
+                    to { transform: scale(1); opacity: 1; }
                 }
             `}</style>
         </div>
@@ -374,7 +490,7 @@ const BaselinePage: React.FC = () => {
 const DetailItem: React.FC<{ label: string; value: string; isContact?: boolean; highlight?: boolean }> = ({ label, value, isContact, highlight }) => (
     <div className={`space-y-1.5 p-4 rounded-2xl border transition-colors ${highlight ? 'bg-indigo-50 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800' : 'bg-white dark:bg-gray-800/80 border-gray-100 dark:border-gray-700 hover:border-indigo-200 shadow-sm'}`}>
         <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">{label}</p>
-        <p className={`text-sm font-bold ${isContact ? 'text-emerald-600' : highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-800 dark:text-gray-200'}`}>
+        <p className={`text-sm font-bold break-all ${isContact ? 'text-emerald-600' : highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-800 dark:text-gray-200'}`}>
             {value || '---'}
         </p>
     </div>

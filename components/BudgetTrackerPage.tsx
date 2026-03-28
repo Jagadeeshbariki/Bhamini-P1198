@@ -66,12 +66,12 @@ const parseCSV = (csv: string): BudgetRow[] => {
             year: row['YEAR'] || '',
             quarter: row['QUARTER'] || '',
             months: row['MONTHS'] || '',
-            headCode: row['HEADCODE'] || row['HEAD_CODE'] || '',
-            budgetHead: row['BUDGETHEAD'] || row['BUDGET_HEAD'] || '',
-            targetAmount: parseFloat((row['TARGETAMOUNT'] || '0').replace(/[^0-9.]/g, '')) || 0,
-            unitsToCover: parseFloat((row['UNITSTOCOVER'] || '0').replace(/[^0-9.]/g, '')) || 0,
-            spentAmount: parseFloat((row['SPENTAMONT'] || row['SPENTAMOUNT'] || '0').replace(/[^0-9.]/g, '')) || 0,
-            unitsCovered: parseFloat((row['UNITSCOVERED'] || '0').replace(/[^0-9.]/g, '')) || 0
+            headCode: row['HEADCODE'] || row['HEAD_CODE'] || row['HEAD CODE'] || '',
+            budgetHead: row['BUDGETHEAD'] || row['BUDGET_HEAD'] || row['BUDGET HEAD'] || '',
+            targetAmount: parseFloat((row['TARGETAMOUNT'] || row['TARGET_AMOUNT'] || row['TARGET AMOUNT'] || '0').replace(/[^0-9.]/g, '')) || 0,
+            unitsToCover: parseFloat((row['UNITSTOCOVER'] || row['UNITS_TO_COVER'] || row['UNITS TO COVER'] || '0').replace(/[^0-9.]/g, '')) || 0,
+            spentAmount: parseFloat((row['SPENTAMOUNT'] || row['SPENT_AMOUNT'] || row['SPENT AMOUNT'] || row['SPENTAMONT'] || '0').replace(/[^0-9.]/g, '')) || 0,
+            unitsCovered: parseFloat((row['UNITSCOVERED'] || row['UNITS_COVERED'] || row['UNITS COVERED'] || '0').replace(/[^0-9.]/g, '')) || 0
         };
     });
 };
@@ -109,6 +109,7 @@ const BudgetTrackerPage: React.FC = () => {
         const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
         try {
+            console.log("Fetching budget data from:", BUDGET_CSV_URL);
             const response = await fetch(`${BUDGET_CSV_URL}${BUDGET_CSV_URL.includes('?') ? '&' : '?'}t=${Date.now()}`, { 
                 signal: controller.signal 
             });
@@ -117,11 +118,14 @@ const BudgetTrackerPage: React.FC = () => {
             if (!response.ok) throw new Error(`Server responded with ${response.status}`);
             
             const text = await response.text();
+            console.log("Raw CSV length:", text?.length || 0);
+            
             if (!text || text.trim().length === 0) {
                 throw new Error("Received empty data from spreadsheet");
             }
             
             const parsed = parseCSV(text);
+            console.log("Parsed records:", parsed.length);
             setAllData(parsed);
         } catch (err: any) {
             console.error("Fetch error:", err);
@@ -238,7 +242,7 @@ const BudgetTrackerPage: React.FC = () => {
         };
     }, [filteredData]);
 
-    if (loading) return (
+    if (loading && allData.length === 0) return (
         <div className="flex flex-col items-center justify-center min-h-[70vh]">
             <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-6"></div>
             <p className="text-gray-500 font-black uppercase tracking-[0.3em] text-[10px] animate-pulse">Syncing Field Targets...</p>
