@@ -47,6 +47,30 @@ function doPost(e) {
       return handlePhotoUpload(data);
     }
     
+    if (data.action === 'addPhoto') {
+      return handleAddPhoto(data);
+    }
+
+    if (data.action === 'deletePhoto') {
+      return handleDeletePhoto(data);
+    }
+
+    if (data.action === 'addAchievement') {
+      return handleAddAchievement(data);
+    }
+
+    if (data.action === 'addBill') {
+      return handleAddBill(data);
+    }
+
+    if (data.action === 'updateAsset') {
+      return handleUpdateAsset(data);
+    }
+
+    if (data.action === 'updateBillStatus') {
+      return handleUpdateBillStatus(data);
+    }
+    
     if (data.action === 'updateBudgetPerformance') {
       return handleBudgetUpdate(data);
     }
@@ -206,6 +230,116 @@ function handleBudgetUpdate(data) {
     status: 'success', 
     message: "Updated " + updatedCount + " activities in HDFC_Target successfully." 
   })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleAddPhoto(data) {
+  const folder = DriveApp.getFolderById(FOLDER_ID);
+  const blob = Utilities.newBlob(Utilities.base64Decode(data.data), data.mimeType, data.fileName);
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const url = file.getUrl();
+  
+  const sheet = getSheetByGid(14172760); // PHOTOS sheet
+  if (sheet) {
+    sheet.appendRow([new Date(), url, data.type, data.description, data.activity]);
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: 'success', url: url }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleDeletePhoto(data) {
+  const sheet = getSheetByGid(14172760);
+  if (!sheet) throw new Error("Photos sheet not found");
+  
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][1] === data.url) {
+      sheet.deleteRow(i + 1);
+      break;
+    }
+  }
+  
+  // Also try to delete from Drive
+  try {
+    const id = data.url.split('id=')[1] || data.url.split('/d/')[1].split('/')[0];
+    DriveApp.getFileById(id).setTrashed(true);
+  } catch (e) {
+    console.error("Could not delete from Drive: " + e.message);
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleAddAchievement(data) {
+  const sheet = getSheetByGid(1127739857); // MIS_ACHIEVEMENTS
+  if (!sheet) throw new Error("Achievements sheet not found");
+  
+  sheet.appendRow([new Date(), data.id, data.value, data.gp, data.remarks]);
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleAddBill(data) {
+  let url = '';
+  if (data.data) {
+    const folder = DriveApp.getFolderById(FOLDER_ID);
+    const blob = Utilities.newBlob(Utilities.base64Decode(data.data), 'application/pdf', 'bill_' + Date.now() + '.pdf');
+    const file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    url = file.getUrl();
+  }
+  
+  const sheet = getSheetByGid(1851901743); // MAINTENANCE
+  if (!sheet) throw new Error("Maintenance sheet not found");
+  
+  const id = 'BILL-' + Math.floor(Math.random() * 1000000);
+  sheet.appendRow([new Date(), id, data.date, data.category, data.description, data.amount, 'Pending with me', url]);
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleUpdateAsset(data) {
+  const sheet = getSheetByGid(0); // ASSETS
+  if (!sheet) throw new Error("Assets sheet not found");
+  
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0].map(h => h.toString().toUpperCase());
+  const idCol = headers.indexOf('SNO') === -1 ? headers.indexOf('ID') : headers.indexOf('SNO');
+  const statusCol = headers.indexOf('STATUSOFTHEASSET');
+  const paymentCol = headers.indexOf('PAYMENTSTATUS');
+  const receivedCol = headers.indexOf('HOWMANYRECEIVED');
+  
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][idCol].toString() === data.id.toString()) {
+      if (statusCol !== -1) sheet.getRange(i + 1, statusCol + 1).setValue(data.assetStatus);
+      if (paymentCol !== -1) sheet.getRange(i + 1, paymentCol + 1).setValue(data.paymentStatus);
+      if (receivedCol !== -1) sheet.getRange(i + 1, receivedCol + 1).setValue(data.qtyReceived);
+      break;
+    }
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleUpdateBillStatus(data) {
+  const sheet = getSheetByGid(1851901743);
+  if (!sheet) throw new Error("Maintenance sheet not found");
+  
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][1].toString() === data.id.toString()) {
+      sheet.getRange(i + 1, 7).setValue(data.status); // Status is usually 7th column
+      break;
+    }
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function getSheetByGid(gid) {

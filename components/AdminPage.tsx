@@ -305,6 +305,8 @@ const AdminPage: React.FC = () => {
         let successCount = 0;
         let errorCount = 0;
 
+        let lastErrorMessage = '';
+
         try {
             for (let i = 0; i < selectedFiles.length; i++) {
                 const file = selectedFiles[i];
@@ -318,7 +320,6 @@ const AdminPage: React.FC = () => {
                     type: uploadType,
                     description: photoDescription || 'Field Entry',
                     activity: photoActivity,
-                    Activity: photoActivity,
                     data: base64Data
                 };
 
@@ -336,9 +337,11 @@ const AdminPage: React.FC = () => {
                         successCount++;
                     } else {
                         errorCount++;
+                        lastErrorMessage = data.message || 'Unknown error from script';
                     }
                 } catch {
                     errorCount++;
+                    lastErrorMessage = 'Invalid JSON response from script. Check if the script is deployed as "Anyone".';
                 }
             }
 
@@ -353,10 +356,10 @@ const AdminPage: React.FC = () => {
                 setPhotoActivity('');
                 fetchData();
             } else {
-                setUploadStatus({ success: false, message: 'All uploads failed. Check script deployment.' });
+                setUploadStatus({ success: false, message: `All uploads failed. Script Error: ${lastErrorMessage}` });
             }
-        } catch {
-            setUploadStatus({ success: false, message: 'Connection error during multiple upload.' });
+        } catch (err) {
+            setUploadStatus({ success: false, message: `Connection error: ${err instanceof Error ? err.message : 'Unknown error'}` });
         } finally {
             setIsUploading(false);
         }
@@ -397,13 +400,17 @@ const AdminPage: React.FC = () => {
         } finally { setIsSubmittingAsset(false); }
     };
 
-    const handleUpdateBillStatus = async (id: string, status: string) => {
+    const handleUpdateBillStatus = async (billId: string, status: string) => {
         try {
             const res = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify({ action: 'updateBillStatus', id, status })
+                method: 'POST', 
+                mode: 'cors', 
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({ action: 'updateBillStatus', billId, status })
             });
-            if ((await res.json()).status === 'success') fetchData();
+            const data = await res.json();
+            if (data.status === 'success') fetchData();
+            else alert("Update failed: " + data.message);
         } catch { alert("Status update failed."); }
     };
 
@@ -621,9 +628,29 @@ const AdminPage: React.FC = () => {
                         </div>
                         <button onClick={async () => {
                             setIsSubmittingMIS(true);
-                            const res = await fetch(GOOGLE_APPS_SCRIPT_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: 'addAchievement', id: selectedActivityId, value: achievementValue, gp: achievementGP, remarks: achievementRemarks }) });
-                            if ((await res.json()).status === 'success') { setAchievementValue(''); setAchievementGP(''); setAchievementRemarks(''); fetchData(); }
-                            setIsSubmittingMIS(false);
+                            try {
+                                const res = await fetch(GOOGLE_APPS_SCRIPT_URL, { 
+                                    method: 'POST', 
+                                    mode: 'cors', 
+                                    headers: { 'Content-Type': 'text/plain' },
+                                    body: JSON.stringify({ action: 'addAchievement', id: selectedActivityId, value: achievementValue, gp: achievementGP, remarks: achievementRemarks }) 
+                                });
+                                const raw = await res.text();
+                                const data = JSON.parse(raw);
+                                if (data.status === 'success') { 
+                                    setAchievementValue(''); 
+                                    setAchievementGP(''); 
+                                    setAchievementRemarks(''); 
+                                    fetchData(); 
+                                    alert("MIS Achievement synced successfully!");
+                                } else {
+                                    alert("Sync failed: " + (data.message || "Unknown error"));
+                                }
+                            } catch (err) {
+                                alert("Connection error: " + (err instanceof Error ? err.message : "Unknown error"));
+                            } finally {
+                                setIsSubmittingMIS(false);
+                            }
                         }} disabled={isSubmittingMIS} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all">
                             {isSubmittingMIS ? "Syncing..." : "Sync MIS Achievement"}
                         </button>
@@ -656,9 +683,38 @@ const AdminPage: React.FC = () => {
                                     <textarea value={billDescription} onChange={e => setBillDescription(e.target.value)} placeholder="Purpose..." className="w-full p-4 bg-white rounded-xl text-xs font-bold ring-1 ring-gray-100" />
                                     <button onClick={async () => {
                                         setIsSubmittingBill(true);
-                                        const res = await fetch(GOOGLE_APPS_SCRIPT_URL, { method: 'POST', mode: 'cors', body: JSON.stringify({ action: 'addBill', date: billDate, category: billCategory, amount: billAmount, description: billDescription, data: billPreview?.split(',')[1] }) });
-                                        if ((await res.json()).status === 'success') { setBillAmount(''); setBillDescription(''); fetchData(); }
-                                        setIsSubmittingBill(false);
+                                        try {
+                                            const res = await fetch(GOOGLE_APPS_SCRIPT_URL, { 
+                                                method: 'POST', 
+                                                mode: 'cors', 
+                                                headers: { 'Content-Type': 'text/plain' },
+                                                body: JSON.stringify({ 
+                                                    action: 'addMaintenanceBill', 
+                                                    date: billDate, 
+                                                    category: billCategory, 
+                                                    amount: billAmount, 
+                                                    description: billDescription, 
+                                                    billData: billPreview?.split(',')[1],
+                                                    fileName: `bill_${Date.now()}.jpg`,
+                                                    mimeType: 'image/jpeg',
+                                                    status: 'Pending with me'
+                                                }) 
+                                            });
+                                            const raw = await res.text();
+                                            const data = JSON.parse(raw);
+                                            if (data.status === 'success') { 
+                                                setBillAmount(''); 
+                                                setBillDescription(''); 
+                                                fetchData(); 
+                                                alert("Bill published successfully!");
+                                            } else {
+                                                alert("Upload failed: " + (data.message || "Unknown error"));
+                                            }
+                                        } catch (err) {
+                                            alert("Connection error: " + (err instanceof Error ? err.message : "Unknown error"));
+                                        } finally {
+                                            setIsSubmittingBill(false);
+                                        }
                                     }} disabled={isSubmittingBill} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-xl">
                                         {isSubmittingBill ? "Uploading..." : "Publish to Ledger"}
                                     </button>
@@ -692,9 +748,17 @@ const AdminPage: React.FC = () => {
                                 <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6">Commit Update</h3>
                                 <div className="space-y-4">
                                     <select value={selectedAssetId} onChange={e => {
-                                        const id = e.target.value; setSelectedAssetId(id);
+                                        const id = e.target.value; 
+                                        setSelectedAssetId(id);
                                         const found = assetsList.find(a => a.id === id);
-                                        if (found) setAssetForm({ assetStatus: found.assetStatus, paymentStatus: found.paymentStatus, qtyReceived: found.qtyReceived });
+                                        if (found) {
+                                            setAssetForm({ 
+                                                ...found,
+                                                assetStatus: found.assetStatus, 
+                                                paymentStatus: found.paymentStatus, 
+                                                qtyReceived: found.qtyReceived 
+                                            });
+                                        }
                                     }} className="w-full p-4 bg-white dark:bg-gray-800 rounded-2xl font-bold text-xs">
                                         <option value="">Select Asset...</option>
                                         {assetsList.map(a => <option key={a.id} value={a.id}>{a.assetName}</option>)}
