@@ -47,6 +47,10 @@ function doPost(e) {
       return handlePhotoUpload(data);
     }
     
+    if (data.action === 'updateBudgetPerformance') {
+      return handleBudgetUpdate(data);
+    }
+    
     return handleAttendance(data);
     
   } catch (error) {
@@ -152,6 +156,64 @@ function handleAttendance(data) {
   
   return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleBudgetUpdate(data) {
+  const { year, month, type, updates } = data;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("HDFC_Target");
+  
+  if (!sheet) throw new Error("Sheet 'HDFC_Target' not found. Please ensure the tab name is exactly 'HDFC_Target'.");
+  
+  const range = sheet.getDataRange();
+  const rows = range.getValues();
+  const headers = rows[0].map(h => h.toString().toUpperCase().replace(/[\s_]+/g, ''));
+  
+  const yearCol = headers.indexOf('YEAR');
+  const monthsCol = headers.indexOf('MONTHS');
+  const headCodeCol = headers.findIndex(h => h === 'HEADCODE' || h === 'HEAD_CODE');
+  const spentCol = headers.findIndex(h => h === 'SPENTAMONT' || h === 'SPENTAMOUNT');
+  const unitsCol = headers.indexOf('UNITSCOVERED');
+  
+  if (yearCol === -1 || monthsCol === -1 || headCodeCol === -1) {
+    throw new Error("Required columns (YEAR, MONTHS, HEADCODE) not found in 'HDFC_Target' sheet.");
+  }
+  
+  const updateCol = type === 'budget' ? spentCol : unitsCol;
+  if (updateCol === -1) {
+    throw new Error("Update column (" + (type === 'budget' ? 'SPENTAMONT' : 'UNITSCOVERED') + ") not found.");
+  }
+  
+  let updatedCount = 0;
+  updates.forEach(update => {
+    const { code, value } = update;
+    for (let i = 1; i < rows.length; i++) {
+      const rowYear = rows[i][yearCol].toString().trim();
+      const rowMonths = rows[i][monthsCol].toString().toLowerCase();
+      const rowCode = rows[i][headCodeCol].toString().trim();
+      
+      if (rowYear === year && rowMonths.includes(month.toLowerCase()) && rowCode === code) {
+        // Add the new value to the existing value (Additive Update)
+        const currentValue = parseFloat(rows[i][updateCol]) || 0;
+        sheet.getRange(i + 1, updateCol + 1).setValue(currentValue + value);
+        updatedCount++;
+        break; 
+      }
+    }
+  });
+  
+  return ContentService.createTextOutput(JSON.stringify({ 
+    status: 'success', 
+    message: "Updated " + updatedCount + " activities in HDFC_Target successfully." 
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function getSheetByGid(gid) {
+  const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
+  for (let i = 0; i < sheets.length; i++) {
+    if (sheets[i].getSheetId() == gid) return sheets[i];
+  }
+  return null;
 }
 
 function normalizeId(id) {

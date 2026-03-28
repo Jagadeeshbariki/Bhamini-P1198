@@ -18,7 +18,12 @@ const Dashboard: React.FC<DashboardProps> = ({ activityId }) => {
             'healthcare': 'p_ghi789',  // Replace with actual Page ID for Health
             'wash': 'p_jkl012',        // Replace with actual Page ID for WASH
             'financial': 'p_mno345',   // Replace with actual Page ID for Financial
-            'infrastructure': 'p_pqr678' // Replace with actual Page ID for Infrastructure
+            'infrastructure': 'p_pqr678', // Replace with actual Page ID for Infrastructure
+            'byp-poultry': 'p_byp123',    // Added BYP Poultry
+            'elevated-goat-shed': 'p_goat456', // Added Elevated Goat Shed
+            'byp-poultry-ls': 'p_byp123',    // Added BYP Poultry LS
+            'elevated-goat-shed-ls': 'p_goat456', // Added Elevated Goat Shed LS
+            'dashboard': 'l5bjF'           // Default dashboard
         };
 
         const pageId = pageMapping[id] || 'l5bjF'; // Default to Hari

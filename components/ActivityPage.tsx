@@ -4,6 +4,8 @@ import Dashboard from './Dashboard';
 import AssetTrackingDashboard from './AssetTrackingDashboard';
 import BeneficiaryExplorer from './BeneficiaryExplorer';
 import EcoFarmpondPage from './EcoFarmpondPage';
+import BYPPage from './BYPPage';
+import ElevatedGoatShedPage from './ElevatedGoatShedPage';
 
 export interface ActivityType {
     id: string;
@@ -12,9 +14,14 @@ export interface ActivityType {
 }
 
 const ACTIVITIES: ActivityType[] = [
+    { id: 'dashboard', name: 'Dashboard', description: 'General Looker Studio dashboards for various activities.' },
+    { id: 'byp-poultry-ls', name: 'BYP Poultry Dashboard', description: 'Looker Studio monitoring for BYP Poultry.' },
+    { id: 'elevated-goat-shed-ls', name: 'Elevated Goat Shed Dashboard', description: 'Looker Studio monitoring for Elevated Goat Shed.' },
     { id: 'assets', name: 'Asset Tracking System', description: 'Interactive inventory, procurement ledger, and stock point monitoring.' },
     { id: 'beneficiary', name: 'Beneficiary Explorer', description: 'Detailed explorer for project beneficiaries and demographics.' },
     { id: 'eco-farmpond', name: 'Eco-farmpond', description: 'Project monitoring and contribution analysis for farmpond beneficiaries.' },
+    { id: 'byp-poultry', name: 'BYP Poultry Explorer', description: 'Backyard Poultry project monitoring and tracking.' },
+    { id: 'elevated-goat-shed', name: 'Elevated Goat Shed Explorer', description: 'Monitoring and tracking for elevated goat shed beneficiaries.' },
 ];
 
 const ActivityPage: React.FC = () => {
@@ -35,6 +42,12 @@ const ActivityPage: React.FC = () => {
         }
         if (selectedActivity.id === 'eco-farmpond') {
             return <EcoFarmpondPage />;
+        }
+        if (selectedActivity.id === 'byp-poultry') {
+            return <BYPPage />;
+        }
+        if (selectedActivity.id === 'elevated-goat-shed') {
+            return <ElevatedGoatShedPage />;
         }
         return <Dashboard activityId={selectedActivity.id} />;
     };

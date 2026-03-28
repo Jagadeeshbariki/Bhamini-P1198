@@ -3,7 +3,7 @@ export interface AuthUser {
   username: string;
   email?: string;
   isAdmin?: boolean;
-  role: 'field' | 'project' | 'admin' | 'da';
+  role: 'field' | 'project' | 'admin' | 'da' | 'tl';
   project?: string;
   token?: string;
 }

@@ -1,15 +1,22 @@
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useContext, useCallback } from 'react';
 import { 
-    Search, Filter, Activity, Calendar, PieChart as PieChartIcon, 
-    Target, TrendingUp, Clock, Users 
+    Search, Activity, Calendar, PieChart as PieChartIcon, 
+    Target, TrendingUp, Clock, Users,
+    AlertCircle, CheckCircle2, X, Plus, Trash2
 } from 'lucide-react';
 import { 
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
-    CartesianGrid, Tooltip, Cell, Legend 
+    CartesianGrid, Tooltip, Cell, PieChart, Pie
 } from 'recharts';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+import { AuthContext } from '../contexts/AuthContext';
+import { GOOGLE_APPS_SCRIPT_URL, BUDGET_CSV_URL } from '../config';
 
-const BUDGET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQgIQP5-BbSLrJRyN-E___LfrW-uQlNa3iZ4AbFfKM3Ne_FHlFeRXbHG2Xk5JYQhh9o_HLekVTmwsh6/pub?gid=1547578809&single=true&output=csv';
+function cn(...inputs: ClassValue[]) {
+    return twMerge(clsx(inputs));
+}
 
 const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -31,7 +38,49 @@ interface BudgetRow {
     unitsCovered: number;
 }
 
+const parseCSV = (csv: string): BudgetRow[] => {
+    const lines = csv.trim().split(/\r\n|\n/);
+    if (lines.length < 1) return [];
+    
+    const parseLine = (line: string): string[] => {
+        const values = [];
+        let inQuote = false, val = '';
+        for (let j = 0; j < line.length; j++) {
+            if (line[j] === '"') inQuote = !inQuote;
+            else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
+            else val += line[j];
+        }
+        values.push(val.trim().replace(/^"|"$/g, ''));
+        return values;
+    };
+
+    const rawHeaders = parseLine(lines[0]);
+    const headers = rawHeaders.map(h => h.toUpperCase().replace(/[\s_]+/g, ''));
+    
+    return lines.slice(1).map(line => {
+        const vals = parseLine(line);
+        const row: any = {};
+        headers.forEach((h, i) => row[h] = vals[i] || '');
+        
+        return {
+            year: row['YEAR'] || '',
+            quarter: row['QUARTER'] || '',
+            months: row['MONTHS'] || '',
+            headCode: row['HEADCODE'] || row['HEAD_CODE'] || '',
+            budgetHead: row['BUDGETHEAD'] || row['BUDGET_HEAD'] || '',
+            targetAmount: parseFloat((row['TARGETAMOUNT'] || '0').replace(/[^0-9.]/g, '')) || 0,
+            unitsToCover: parseFloat((row['UNITSTOCOVER'] || '0').replace(/[^0-9.]/g, '')) || 0,
+            spentAmount: parseFloat((row['SPENTAMONT'] || row['SPENTAMOUNT'] || '0').replace(/[^0-9.]/g, '')) || 0,
+            unitsCovered: parseFloat((row['UNITSCOVERED'] || '0').replace(/[^0-9.]/g, '')) || 0
+        };
+    });
+};
+
 const BudgetTrackerPage: React.FC = () => {
+    const authContext = useContext(AuthContext);
+    const user = authContext?.user;
+    const isAuthorized = user?.role === 'admin' || user?.role === 'tl';
+
     const [allData, setAllData] = useState<BudgetRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -43,61 +92,52 @@ const BudgetTrackerPage: React.FC = () => {
     const [selectedActivity, setSelectedActivity] = useState<string>('All');
     const [searchQuery, setSearchQuery] = useState('');
 
-    const parseCSV = (csv: string): BudgetRow[] => {
-        const lines = csv.trim().split(/\r\n|\n/);
-        if (lines.length < 1) return [];
-        
-        const parseLine = (line: string): string[] => {
-            const values = [];
-            let inQuote = false, val = '';
-            for (let j = 0; j < line.length; j++) {
-                if (line[j] === '"') inQuote = !inQuote;
-                else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
-                else val += line[j];
-            }
-            values.push(val.trim().replace(/^"|"$/g, ''));
-            return values;
-        };
+    // Update Form State
+    const [showUpdateForm, setShowUpdateForm] = useState(false);
+    const [updateYear, setUpdateYear] = useState('');
+    const [updateMonth, setUpdateMonth] = useState('');
+    const [updateType, setUpdateType] = useState<'budget' | 'units'>('budget');
+    const [updateActivities, setUpdateActivities] = useState<string[]>([]);
+    const [updateValues, setUpdateValues] = useState<Record<string, number>>({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-        const rawHeaders = parseLine(lines[0]);
-        const headers = rawHeaders.map(h => h.toUpperCase().replace(/[\s_]+/g, ''));
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
         
-        return lines.slice(1).map(line => {
-            const vals = parseLine(line);
-            const row: any = {};
-            headers.forEach((h, i) => row[h] = vals[i] || '');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+        try {
+            const response = await fetch(`${BUDGET_CSV_URL}${BUDGET_CSV_URL.includes('?') ? '&' : '?'}t=${Date.now()}`, { 
+                signal: controller.signal 
+            });
+            clearTimeout(timeoutId);
             
-            return {
-                year: row['YEAR'] || '',
-                quarter: row['QUARTER'] || '',
-                months: row['MONTHS'] || '',
-                headCode: row['HEADCODE'] || row['HEAD_CODE'] || '',
-                budgetHead: row['BUDGETHEAD'] || row['BUDGET_HEAD'] || '',
-                targetAmount: parseFloat((row['TARGETAMOUNT'] || '0').replace(/[^0-9.]/g, '')) || 0,
-                unitsToCover: parseFloat((row['UNITSTOCOVER'] || '0').replace(/[^0-9.]/g, '')) || 0,
-                spentAmount: parseFloat((row['SPENTAMONT'] || row['SPENTAMOUNT'] || '0').replace(/[^0-9.]/g, '')) || 0,
-                unitsCovered: parseFloat((row['UNITSCOVERED'] || '0').replace(/[^0-9.]/g, '')) || 0
-            };
-        });
-    };
+            if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+            
+            const text = await response.text();
+            if (!text || text.trim().length === 0) {
+                throw new Error("Received empty data from spreadsheet");
+            }
+            
+            const parsed = parseCSV(text);
+            setAllData(parsed);
+        } catch (err: any) {
+            console.error("Fetch error:", err);
+            if (err.name === 'AbortError') {
+                setError("Request timed out. The spreadsheet might be taking too long to respond. Please try again.");
+            } else {
+                setError(err.message || "An unexpected error occurred while loading data.");
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const response = await fetch(`${BUDGET_CSV_URL}&t=${Date.now()}`);
-                if (!response.ok) throw new Error("Could not load budget data");
-                const text = await response.text();
-                const parsed = parseCSV(text);
-                setAllData(parsed);
-            } catch (err: any) {
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchData();
-    }, []);
+    }, [fetchData]);
 
     const filterOptions = useMemo(() => {
         const monthsSet = new Set<string>();
@@ -137,76 +177,65 @@ const BudgetTrackerPage: React.FC = () => {
     }, [allData, selectedYear, selectedQuarter, selectedMonth, selectedActivity, searchQuery]);
 
     const stats = useMemo(() => {
-        const totalAmount = filteredData.reduce((acc, d) => acc + d.targetAmount, 0);
-        const totalUnits = filteredData.reduce((acc, d) => acc + d.unitsToCover, 0);
+        const totalBudget = filteredData.reduce((acc, d) => acc + d.targetAmount, 0);
         const totalSpent = filteredData.reduce((acc, d) => acc + d.spentAmount, 0);
-        const totalPending = Math.max(0, totalAmount - totalSpent);
+        const totalUnitsTarget = filteredData.reduce((acc, d) => acc + d.unitsToCover, 0);
+        const totalUnitsCovered = filteredData.reduce((acc, d) => acc + d.unitsCovered, 0);
         
-        const headCodeMap = new Map<string, { target: number, spent: number, pending: number, name: string, unitsTarget: number, unitsAchievement: number }>();
+        const headCodeMap = new Map<string, { target: number, spent: number, name: string, unitsTarget: number, unitsCovered: number }>();
         filteredData.forEach(d => {
-            const current = headCodeMap.get(d.headCode) || { target: 0, spent: 0, pending: 0, name: d.budgetHead, unitsTarget: 0, unitsAchievement: 0 };
-            const newTarget = current.target + d.targetAmount;
-            const newSpent = current.spent + d.spentAmount;
-            const newUnitsTarget = current.unitsTarget + d.unitsToCover;
-            const newUnitsAchievement = current.unitsAchievement + d.unitsCovered;
-            
+            const current = headCodeMap.get(d.headCode) || { target: 0, spent: 0, name: d.budgetHead, unitsTarget: 0, unitsCovered: 0 };
             headCodeMap.set(d.headCode, { 
-                target: newTarget,
-                spent: newSpent,
-                pending: Math.max(0, newTarget - newSpent),
+                target: current.target + d.targetAmount,
+                spent: current.spent + d.spentAmount,
                 name: d.budgetHead,
-                unitsTarget: newUnitsTarget,
-                unitsAchievement: newUnitsAchievement
+                unitsTarget: current.unitsTarget + d.unitsToCover,
+                unitsCovered: current.unitsCovered + d.unitsCovered
             });
         });
 
-        const budgetAnalysisData = Array.from(headCodeMap.entries())
-            .map(([code, data]) => ({ 
-                name: code,
-                fullName: data.name,
-                Target: data.target,
-                Achievement: data.spent,
-                Pending: data.pending,
-                UnitsTarget: data.unitsTarget,
-                UnitsAchievement: data.unitsAchievement
-            }))
-            .sort((a, b) => b.Target - a.Target)
-            .slice(0, 15);
-
-        const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
-        const qData = quarters.map(q => {
-            const qRows = filteredData.filter(d => d.quarter.includes(q));
+        const activityData = Array.from(headCodeMap.entries()).map(([code, data]) => {
+            const achievementRate = data.target > 0 ? (data.spent / data.target) * 100 : 0;
+            const unitsRate = data.unitsTarget > 0 ? (data.unitsCovered / data.unitsTarget) * 100 : 0;
             return {
-                name: q,
-                target: qRows.reduce((acc, d) => acc + d.targetAmount, 0),
-                spent: qRows.reduce((acc, d) => acc + d.spentAmount, 0),
-                unitsTarget: qRows.reduce((acc, d) => acc + d.unitsToCover, 0),
-                unitsAchievement: qRows.reduce((acc, d) => acc + d.unitsCovered, 0)
+                code,
+                name: data.name,
+                target: data.target,
+                spent: data.spent,
+                unitsTarget: data.unitsTarget,
+                unitsCovered: data.unitsCovered,
+                achievementRate,
+                unitsRate,
+                isOverspent: data.spent > data.target
             };
         });
-        const maxQ = Math.max(...qData.map(q => Math.max(q.target, q.spent))) || 1;
-        const maxQUnits = Math.max(...qData.map(q => Math.max(q.unitsTarget, q.unitsAchievement))) || 1;
 
-        const activityQuarterlyData = Array.from(headCodeMap.entries())
-            .map(([code, data]) => {
-                const activityRows = filteredData.filter(d => d.headCode === code);
-                const qBreakdown: any = { 
-                    name: code, 
-                    fullName: data.name,
-                    totalTarget: data.unitsTarget,
-                    totalAchievement: data.unitsAchievement
-                };
-                ['Q1', 'Q2', 'Q3', 'Q4'].forEach(q => {
-                    const qRows = activityRows.filter(d => d.quarter.includes(q));
-                    qBreakdown[`${q}_Target`] = qRows.reduce((acc, d) => acc + d.unitsToCover, 0);
-                    qBreakdown[`${q}_Achievement`] = qRows.reduce((acc, d) => acc + d.unitsCovered, 0);
-                });
-                return qBreakdown;
-            })
-            .sort((a, b) => b.totalTarget - a.totalTarget)
-            .slice(0, 6); // Top 6 for readability in clustered view
+        const overspentActivities = activityData.filter(a => a.isOverspent);
+        const below50Progress = activityData.filter(a => a.unitsRate < 50);
+        const completedActivities = activityData.filter(a => a.unitsRate >= 100);
+        
+        const sortedByAchievement = [...activityData].filter(a => a.target > 0).sort((a, b) => b.unitsRate - a.unitsRate);
+        const highestPerforming = sortedByAchievement[0] || null;
+        const lowestPerforming = sortedByAchievement[sortedByAchievement.length - 1] || null;
 
-        return { totalAmount, totalUnits, totalSpent, totalPending, qData, maxQ, maxQUnits, budgetAnalysisData, activityQuarterlyData };
+        const pieData = activityData
+            .sort((a, b) => b.target - a.target)
+            .slice(0, 5)
+            .map(a => ({ name: a.name.split(' ')[0], value: a.target, code: a.code }));
+
+        return { 
+            totalBudget, 
+            totalSpent, 
+            totalUnitsTarget, 
+            totalUnitsCovered, 
+            activityData, 
+            overspentActivities,
+            below50Progress,
+            completedActivities,
+            highestPerforming,
+            lowestPerforming,
+            pieData
+        };
     }, [filteredData]);
 
     if (loading) return (
@@ -228,323 +257,605 @@ const BudgetTrackerPage: React.FC = () => {
     );
 
     return (
-        <div className="min-h-screen bg-slate-50/50 p-4 md:p-8">
+        <div className="min-h-screen bg-slate-50/50 p-4 md:p-8 pb-20">
             <div className="max-w-7xl mx-auto">
+                {/* Update Form Modal */}
+                {showUpdateForm && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                        <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                <div>
+                                    <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Update Performance Data</h2>
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Submit spent amounts or units covered</p>
+                                </div>
+                                <button 
+                                    onClick={() => setShowUpdateForm(false)}
+                                    className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+                                >
+                                    <X className="w-6 h-6 text-slate-400" />
+                                </button>
+                            </div>
+
+                            <div className="p-8 max-h-[70vh] overflow-y-auto">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Financial Year</label>
+                                        <select
+                                            className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase text-slate-900 focus:ring-2 focus:ring-indigo-500"
+                                            value={updateYear}
+                                            onChange={(e) => setUpdateYear(e.target.value)}
+                                        >
+                                            <option value="">Select Year</option>
+                                            {filterOptions.years.filter(y => y !== 'All').map(y => <option key={y} value={y}>{y}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Month</label>
+                                        <select
+                                            className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase text-slate-900 focus:ring-2 focus:ring-indigo-500"
+                                            value={updateMonth}
+                                            onChange={(e) => setUpdateMonth(e.target.value)}
+                                        >
+                                            <option value="">Select Month</option>
+                                            {filterOptions.months.filter(m => m !== 'All').map(m => <option key={m} value={m}>{m}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Update Type</label>
+                                        <select
+                                            className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase text-slate-900 focus:ring-2 focus:ring-indigo-500"
+                                            value={updateType}
+                                            onChange={(e) => setUpdateType(e.target.value as 'budget' | 'units')}
+                                        >
+                                            <option value="budget">Spent Amount (Budget)</option>
+                                            <option value="units">Units Covered</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Select Activities</label>
+                                        <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-2xl min-h-[48px]">
+                                            {filterOptions.activities.filter(a => a !== 'All').map(activity => (
+                                                <button
+                                                    key={activity}
+                                                    onClick={() => {
+                                                        if (updateActivities.includes(activity)) {
+                                                            setUpdateActivities(updateActivities.filter(a => a !== activity));
+                                                            const newValues = { ...updateValues };
+                                                            delete newValues[activity];
+                                                            setUpdateValues(newValues);
+                                                        } else {
+                                                            setUpdateActivities([...updateActivities, activity]);
+                                                        }
+                                                    }}
+                                                    className={cn(
+                                                        "px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+                                                        updateActivities.includes(activity) 
+                                                            ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" 
+                                                            : "bg-white text-slate-400 border border-slate-200 hover:border-indigo-300"
+                                                    )}
+                                                >
+                                                    {activity}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {updateActivities.length > 0 && (
+                                    <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+                                        <div className="flex items-center gap-4">
+                                            <div className="h-px bg-slate-100 flex-1"></div>
+                                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">Activity Details</span>
+                                            <div className="h-px bg-slate-100 flex-1"></div>
+                                        </div>
+                                        
+                                        {updateActivities.map((code) => {
+                                            const activity = stats.activityData.find(a => a.code === code);
+                                            return (
+                                                <div key={code} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 group hover:border-indigo-200 transition-all">
+                                                    <div className="flex justify-between items-start mb-4">
+                                                        <div>
+                                                            <p className="text-[11px] font-black text-slate-900 uppercase">{activity?.name || code}</p>
+                                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{code}</p>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => setUpdateActivities(updateActivities.filter(a => a !== code))}
+                                                            className="text-slate-300 hover:text-red-500 transition-colors"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                                                            {updateType === 'budget' ? 'Enter Spent Amount (₹)' : 'Enter Units Covered'}
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder={updateType === 'budget' ? "0.00" : "0"}
+                                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                                            value={updateValues[code] || ''}
+                                                            onChange={(e) => setUpdateValues({ ...updateValues, [code]: parseFloat(e.target.value) || 0 })}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="p-8 bg-slate-50/50 border-t border-slate-100 flex gap-4">
+                                <button 
+                                    onClick={() => setShowUpdateForm(false)}
+                                    className="flex-1 py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    disabled={isSubmitting || !updateYear || !updateMonth || updateActivities.length === 0}
+                                    onClick={async () => {
+                                        setIsSubmitting(true);
+                                        try {
+                                            const payload = {
+                                                action: 'updateBudgetPerformance',
+                                                year: updateYear,
+                                                month: updateMonth,
+                                                type: updateType,
+                                                updates: Object.entries(updateValues).map(([code, value]) => ({ code, value }))
+                                            };
+
+                                            // We use a timeout for the submission too
+                                            const submitController = new AbortController();
+                                            const submitTimeout = setTimeout(() => submitController.abort(), 60000); // 60s timeout
+
+                                            await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                                                method: 'POST',
+                                                mode: 'no-cors',
+                                                body: JSON.stringify(payload),
+                                                signal: submitController.signal
+                                            });
+                                            
+                                            clearTimeout(submitTimeout);
+
+                                            alert("Update submitted successfully! The dashboard will refresh with new data in a few seconds.");
+                                            
+                                            setShowUpdateForm(false);
+                                            setUpdateActivities([]);
+                                            setUpdateValues({});
+                                            
+                                            // Re-fetch data after a delay to allow Google Sheets to process the update
+                                            setTimeout(() => {
+                                                fetchData();
+                                            }, 3000);
+                                        } catch (err: any) {
+                                            console.error("Submission error:", err);
+                                            alert("Error submitting update: " + (err.name === 'AbortError' ? "Request timed out" : err.message));
+                                        } finally {
+                                            setIsSubmitting(false);
+                                        }
+                                    }}
+                                    className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 disabled:opacity-50 disabled:shadow-none"
+                                >
+                                    {isSubmitting ? 'Submitting...' : 'Submit Updates'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Header & Filters */}
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mb-8">
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm mb-8">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                         <div>
-                            <h1 className="text-2xl font-bold text-slate-900">Budget Analysis Dashboard</h1>
-                            <p className="text-slate-500 text-sm">Monitor budget allocation and utilization across activities</p>
+                            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Budget & Activity Dashboard</h1>
+                            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Performance Monitoring & Utilization Tracking</p>
                         </div>
-                        <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-200 w-full md:w-auto">
-                            <Search className="w-4 h-4 text-slate-400 ml-2" />
-                            <input
-                                type="text"
-                                placeholder="Search activity..."
-                                className="bg-transparent border-none focus:ring-0 text-sm text-slate-700 w-full md:w-64"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
+                        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                            {isAuthorized && (
+                                <button 
+                                    onClick={() => setShowUpdateForm(true)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+                                >
+                                    <Plus className="w-3 h-3" />
+                                    Update Spents
+                                </button>
+                            )}
+                            <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border border-slate-200 flex-1 md:flex-none">
+                                <Search className="w-4 h-4 text-slate-400 ml-2" />
+                                <input
+                                    type="text"
+                                    placeholder="SEARCH BUDGET HEAD..."
+                                    className="bg-transparent border-none focus:ring-0 text-[10px] font-bold uppercase text-slate-700 w-full md:w-64"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                         <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Financial Year</label>
-                            <div className="relative">
-                                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <select
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
-                                    value={selectedYear}
-                                    onChange={(e) => setSelectedYear(e.target.value)}
-                                >
-                                    {filterOptions.years.map(y => <option key={y} value={y} className="bg-white dark:bg-gray-800 text-slate-900 dark:text-white">{y}</option>)}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Activity (Head Code)</label>
-                            <div className="relative">
-                                <Activity className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <select
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
-                                    value={selectedActivity}
-                                    onChange={(e) => setSelectedActivity(e.target.value)}
-                                >
-                                    {filterOptions.activities.map(a => <option key={a} value={a} className="bg-white dark:bg-gray-800 text-slate-900 dark:text-white">{a}</option>)}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Month</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Year</label>
                             <div className="relative">
                                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <select
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
-                                    value={selectedMonth}
-                                    onChange={(e) => setSelectedMonth(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase text-slate-900 focus:ring-2 focus:ring-indigo-500 transition-all appearance-none cursor-pointer"
+                                    value={selectedYear}
+                                    onChange={(e) => setSelectedYear(e.target.value)}
                                 >
-                                    {filterOptions.months.map(m => <option key={m} value={m} className="bg-white dark:bg-gray-800 text-slate-900 dark:text-white">{m}</option>)}
+                                    {filterOptions.years.map(y => <option key={y} value={y}>{y}</option>)}
                                 </select>
                             </div>
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Quarter</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Quarter</label>
                             <div className="relative">
                                 <PieChartIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <select
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase text-slate-900 focus:ring-2 focus:ring-indigo-500 transition-all appearance-none cursor-pointer"
                                     value={selectedQuarter}
                                     onChange={(e) => setSelectedQuarter(e.target.value)}
                                 >
-                                    {filterOptions.quarters.map(q => <option key={q} value={q} className="bg-white dark:bg-gray-800 text-slate-900 dark:text-white">{q}</option>)}
+                                    {filterOptions.quarters.map(q => <option key={q} value={q}>{q}</option>)}
                                 </select>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                {/* KPI Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-4 mb-4">
-                            <div className="p-2 bg-indigo-50 rounded-lg">
-                                <Target className="w-5 h-5 text-indigo-600" />
+                        <div className="space-y-2">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Month</label>
+                            <div className="relative">
+                                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <select
+                                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase text-slate-900 focus:ring-2 focus:ring-indigo-500 transition-all appearance-none cursor-pointer"
+                                    value={selectedMonth}
+                                    onChange={(e) => setSelectedMonth(e.target.value)}
+                                >
+                                    {filterOptions.months.map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
                             </div>
-                            <span className="text-sm font-medium text-slate-500">Total Target</span>
                         </div>
-                        <div className="text-2xl font-bold text-slate-900">{formatCurrency(stats.totalAmount)}</div>
-                    </div>
 
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-4 mb-4">
-                            <div className="p-2 bg-emerald-50 rounded-lg">
-                                <TrendingUp className="w-5 h-5 text-emerald-600" />
-                            </div>
-                            <span className="text-sm font-medium text-slate-500">Utilized Budget</span>
-                        </div>
-                        <div className="text-2xl font-bold text-emerald-600">{formatCurrency(stats.totalSpent)}</div>
-                        <div className="mt-2 flex items-center gap-2">
-                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div 
-                                    className="h-full bg-emerald-500 rounded-full"
-                                    style={{ width: `${Math.min(100, (stats.totalSpent / (stats.totalAmount || 1)) * 100)}%` }}
-                                />
-                            </div>
-                            <span className="text-[10px] font-bold text-slate-400">
-                                {((stats.totalSpent / (stats.totalAmount || 1)) * 100).toFixed(1)}%
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-4 mb-4">
-                            <div className="p-2 bg-amber-50 rounded-lg">
-                                <Clock className="w-5 h-5 text-amber-600" />
-                            </div>
-                            <span className="text-sm font-medium text-slate-500">Pending Budget</span>
-                        </div>
-                        <div className="text-2xl font-bold text-amber-600">{formatCurrency(stats.totalPending)}</div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-4 mb-4">
-                            <div className="p-2 bg-slate-50 rounded-lg">
-                                <Users className="w-5 h-5 text-slate-600" />
-                            </div>
-                            <span className="text-sm font-medium text-slate-500">Target Units</span>
-                        </div>
-                        <div className="text-2xl font-bold text-slate-900">{stats.totalUnits.toLocaleString()}</div>
-                    </div>
-                </div>
-
-                {/* Budget Analysis Chart (Amount) */}
-                <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm mb-8">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                        <div>
-                            <h3 className="font-bold text-slate-900 text-lg">Budget Utilization by Activity (Amount)</h3>
-                            <p className="text-slate-500 text-xs mt-1">Comparing Target, Achievement, and Pending amounts (by Head Code)</p>
-                        </div>
-                        <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Target</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Achievement</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pending</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div className="h-[400px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stats.budgetAnalysisData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis 
-                                    dataKey="name" 
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                    interval={0}
-                                    angle={-45}
-                                    textAnchor="end"
-                                />
-                                <YAxis 
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }}
-                                    tickFormatter={(val) => `₹${(val / 100000).toFixed(1)}L`}
-                                />
-                                <Tooltip 
-                                    cursor={{ fill: '#f8fafc' }}
-                                    contentStyle={{ 
-                                        borderRadius: '16px', 
-                                        border: 'none', 
-                                        boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
-                                        padding: '16px'
+                        <div className="space-y-2">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Activity Code</label>
+                            <div className="relative flex gap-2">
+                                <div className="relative flex-1">
+                                    <Activity className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <select
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase text-slate-900 focus:ring-2 focus:ring-indigo-500 transition-all appearance-none cursor-pointer"
+                                        value={selectedActivity}
+                                        onChange={(e) => setSelectedActivity(e.target.value)}
+                                    >
+                                        {filterOptions.activities.map(a => <option key={a} value={a}>{a}</option>)}
+                                    </select>
+                                </div>
+                                <button 
+                                    onClick={() => {
+                                        setSelectedYear('All');
+                                        setSelectedQuarter('All');
+                                        setSelectedMonth('All');
+                                        setSelectedActivity('All');
+                                        setSearchQuery('');
                                     }}
-                                    formatter={(value: number) => [formatCurrency(value), '']}
-                                />
-                                <Bar dataKey="Target" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={16} />
-                                <Bar dataKey="Achievement" fill="#10b981" radius={[4, 4, 0, 0]} barSize={16} />
-                                <Bar dataKey="Pending" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={16} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                                    className="p-3 bg-slate-100 text-slate-500 rounded-2xl hover:bg-slate-200 transition-colors"
+                                    title="Reset Filters"
+                                >
+                                    <Clock className="w-4 h-4 rotate-180" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                {/* Units Analysis Charts Section */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                    {/* Activity-wise Units Clustered Chart */}
-                    <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                {/* 1. Top Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all">
+                        <div className="flex justify-between items-start">
+                            <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 group-hover:scale-110 transition-transform">
+                                <Target className="w-6 h-6" />
+                            </div>
+                            <span className="text-[8px] font-black uppercase text-indigo-500 tracking-widest bg-indigo-50 px-2 py-1 rounded-lg">Budget Target</span>
+                        </div>
+                        <div className="mt-4">
+                            <p className="text-2xl font-black text-slate-900 tracking-tight">{formatCurrency(stats.totalBudget)}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Total Allocated</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all">
+                        <div className="flex justify-between items-start">
+                            <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600 group-hover:scale-110 transition-transform">
+                                <TrendingUp className="w-6 h-6" />
+                            </div>
+                            <span className="text-[8px] font-black uppercase text-emerald-500 tracking-widest bg-emerald-50 px-2 py-1 rounded-lg">Spent Amount</span>
+                        </div>
+                        <div className="mt-4">
+                            <p className="text-2xl font-black text-emerald-600 tracking-tight">{formatCurrency(stats.totalSpent)}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{((stats.totalSpent / (stats.totalBudget || 1)) * 100).toFixed(1)}% Utilization</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all">
+                        <div className="flex justify-between items-start">
+                            <div className="p-3 bg-amber-50 rounded-2xl text-amber-600 group-hover:scale-110 transition-transform">
+                                <Users className="w-6 h-6" />
+                            </div>
+                            <span className="text-[8px] font-black uppercase text-amber-500 tracking-widest bg-amber-50 px-2 py-1 rounded-lg">Units Target</span>
+                        </div>
+                        <div className="mt-4">
+                            <p className="text-2xl font-black text-slate-900 tracking-tight">{stats.totalUnitsTarget.toLocaleString()}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Total Beneficiaries</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all">
+                        <div className="flex justify-between items-start">
+                            <div className="p-3 bg-sky-50 rounded-2xl text-sky-600 group-hover:scale-110 transition-transform">
+                                <Activity className="w-6 h-6" />
+                            </div>
+                            <span className="text-[8px] font-black uppercase text-sky-500 tracking-widest bg-sky-50 px-2 py-1 rounded-lg">Units Covered</span>
+                        </div>
+                        <div className="mt-4">
+                            <p className="text-2xl font-black text-sky-600 tracking-tight">{stats.totalUnitsCovered.toLocaleString()}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{((stats.totalUnitsCovered / (stats.totalUnitsTarget || 1)) * 100).toFixed(1)}% Coverage</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-8">
+                    {/* 2. Bar Chart: Target vs Spent */}
+                    <div className="lg:col-span-8 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-8">
                             <div>
-                                <h3 className="font-bold text-slate-900 text-lg">Activity-wise Units Achievement (Quarterly)</h3>
-                                <p className="text-slate-500 text-xs mt-1">Clustered comparison of Target vs Achievement by Quarter (Top Activities)</p>
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Budget Utilization by Head</h3>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Target vs Spent Amount (Top 10)</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                                    <span className="text-[8px] font-black uppercase text-slate-400">Target</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                    <span className="text-[8px] font-black uppercase text-slate-400">Spent</span>
+                                </div>
                             </div>
                         </div>
-                        
-                        <div className="h-[450px] w-full">
+                        <div className="h-[350px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={stats.activityQuarterlyData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                                <BarChart 
+                                    data={stats.activityData.slice(0, 10)} 
+                                    margin={{ top: 10, right: 10, left: 0, bottom: 20 }}
+                                    onClick={(data) => {
+                                        if (data && data.activePayload && data.activePayload[0]) {
+                                            setSelectedActivity(data.activePayload[0].payload.code);
+                                        }
+                                    }}
+                                >
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                     <XAxis 
-                                        dataKey="name" 
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                        interval={0}
-                                        angle={-45}
-                                        textAnchor="end"
+                                        dataKey="code" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fontSize: 9, fontWeight: 900, fill: '#94a3b8' }}
                                     />
                                     <YAxis 
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }}
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fontSize: 9, fontWeight: 900, fill: '#94a3b8' }}
+                                        tickFormatter={(val) => `₹${(val / 100000).toFixed(1)}L`}
                                     />
                                     <Tooltip 
                                         cursor={{ fill: '#f8fafc' }}
-                                        contentStyle={{ 
-                                            borderRadius: '16px', 
-                                            border: 'none', 
-                                            boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
-                                            padding: '16px'
-                                        }}
+                                        contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
+                                        formatter={(val: number) => [formatCurrency(val), '']}
                                     />
-                                    <Legend 
-                                        verticalAlign="top" 
-                                        height={36}
-                                        iconType="circle"
-                                        wrapperStyle={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}
-                                    />
-                                    {/* Q1 */}
-                                    <Bar dataKey="Q1_Target" name="Q1 Target" fill="#6366f1" radius={[2, 2, 0, 0]} barSize={8} />
-                                    <Bar dataKey="Q1_Achievement" name="Q1 Achieved" fill="#818cf8" radius={[2, 2, 0, 0]} barSize={8} />
-                                    {/* Q2 */}
-                                    <Bar dataKey="Q2_Target" name="Q2 Target" fill="#10b981" radius={[2, 2, 0, 0]} barSize={8} />
-                                    <Bar dataKey="Q2_Achievement" name="Q2 Achieved" fill="#34d399" radius={[2, 2, 0, 0]} barSize={8} />
-                                    {/* Q3 */}
-                                    <Bar dataKey="Q3_Target" name="Q3 Target" fill="#f59e0b" radius={[2, 2, 0, 0]} barSize={8} />
-                                    <Bar dataKey="Q3_Achievement" name="Q3 Achieved" fill="#fbbf24" radius={[2, 2, 0, 0]} barSize={8} />
-                                    {/* Q4 */}
-                                    <Bar dataKey="Q4_Target" name="Q4 Target" fill="#ef4444" radius={[2, 2, 0, 0]} barSize={8} />
-                                    <Bar dataKey="Q4_Achievement" name="Q4 Achieved" fill="#f87171" radius={[2, 2, 0, 0]} barSize={8} />
+                                    <Bar dataKey="target" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={20} />
+                                    <Bar dataKey="spent" radius={[4, 4, 0, 0]} barSize={20}>
+                                        {stats.activityData.slice(0, 10).map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.spent > entry.target ? '#ef4444' : '#10b981'} />
+                                        ))}
+                                    </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
 
-                    {/* Activity Legend */}
-                    <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                        <h3 className="font-bold text-slate-900 mb-6 uppercase tracking-wider text-xs border-b border-slate-100 pb-4">Activity Code Legend</h3>
-                        <div className="flex-1 overflow-y-auto pr-2 space-y-4 custom-scrollbar">
-                            {stats.budgetAnalysisData.map((item) => (
-                                <div key={item.name} className="flex gap-3 group">
-                                    <div className="flex-shrink-0 w-12 h-6 bg-slate-50 rounded flex items-center justify-center border border-slate-100 group-hover:bg-indigo-50 transition-colors">
-                                        <span className="text-[10px] font-bold text-indigo-600 font-mono">{item.name}</span>
+                    {/* 5. Pie Chart: Budget Distribution */}
+                    <div className="lg:col-span-4 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Budget Split</h3>
+                            <PieChartIcon className="w-4 h-4 text-indigo-500" />
+                        </div>
+                        <div className="flex-grow min-h-[250px] relative">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={stats.pieData}
+                                        innerRadius={60}
+                                        outerRadius={80}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                        onClick={(data) => {
+                                            if (data && data.code) {
+                                                setSelectedActivity(data.code);
+                                            }
+                                        }}
+                                    >
+                                        {stats.pieData.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#f43f5e', '#06b6d4'][index % 7]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                <span className="text-xl font-black text-slate-900">{stats.activityData.length}</span>
+                                <span className="text-[7px] font-black uppercase text-slate-400">Heads</span>
+                            </div>
+                        </div>
+                        <div className="mt-6 space-y-2">
+                            {stats.pieData.slice(0, 4).map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full" style={{ background: ['#6366f1', '#10b981', '#f59e0b', '#3b82f6'][idx % 4] }}></div>
+                                        <span className="text-[9px] font-black uppercase text-slate-500">{item.name}</span>
                                     </div>
-                                    <span className="text-[11px] text-slate-600 leading-tight font-medium group-hover:text-slate-900 transition-colors">{item.fullName}</span>
+                                    <span className="text-[9px] font-black text-slate-900">{((item.value / stats.totalBudget) * 100).toFixed(1)}%</span>
                                 </div>
                             ))}
                         </div>
                     </div>
                 </div>
 
-                {/* Quarter-wise Units Chart */}
-                <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm mb-8">
-                    <div className="flex items-center justify-between mb-8">
-                        <div>
-                            <h3 className="font-bold text-slate-900 uppercase tracking-wider text-sm">Quarterly Units Target vs Achievement</h3>
-                            <p className="text-slate-500 text-[10px] mt-1">Units progress across financial quarters</p>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-8">
+                    {/* 3. Units Progress */}
+                    <div className="lg:col-span-6 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Units Coverage Progress</h3>
+                            <Activity className="w-4 h-4 text-sky-500" />
                         </div>
-                        <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Target</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Achievement</span>
-                            </div>
+                        <div className="space-y-6">
+                            {stats.activityData.slice(0, 5).map((activity, idx) => (
+                                <div key={idx} className="space-y-2">
+                                    <div className="flex justify-between items-end">
+                                        <div className="max-w-[70%]">
+                                            <p className="text-[10px] font-black text-slate-900 uppercase truncate">{activity.name}</p>
+                                            <p className="text-[8px] font-bold text-slate-400 uppercase">{activity.code}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black text-slate-900">{activity.unitsCovered} / {activity.unitsTarget}</p>
+                                            <p className="text-[8px] font-bold text-sky-500 uppercase">{activity.unitsRate.toFixed(1)}%</p>
+                                        </div>
+                                    </div>
+                                    <div className="h-2 bg-slate-50 rounded-full overflow-hidden">
+                                        <div 
+                                            className={cn(
+                                                "h-full rounded-full transition-all duration-1000",
+                                                activity.unitsRate >= 80 ? "bg-emerald-500" : activity.unitsRate >= 40 ? "bg-amber-500" : "bg-red-500"
+                                            )}
+                                            style={{ width: `${Math.min(100, activity.unitsRate)}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
-                    <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stats.qData} margin={{ top: 10, right: 30, left: 20, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis 
-                                    dataKey="name" 
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
-                                />
-                                <YAxis 
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }}
-                                />
-                                <Tooltip 
-                                    cursor={{ fill: '#f8fafc' }}
-                                    contentStyle={{ 
-                                        borderRadius: '12px', 
-                                        border: 'none', 
-                                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                                        padding: '12px'
-                                    }}
-                                />
-                                <Bar dataKey="unitsTarget" name="Target Units" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={40} />
-                                <Bar dataKey="unitsAchievement" name="Achieved Units" fill="#10b981" radius={[6, 6, 0, 0]} barSize={40} />
-                            </BarChart>
-                        </ResponsiveContainer>
+
+                    {/* 7. Insights Section */}
+                    <div className="lg:col-span-6 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Dashboard Insights</h3>
+                            <TrendingUp className="w-4 h-4 text-indigo-500" />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="p-5 bg-red-50 rounded-3xl border border-red-100 flex items-center gap-4">
+                                <div className="p-3 bg-white rounded-2xl text-red-500 shadow-sm">
+                                    <AlertCircle className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <p className="text-[9px] font-black text-red-400 uppercase tracking-widest">Overspent</p>
+                                    <p className="text-xl font-black text-red-600">{stats.overspentActivities.length}</p>
+                                </div>
+                            </div>
+
+                            <div className="p-5 bg-indigo-50 rounded-3xl border border-indigo-100 flex items-center gap-4">
+                                <div className="p-3 bg-white rounded-2xl text-indigo-500 shadow-sm">
+                                    <CheckCircle2 className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Completed</p>
+                                    <p className="text-xl font-black text-indigo-600">{stats.completedActivities.length}</p>
+                                </div>
+                            </div>
+
+                            <div className="p-5 bg-amber-50 rounded-3xl border border-amber-100 flex items-center gap-4">
+                                <div className="p-3 bg-white rounded-2xl text-amber-500 shadow-sm">
+                                    <Clock className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest">Below 50%</p>
+                                    <p className="text-xl font-black text-amber-600">{stats.below50Progress.length}</p>
+                                </div>
+                            </div>
+                            
+                            {stats.highestPerforming && (
+                                <div className="p-5 bg-emerald-50 rounded-3xl border border-emerald-100 flex items-center gap-4 sm:col-span-2">
+                                    <div className="p-3 bg-white rounded-2xl text-emerald-500 shadow-sm">
+                                        <TrendingUp className="w-6 h-6" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Highest Performance</p>
+                                        <p className="text-sm font-black text-emerald-700 truncate">{stats.highestPerforming.name}</p>
+                                        <p className="text-[10px] font-bold text-emerald-600 uppercase">{stats.highestPerforming.unitsRate.toFixed(1)}% Coverage</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {stats.lowestPerforming && (
+                                <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex items-center gap-4 sm:col-span-2">
+                                    <div className="p-3 bg-white rounded-2xl text-slate-500 shadow-sm">
+                                        <Clock className="w-6 h-6" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Lowest Performance</p>
+                                        <p className="text-sm font-black text-slate-700 truncate">{stats.lowestPerforming.name}</p>
+                                        <p className="text-[10px] font-bold text-slate-600 uppercase">{stats.lowestPerforming.unitsRate.toFixed(1)}% Coverage</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. Overspending Table */}
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="p-8 border-b border-slate-50 flex justify-between items-center">
+                        <div>
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Overspending Analysis</h3>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Activities exceeding allocated budget</p>
+                        </div>
+                        <div className="px-4 py-2 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase tracking-widest">
+                            {stats.overspentActivities.length} Alerts
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50/50">
+                                    <th className="px-8 py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">Budget Head</th>
+                                    <th className="px-8 py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">Target</th>
+                                    <th className="px-8 py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">Spent</th>
+                                    <th className="px-8 py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">Variance</th>
+                                    <th className="px-8 py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {stats.overspentActivities.length > 0 ? stats.overspentActivities.map((activity, idx) => (
+                                    <tr key={idx} className="bg-red-50/30 hover:bg-red-50/50 transition-colors">
+                                        <td className="px-8 py-4">
+                                            <p className="text-[11px] font-black text-slate-900 uppercase">{activity.name}</p>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase">{activity.code}</p>
+                                        </td>
+                                        <td className="px-8 py-4 text-[11px] font-bold text-slate-600">{formatCurrency(activity.target)}</td>
+                                        <td className="px-8 py-4 text-[11px] font-black text-red-600">{formatCurrency(activity.spent)}</td>
+                                        <td className="px-8 py-4 text-[11px] font-black text-red-600">+{formatCurrency(activity.spent - activity.target)}</td>
+                                        <td className="px-8 py-4">
+                                            <span className="px-3 py-1 bg-red-100 text-red-600 rounded-lg text-[8px] font-black uppercase tracking-widest">Overspent</span>
+                                        </td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td colSpan={5} className="px-8 py-12 text-center">
+                                            <div className="flex flex-col items-center gap-2 opacity-30">
+                                                <CheckCircle2 className="w-8 h-8" />
+                                                <p className="text-[10px] font-black uppercase tracking-widest">All activities within budget</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>

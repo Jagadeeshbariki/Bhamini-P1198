@@ -77,6 +77,7 @@ const BeneficiaryExplorer: React.FC = () => {
     const [filterVillage, setFilterVillage] = useState('All');
     const [filterActivity, setFilterActivity] = useState('All');
     const [filterGender, setFilterGender] = useState('All');
+    const [filterMaterialStatus, setFilterMaterialStatus] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: keyof Beneficiary; direction: 'asc' | 'desc' } | null>(null);
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -245,13 +246,16 @@ const BeneficiaryExplorer: React.FC = () => {
                 const label = g.startsWith('m') ? 'Male' : g.startsWith('f') ? 'Female' : 'Other';
                 return label === filterGender;
             })();
+            const matchesMaterial = filterMaterialStatus === 'All' || (
+                filterMaterialStatus === 'Received' ? d.assets.length > 0 : d.assets.length === 0
+            );
             const matchesSearch = d.beneficiaryName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                  d.beneficiaryId.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                  d.hhHeadName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                  d.hhId.toLowerCase().includes(searchQuery.toLowerCase());
-            return matchesCluster && matchesGP && matchesVillage && matchesActivity && matchesGender && matchesSearch;
+            return matchesCluster && matchesGP && matchesVillage && matchesActivity && matchesGender && matchesMaterial && matchesSearch;
         });
-    }, [data, filterCluster, filterGP, filterVillage, filterActivity, filterGender, searchQuery]);
+    }, [data, filterCluster, filterGP, filterVillage, filterActivity, filterGender, filterMaterialStatus, searchQuery]);
 
     const sortedData = useMemo(() => {
         const sortableItems = [...filteredData];
@@ -335,6 +339,7 @@ const BeneficiaryExplorer: React.FC = () => {
         setFilterVillage('All');
         setFilterActivity('All');
         setFilterGender('All');
+        setFilterMaterialStatus('All');
         setSearchQuery('');
     };
 
@@ -386,7 +391,7 @@ const BeneficiaryExplorer: React.FC = () => {
                         <Download className="w-3.5 h-3.5" />
                         Export Data
                     </button>
-                    {(filterCluster !== 'All' || filterGP !== 'All' || filterVillage !== 'All' || filterActivity !== 'All' || filterGender !== 'All' || searchQuery !== '') && (
+                    {(filterCluster !== 'All' || filterGP !== 'All' || filterVillage !== 'All' || filterActivity !== 'All' || filterGender !== 'All' || filterMaterialStatus !== 'All' || searchQuery !== '') && (
                         <button 
                             onClick={clearFilters}
                             className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-400 hover:bg-red-100 transition-all"
@@ -399,7 +404,7 @@ const BeneficiaryExplorer: React.FC = () => {
             </div>
 
             {/* 2. FILTERS */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
                 <div className="space-y-1.5">
                     <label className="flex items-center gap-2 text-[9px] font-black uppercase text-gray-400 tracking-widest ml-1">
                         <MapPin className="w-3 h-3" /> Cluster
@@ -434,12 +439,22 @@ const BeneficiaryExplorer: React.FC = () => {
                 </div>
                 <div className="space-y-1.5">
                     <label className="flex items-center gap-2 text-[9px] font-black uppercase text-gray-400 tracking-widest ml-1">
+                        <ActivityIcon className="w-3 h-3" /> Material
+                    </label>
+                    <select value={filterMaterialStatus} onChange={e => setFilterMaterialStatus(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-all">
+                        <option value="All">All Status</option>
+                        <option value="Received">Material Received Farmer</option>
+                        <option value="Not Received">No Material Received Farmers</option>
+                    </select>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-[9px] font-black uppercase text-gray-400 tracking-widest ml-1">
                         <Search className="w-3 h-3" /> Search
                     </label>
                     <div className="relative">
                         <input 
                             type="text" 
-                            placeholder="NAME / ID / AADHAR..." 
+                            placeholder="NAME / ID..." 
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             className="w-full bg-gray-50 dark:bg-gray-900 pl-4 pr-10 py-2.5 rounded-2xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none focus:ring-2 focus:ring-indigo-500 transition-all"

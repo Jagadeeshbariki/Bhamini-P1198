@@ -24,9 +24,34 @@ import { APP_VERSION } from './config';
 type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'eco-farmpond' | 'byp-poultry' | 'elevated-goat-shed' | 'beneficiary-explorer' | 'asset-tracking';
 
 const AppContent: React.FC = () => {
-    const [page, setPage] = useState<Page>('home');
+    const [page, setPage] = useState<Page>(() => {
+        const hash = window.location.hash.replace('#', '') as Page;
+        const validPages: Page[] = ['home', 'activity', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking'];
+        return validPages.includes(hash) ? hash : 'home';
+    });
     const { user, logout } = useAuth();
     const [lastProtectedPage, setLastProtectedPage] = useState<Page>('home');
+
+    // Sync state with hash changes (e.g., browser back/forward)
+    useEffect(() => {
+        const handleHashChange = () => {
+            const hash = window.location.hash.replace('#', '') as Page;
+            const validPages: Page[] = ['home', 'activity', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking'];
+            if (validPages.includes(hash)) {
+                setPage(hash);
+            }
+        };
+
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
+
+    // Update hash when page state changes
+    useEffect(() => {
+        if (window.location.hash !== `#${page}`) {
+            window.location.hash = page;
+        }
+    }, [page]);
 
     useEffect(() => {
         const storedVersion = localStorage.getItem('app_version');
@@ -76,6 +101,7 @@ const AppContent: React.FC = () => {
 
     const handleNavigate = (targetPage: Page) => {
         setPage(targetPage);
+        window.location.hash = targetPage;
     };
 
     const handleLoginSuccess = () => {
