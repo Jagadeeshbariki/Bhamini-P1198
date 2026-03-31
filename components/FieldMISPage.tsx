@@ -161,14 +161,6 @@ const FieldMISPage: React.FC = () => {
         return { year, quarter };
     }, [parseDate]);
 
-    const getYearMonth = useCallback((dateStr: string) => {
-        const d = parseDate(dateStr);
-        if (!d) return null;
-        const year = d.getFullYear().toString();
-        const month = d.toLocaleString('default', { month: 'long' });
-        return { year, month };
-    }, [parseDate]);
-
     const getActivityMatch = useCallback((headCode: string, budgetHead: string, activityStr: string) => {
         const act = (activityStr || '').toLowerCase().replace(/_/g, ' ');
         const hName = (budgetHead || '').toLowerCase();

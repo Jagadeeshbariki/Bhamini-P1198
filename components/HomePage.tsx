@@ -1,7 +1,9 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import PhotoSlider from './PhotoSlider';
 import PhotoGallery from './PhotoGallery';
+import MediaUploadModal from './MediaUploadModal';
+import { useAuth } from '../hooks/useAuth';
 import { 
     GOOGLE_SHEET_PHOTOS_URL 
 } from '../config';
@@ -13,11 +15,13 @@ interface ImageData {
 }
 
 const HomePage: React.FC = () => {
+    const { user } = useAuth();
     const [sliderImages, setSliderImages] = useState<ImageData[]>([]);
     const [galleryImages, setGalleryImages] = useState<ImageData[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const filterRef = useRef<HTMLDivElement>(null);
 
     const getDriveDirectUrl = (input: string) => {
@@ -74,43 +78,44 @@ const HomePage: React.FC = () => {
         return '';
     };
 
-    useEffect(() => {
-        const fetchPhotos = async () => {
-            setLoading(true);
-            try {
-                const response = await fetch(`${GOOGLE_SHEET_PHOTOS_URL}&t=${Date.now()}`);
-                const csvText = await response.text();
-                const rows = parseCSVToObjects(csvText);
-                const slider: ImageData[] = [];
-                const gallery: ImageData[] = [];
+    const fetchPhotos = useCallback(async () => {
+        setLoading(true);
+        try {
+            const response = await fetch(`${GOOGLE_SHEET_PHOTOS_URL}&t=${Date.now()}`);
+            const csvText = await response.text();
+            const rows = parseCSVToObjects(csvText);
+            const slider: ImageData[] = [];
+            const gallery: ImageData[] = [];
 
-                rows.forEach(row => {
-                    const urlRaw = getFuzzy(row, ['URL', 'LINK', 'IMAGE', 'PHOTO']);
-                    const typeRaw = getFuzzy(row, ['TYPE', 'CATEGORY', 'PLACEMENT']) || 'gallery';
-                    const descRaw = getFuzzy(row, ['DESCRIPTION', 'DESC', 'CAPTION']) || '';
-                    const activityRaw = getFuzzy(row, ['ACTIVITY', 'ACT', 'WORK']) || 'Uncategorized';
-                    
-                    const directUrl = getDriveDirectUrl(urlRaw);
-                    if (directUrl) {
-                        const imgData = { url: directUrl, description: descRaw, activity: activityRaw };
-                        const type = typeRaw.toLowerCase();
-                        if (type.includes('slider') || type.includes('hero')) {
-                            slider.push(imgData);
-                        } else {
-                            gallery.push(imgData);
-                        }
+            rows.forEach(row => {
+                const urlRaw = getFuzzy(row, ['URL', 'LINK', 'IMAGE', 'PHOTO']);
+                const typeRaw = getFuzzy(row, ['TYPE', 'CATEGORY', 'PLACEMENT']) || 'gallery';
+                const descRaw = getFuzzy(row, ['DESCRIPTION', 'DESC', 'CAPTION']) || '';
+                const activityRaw = getFuzzy(row, ['ACTIVITY', 'ACT', 'WORK']) || 'Uncategorized';
+                
+                const directUrl = getDriveDirectUrl(urlRaw);
+                if (directUrl) {
+                    const imgData = { url: directUrl, description: descRaw, activity: activityRaw };
+                    const type = typeRaw.toLowerCase();
+                    if (type.includes('slider') || type.includes('hero')) {
+                        slider.push(imgData);
+                    } else {
+                        gallery.push(imgData);
                     }
-                });
-                setSliderImages(slider.reverse());
-                setGalleryImages(gallery.reverse());
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchPhotos();
+                }
+            });
+            setSliderImages(slider.reverse());
+            setGalleryImages(gallery.reverse());
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchPhotos();
+    }, [fetchPhotos]);
 
     const availableActivities = useMemo(() => {
         return Array.from(new Set(galleryImages.map(img => img.activity))).sort();
@@ -155,9 +160,22 @@ const HomePage: React.FC = () => {
             
             <section className="animate-fade-in">
                 <div className="flex flex-col md:flex-row items-center justify-between mb-8 px-4 gap-4">
-                    <div className="text-left">
-                        <h2 className="text-2xl font-black text-gray-800 dark:text-white uppercase tracking-tight leading-none">Field Gallery</h2>
-                        <div className="h-1 w-12 bg-emerald-500 mt-2 rounded-full"></div>
+                    <div className="text-left flex items-center gap-6">
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-800 dark:text-white uppercase tracking-tight leading-none">Field Gallery</h2>
+                            <div className="h-1 w-12 bg-emerald-500 mt-2 rounded-full"></div>
+                        </div>
+                        {(user?.role === 'project' || user?.role === 'admin' || user?.role === 'da') && (
+                            <button 
+                                onClick={() => setIsUploadModalOpen(true)}
+                                className="px-5 py-2.5 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-xl shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2 transform active:scale-95"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+                                </svg>
+                                Upload Photo
+                            </button>
+                        )}
                     </div>
 
                     {/* Compact Multi-select Dropdown Filter */}
@@ -231,6 +249,12 @@ const HomePage: React.FC = () => {
                     </div>
                 )}
             </section>
+
+            <MediaUploadModal 
+                isOpen={isUploadModalOpen} 
+                onClose={() => setIsUploadModalOpen(false)} 
+                onUploadSuccess={fetchPhotos} 
+            />
             
             <style>{`
                 @keyframes dropdown-in {

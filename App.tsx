@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthProvider';
 import { useAuth } from './hooks/useAuth';
 import Header from './components/Header';
 import HomePage from './components/HomePage';

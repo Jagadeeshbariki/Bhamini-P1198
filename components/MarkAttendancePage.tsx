@@ -146,7 +146,7 @@ const MarkAttendancePage: React.FC = () => {
         setCurrentDate(next);
     };
 
-    const handleSubmissionSuccess = (data: any) => {
+    const handleSubmissionSuccess = () => {
         // Immediately trigger a re-fetch which now includes local storage
         fetchMarkedDates();
     };
