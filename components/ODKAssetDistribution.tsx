@@ -63,7 +63,7 @@ const ODKAssetDistribution: React.FC = () => {
             const row = parseLine(line);
             return {
                 cluster: getVal(row, 'Cluster') || getVal(row, 'cluster') || getVal(row, 'location-block') || getVal(row, 'CLUSTER') || 'Unknown',
-                activity: getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || getVal(row, 'activity') || 'Uncategorized',
+                activity: (getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || getVal(row, 'activity') || 'Uncategorized').trim().replace(/^(BYP-|BFE-|AFT-)/, ''),
                 material: getVal(row, 'this_material_label') || 'Unknown Material',
                 count: parseFloat(getVal(row, 'materials_details-material_count')) || 0,
                 date: getVal(row, 'materials_details-distributed_date') || '',
@@ -135,15 +135,29 @@ const ODKAssetDistribution: React.FC = () => {
         const summary: Record<string, { 
             materials: Record<string, Record<string, number>>, 
             clusterTotals: Record<string, number>,
-            total: number 
+            total: number,
+            beneficiaryCount: number,
+            clusterBeneficiaryCounts: Record<string, number>
         }> = {};
 
+        const beneficiarySets: Record<string, Set<string>> = {};
+        const clusterBeneficiarySets: Record<string, Record<string, Set<string>>> = {};
+
         activitiesList.forEach(activity => {
-            summary[activity] = { materials: {}, clusterTotals: {}, total: 0 };
+            summary[activity] = { materials: {}, clusterTotals: {}, total: 0, beneficiaryCount: 0, clusterBeneficiaryCounts: {} };
+            beneficiarySets[activity] = new Set();
+            clusterBeneficiarySets[activity] = {};
         });
 
         data.forEach(d => {
             if (!summary[d.activity]) return;
+            
+            beneficiarySets[d.activity].add(d.beneficiary);
+            
+            if (!clusterBeneficiarySets[d.activity][d.cluster]) {
+                clusterBeneficiarySets[d.activity][d.cluster] = new Set();
+            }
+            clusterBeneficiarySets[d.activity][d.cluster].add(d.beneficiary);
             
             if (!summary[d.activity].materials[d.material]) {
                 summary[d.activity].materials[d.material] = {};
@@ -152,6 +166,13 @@ const ODKAssetDistribution: React.FC = () => {
             summary[d.activity].materials[d.material][d.cluster] = (summary[d.activity].materials[d.material][d.cluster] || 0) + d.count;
             summary[d.activity].clusterTotals[d.cluster] = (summary[d.activity].clusterTotals[d.cluster] || 0) + d.count;
             summary[d.activity].total += d.count;
+        });
+
+        activitiesList.forEach(activity => {
+            summary[activity].beneficiaryCount = beneficiarySets[activity].size;
+            clustersList.forEach(cluster => {
+                summary[activity].clusterBeneficiaryCounts[cluster] = clusterBeneficiarySets[activity][cluster]?.size || 0;
+            });
         });
 
         const grandClusterTotals: Record<string, number> = {};
@@ -243,7 +264,9 @@ const ODKAssetDistribution: React.FC = () => {
                                         <Activity className="w-5 h-5" />
                                     </div>
                                     <div className="text-left">
-                                        <p className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">{activity}</p>
+                                        <p className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                                            {activity}- {pivotData.summary[activity].beneficiaryCount}
+                                        </p>
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{pivotData.summary[activity].total.toLocaleString()} Units Distributed</p>
                                     </div>
                                 </div>
@@ -260,6 +283,17 @@ const ODKAssetDistribution: React.FC = () => {
                                                     <th key={c} className="pb-3 font-black text-gray-400 uppercase tracking-widest text-center">{c}</th>
                                                 ))}
                                                 <th className="pb-3 font-black text-gray-400 uppercase tracking-widest text-center">Total</th>
+                                            </tr>
+                                            <tr className="border-b border-gray-50 dark:border-gray-900 bg-gray-50/30 dark:bg-gray-800/30">
+                                                <th className="py-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest">Beneficiary Count</th>
+                                                {pivotData.clusters.map(c => (
+                                                    <th key={c} className="py-2 text-center text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
+                                                        {pivotData.summary[activity].clusterBeneficiaryCounts[c] || 0}
+                                                    </th>
+                                                ))}
+                                                <th className="py-2 text-center text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
+                                                    {pivotData.summary[activity].beneficiaryCount}
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">

@@ -130,7 +130,7 @@ const AdminPage: React.FC = () => {
                 url: getFuzzy(row, ['URL', 'LINK', 'IMAGE', 'PHOTO']),
                 type: (getFuzzy(row, ['TYPE', 'CAT', 'PLACEMENT']) || 'gallery').toLowerCase(),
                 description: getFuzzy(row, ['DESC', 'CAPTION']),
-                activity: getFuzzy(row, ['ACTIVITY', 'ACT', 'WORK']) || 'Uncategorized',
+                activity: (getFuzzy(row, ['ACTIVITY', 'ACT', 'WORK']) || 'Uncategorized').trim().replace(/^(BYP-|BFE-|AFT-)/, ''),
                 timestamp: getFuzzy(row, ['TIMESTAMP'])
             })).filter(r => r.url).reverse());
 

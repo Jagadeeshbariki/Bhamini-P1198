@@ -91,7 +91,7 @@ const HomePage: React.FC = () => {
                 const urlRaw = getFuzzy(row, ['URL', 'LINK', 'IMAGE', 'PHOTO']);
                 const typeRaw = getFuzzy(row, ['TYPE', 'CATEGORY', 'PLACEMENT']) || 'gallery';
                 const descRaw = getFuzzy(row, ['DESCRIPTION', 'DESC', 'CAPTION']) || '';
-                const activityRaw = getFuzzy(row, ['ACTIVITY', 'ACT', 'WORK']) || 'Uncategorized';
+                const activityRaw = (getFuzzy(row, ['ACTIVITY', 'ACT', 'WORK']) || 'Uncategorized').trim().replace(/^(BYP-|BFE-|AFT-)/, '');
                 
                 const directUrl = getDriveDirectUrl(urlRaw);
                 if (directUrl) {

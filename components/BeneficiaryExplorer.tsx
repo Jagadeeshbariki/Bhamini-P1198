@@ -155,7 +155,7 @@ const BeneficiaryExplorer: React.FC = () => {
                 beneficiaryMap.set(key, {
                     hhId: hhId,
                     hhHeadName: getVal(row, 'location-farmer_name') || getVal(row, 'location-show_farmer_name') || getVal(row, 'HH Head Name') || getVal(row, 'Beneficiary name') || getVal(row, 'farmer_name'),
-                    activity: (getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || getVal(row, 'activity') || '').trim().replace(/^BYP-/, ''),
+                    activity: (getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || getVal(row, 'activity') || '').trim().replace(/^(BYP-|BFE-|AFT-)/, ''),
                     beneficiaryName: getVal(row, 'Beneficiary name') || getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'Beneficiary Name') || getVal(row, 'bnf_name'),
                     beneficiaryId: bId,
                     age: parseInt(getVal(row, 'Age') || getVal(row, 'bnf_section_-age_') || getVal(row, 'bnf_section-age') || getVal(row, 'Age')) || 0,
