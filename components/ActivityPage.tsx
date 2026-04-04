@@ -1,11 +1,11 @@
 
 import React, { useState } from 'react';
-import Dashboard from './Dashboard';
 import AssetTrackingDashboard from './AssetTrackingDashboard';
 import BeneficiaryExplorer from './BeneficiaryExplorer';
 import EcoFarmpondPage from './EcoFarmpondPage';
 import BYPPage from './BYPPage';
 import ElevatedGoatShedPage from './ElevatedGoatShedPage';
+import ODKAssetDistribution from './ODKAssetDistribution';
 
 export interface ActivityType {
     id: string;
@@ -14,9 +14,7 @@ export interface ActivityType {
 }
 
 const ACTIVITIES: ActivityType[] = [
-    { id: 'dashboard', name: 'Dashboard', description: 'General Looker Studio dashboards for various activities.' },
-    { id: 'byp-poultry-ls', name: 'BYP Poultry Dashboard', description: 'Looker Studio monitoring for BYP Poultry.' },
-    { id: 'elevated-goat-shed-ls', name: 'Elevated Goat Shed Dashboard', description: 'Looker Studio monitoring for Elevated Goat Shed.' },
+    { id: 'odk-distribution', name: 'ODK Asset Distribution', description: 'Real-time material distribution status and insights.' },
     { id: 'assets', name: 'Asset Tracking System', description: 'Interactive inventory, procurement ledger, and stock point monitoring.' },
     { id: 'beneficiary', name: 'Beneficiary Explorer', description: 'Detailed explorer for project beneficiaries and demographics.' },
     { id: 'eco-farmpond', name: 'Eco-farmpond', description: 'Project monitoring and contribution analysis for farmpond beneficiaries.' },
@@ -34,6 +32,9 @@ const ActivityPage: React.FC = () => {
     };
 
     const renderContent = () => {
+        if (selectedActivity.id === 'odk-distribution') {
+            return <ODKAssetDistribution />;
+        }
         if (selectedActivity.id === 'assets') {
             return <AssetTrackingDashboard />;
         }
@@ -49,7 +50,7 @@ const ActivityPage: React.FC = () => {
         if (selectedActivity.id === 'elevated-goat-shed') {
             return <ElevatedGoatShedPage />;
         }
-        return <Dashboard activityId={selectedActivity.id} />;
+        return <div className="p-8 text-center text-gray-500">Dashboard content not available.</div>;
     };
 
     return (

@@ -18,15 +18,16 @@ import AssetTrackingDashboard from './components/AssetTrackingDashboard';
 import EcoFarmpondPage from './components/EcoFarmpondPage';
 import BYPPage from './components/BYPPage';
 import ElevatedGoatShedPage from './components/ElevatedGoatShedPage';
+import ODKAssetDistribution from './components/ODKAssetDistribution';
 import AutoInstallBanner from './components/AutoInstallBanner';
 import { APP_VERSION } from './config';
 
-type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'eco-farmpond' | 'byp-poultry' | 'elevated-goat-shed' | 'beneficiary-explorer' | 'asset-tracking';
+type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'eco-farmpond' | 'byp-poultry' | 'elevated-goat-shed' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>(() => {
         const hash = window.location.hash.replace('#', '') as Page;
-        const validPages: Page[] = ['home', 'activity', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking'];
+        const validPages: Page[] = ['home', 'activity', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
         return validPages.includes(hash) ? hash : 'home';
     });
     const { user, logout } = useAuth();
@@ -36,7 +37,7 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         const handleHashChange = () => {
             const hash = window.location.hash.replace('#', '') as Page;
-            const validPages: Page[] = ['home', 'activity', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking'];
+            const validPages: Page[] = ['home', 'activity', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
             if (validPages.includes(hash)) {
                 setPage(hash);
             }
@@ -64,7 +65,7 @@ const AppContent: React.FC = () => {
     }, [user, logout]);
 
     useEffect(() => {
-        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking'];
+        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
         
         // Handle unauthenticated access to protected pages
         if (!user && protectedPages.includes(page)) {
@@ -147,6 +148,8 @@ const AppContent: React.FC = () => {
                 return <BeneficiaryExplorer />;
             case 'asset-tracking':
                 return <AssetTrackingDashboard />;
+            case 'odk-asset-distribution':
+                return <ODKAssetDistribution />;
             case 'login':
                 return <LoginPage onLoginSuccess={handleLoginSuccess} />;
             default:

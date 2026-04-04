@@ -4,10 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { 
     GOOGLE_SHEET_CSV_URL, 
     GOOGLE_APPS_SCRIPT_URL, 
-    GOOGLE_SHEET_PHOTOS_URL, 
-    MIS_TARGETS_URL, 
-    MAINTENANCE_BILLS_URL,
-    ASSETS_DATA_URL
+    GOOGLE_SHEET_PHOTOS_URL
 } from '../config';
 import { generateCalendarDays } from '../utils/calendar';
 
@@ -31,55 +28,11 @@ interface PhotoRecord {
     timestamp: string;
 }
 
-interface MISTarget {
-    id: string;
-    name: string;
-    uom: string;
-}
-
-interface MaintenanceBill {
-    id: string;
-    date: string;
-    category: string;
-    description: string;
-    amount: number;
-    status: string;
-    billUrl: string;
-    timestamp: string;
-}
-
-interface AssetRecord {
-    id: string;
-    projectCode: string;
-    budgetHead: string;
-    activityCode: string;
-    assetCode: string;
-    assetName: string;
-    dateOfPurchase: string;
-    costPerUnit: number;
-    hdfcContribution: number;
-    communityContribution: number;
-    qtyPurchased: number;
-    qtyReceived: number;
-    qtyCluster1: number;
-    distCluster1: number;
-    qtyCluster2: number;
-    distCluster2: number;
-    qtyCluster3: number;
-    distCluster3: number;
-    assetStatus: string;
-    paymentStatus: string;
-    totalPrice: number;
-}
-
 const AdminPage: React.FC = () => {
     const { user, getAllUsers } = useAuth();
-    const [view, setView] = useState<'attendance' | 'media' | 'mis' | 'maintenance' | 'assets'>('attendance');
+    const [view, setView] = useState<'attendance' | 'media'>('attendance');
     const [allAttendanceData, setAllAttendanceData] = useState<AttendanceRecord[]>([]);
     const [mediaRegistry, setMediaRegistry] = useState<PhotoRecord[]>([]);
-    const [misTargets, setMisTargets] = useState<MISTarget[]>([]);
-    const [maintenanceBills, setMaintenanceBills] = useState<MaintenanceBill[]>([]);
-    const [assetsList, setAssetsList] = useState<AssetRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedUsername, setSelectedUsername] = useState<string>('');
     const [usersList, setUsersList] = useState<{username: string, role: string}[]>([]);
@@ -93,26 +46,6 @@ const AdminPage: React.FC = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [isDeletingMedia, setIsDeletingMedia] = useState<string | null>(null);
     const [uploadStatus, setUploadStatus] = useState<{success: boolean, message: string} | null>(null);
-
-    // MIS Manager State
-    const [selectedActivityId, setSelectedActivityId] = useState('');
-    const [achievementValue, setAchievementValue] = useState('');
-    const [achievementGP, setAchievementGP] = useState('');
-    const [achievementRemarks, setAchievementRemarks] = useState('');
-    const [isSubmittingMIS, setIsSubmittingMIS] = useState(false);
-
-    // Maintenance State
-    const [billPreview, setBillPreview] = useState<string | null>(null);
-    const [billDate, setBillDate] = useState(new Date().toISOString().split('T')[0]);
-    const [billCategory, setBillCategory] = useState('Car Rental Bill');
-    const [billAmount, setBillAmount] = useState('');
-    const [billDescription, setBillDescription] = useState('');
-    const [isSubmittingBill, setIsSubmittingBill] = useState(false);
-
-    // Asset Manager State
-    const [selectedAssetId, setSelectedAssetId] = useState(''); 
-    const [assetForm, setAssetForm] = useState<Partial<AssetRecord>>({});
-    const [isSubmittingAsset, setIsSubmittingAsset] = useState(false);
 
     const activityContextOptions = [
         'Irrigation', 'Mobile Irrigation', 'Eco-farm pond', 'BRC', 'CHC',
@@ -173,12 +106,9 @@ const AdminPage: React.FC = () => {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [attRes, mediaRes, misRes, billRes, assetRes, userRes] = await Promise.all([
+            const [attRes, mediaRes, userRes] = await Promise.all([
                 fetch(`${GOOGLE_SHEET_CSV_URL}&_=${Date.now()}`),
                 fetch(`${GOOGLE_SHEET_PHOTOS_URL}&_=${Date.now()}`),
-                fetch(`${MIS_TARGETS_URL}&_=${Date.now()}`),
-                fetch(`${MAINTENANCE_BILLS_URL}&_=${Date.now()}`),
-                fetch(`${ASSETS_DATA_URL}&_=${Date.now()}`),
                 getAllUsers()
             ]);
 
@@ -204,55 +134,6 @@ const AdminPage: React.FC = () => {
                 timestamp: getFuzzy(row, ['TIMESTAMP'])
             })).filter(r => r.url).reverse());
 
-            const misCsv = await misRes.text();
-            const misT = parseCSVToObjects(misCsv).map(row => ({ 
-                id: getFuzzy(row, ['HEAD_CODE', 'HEADCODE', 'ID']), 
-                name: getFuzzy(row, ['BUDGET HEAD', 'BUDGETHEAD', 'NAME']), 
-                uom: getFuzzy(row, ['UOM']) || 'Units' 
-            })).filter(t => t.id);
-            setMisTargets(misT);
-            if (misT.length > 0 && !selectedActivityId) setSelectedActivityId(misT[0].id);
-
-            const billCsv = await billRes.text();
-            setMaintenanceBills(parseCSVToObjects(billCsv).map(row => ({
-                id: getFuzzy(row, ['ID']),
-                date: getFuzzy(row, ['DATE']),
-                category: getFuzzy(row, ['CATEGORY']),
-                description: getFuzzy(row, ['DESCRIPTION']),
-                amount: parseFloat(getFuzzy(row, ['AMOUNT']) || '0'),
-                status: getFuzzy(row, ['STATUS']) || 'Pending with me',
-                billUrl: getFuzzy(row, ['BILLURL', 'URL', 'BILL']),
-                timestamp: getFuzzy(row, ['TIMESTAMP'])
-            })).filter(b => b.id).reverse());
-
-            const assetCsv = await assetRes.text();
-            setAssetsList(parseCSVToObjects(assetCsv).map(row => {
-                const keys = Object.keys(row);
-                return {
-                    id: getFuzzy(row, ['SNO', 'ID']),
-                    projectCode: getFuzzy(row, ['PROJECTCODE']),
-                    budgetHead: getFuzzy(row, ['BUDGETHEAD']),
-                    activityCode: getFuzzy(row, ['ACTIVITYCODE']),
-                    assetCode: getFuzzy(row, ['ASSETCODE']),
-                    assetName: getFuzzy(row, ['ASSETNAME']),
-                    dateOfPurchase: getFuzzy(row, ['DATEOFPURCHASE']),
-                    costPerUnit: parseFloat(getFuzzy(row, ['COSTOFUNIT']) || '0'),
-                    hdfcContribution: parseFloat(getFuzzy(row, ['HDFCCONTRIBUTION']) || '0'),
-                    communityContribution: parseFloat(getFuzzy(row, ['COMMUNITYCONTRIBUTION']) || '0'),
-                    qtyPurchased: parseFloat(getFuzzy(row, ['NUMBEROFASSETPURCHASED']) || '0'),
-                    qtyReceived: parseFloat(getFuzzy(row, ['HOWMANYRECEIVED']) || '0'),
-                    qtyCluster1: parseFloat(row[keys[21]] || '0'),
-                    distCluster1: parseFloat(row[keys[22]] || '0'),
-                    qtyCluster2: parseFloat(row[keys[25]] || '0'),
-                    distCluster2: parseFloat(row[keys[26]] || '0'),
-                    qtyCluster3: parseFloat(row[keys[29]] || '0'),
-                    distCluster3: parseFloat(row[keys[30]] || '0'),
-                    assetStatus: getFuzzy(row, ['STATUSOFTHEASSET']),
-                    paymentStatus: getFuzzy(row, ['PAYMENTSTATUS']),
-                    totalPrice: parseFloat(getFuzzy(row, ['TOTALPRICE']) || '0')
-                };
-            }).filter(a => a.assetName));
-
             setUsersList(userRes);
             if (userRes.length > 0 && !selectedUsername) setSelectedUsername(userRes[0].username);
         } catch (err) {
@@ -260,7 +141,7 @@ const AdminPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [getAllUsers, selectedActivityId, selectedUsername]);
+    }, [getAllUsers, selectedUsername]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -388,33 +269,7 @@ const AdminPage: React.FC = () => {
         }
     };
 
-    const handleUpdateAsset = async () => {
-        if (!selectedAssetId) return;
-        setIsSubmittingAsset(true);
-        try {
-            const res = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify({ action: 'updateAsset', id: selectedAssetId, ...assetForm })
-            });
-            if ((await res.json()).status === 'success') fetchData();
-        } finally { setIsSubmittingAsset(false); }
-    };
-
-    const handleUpdateBillStatus = async (billId: string, status: string) => {
-        try {
-            const res = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                method: 'POST', 
-                mode: 'cors', 
-                headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify({ action: 'updateBillStatus', billId, status })
-            });
-            const data = await res.json();
-            if (data.status === 'success') fetchData();
-            else alert("Update failed: " + data.message);
-        } catch { alert("Status update failed."); }
-    };
-
-    if (user?.role !== 'admin' && user?.role !== 'da') return <div className="p-10 text-center font-black text-red-500 uppercase">Access Denied</div>;
+    if (user?.role !== 'admin' && user?.role !== 'da' && user?.role !== 'field') return <div className="p-10 text-center font-black text-red-500 uppercase">Access Denied</div>;
     if (loading) return <div className="p-20 text-center font-black text-indigo-400 uppercase animate-pulse">Syncing...</div>;
 
     return (
@@ -425,7 +280,7 @@ const AdminPage: React.FC = () => {
                     <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mt-1">Project Management Hub</p>
                 </div>
                 <div className="flex bg-gray-100 dark:bg-gray-800 p-1.5 rounded-2xl shadow-inner border border-gray-200 dark:border-gray-700 overflow-x-auto no-scrollbar">
-                    {['attendance', 'media', 'mis', 'maintenance', 'assets'].map((t) => (
+                    {['attendance', 'media'].filter(t => user?.role !== 'field' || t === 'attendance').map((t) => (
                         <button key={t} onClick={() => setView(t as any)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all whitespace-nowrap ${view === t ? 'bg-white dark:bg-gray-700 text-indigo-600 shadow-sm' : 'text-gray-400'}`}>
                             {t}
                         </button>
@@ -440,7 +295,7 @@ const AdminPage: React.FC = () => {
                             <h2 className="text-xl font-black text-gray-800 dark:text-white uppercase">Personnel Attendance Sync</h2>
                             <div className="flex flex-wrap gap-4">
                                 <select value={selectedUsername} onChange={e => setSelectedUsername(e.target.value)} className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-xs font-bold border-none ring-1 ring-gray-100">
-                                    {usersList.map(u => <option key={u.username} value={u.username}>{u.username} ({u.role})</option>)}
+                                    {usersList.map((u, idx) => <option key={`${u.username}-${idx}`} value={u.username}>{u.username} ({u.role})</option>)}
                                 </select>
                                 <div className="flex gap-2">
                                     <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-xs font-bold">
@@ -461,7 +316,7 @@ const AdminPage: React.FC = () => {
                                 const isCurrentMonth = day.getMonth() === months.indexOf(selectedMonth);
                                 const statusColor = record ? (record.workingStatus === 'Working' ? 'bg-emerald-500 border-emerald-600 text-white shadow-lg' : 'bg-red-500 border-red-600 text-white shadow-lg') : (day.getDay() === 0 && isCurrentMonth ? 'bg-red-50 dark:bg-red-900/10 border-red-100 text-red-300' : 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-300');
                                 return (
-                                    <div key={i} className={`h-24 p-2 rounded-3xl border-2 flex flex-col justify-between transition-all ${!isCurrentMonth ? 'opacity-20 pointer-events-none' : statusColor}`}>
+                                    <div key={`${dateKey}-${i}`} className={`h-24 p-2 rounded-3xl border-2 flex flex-col justify-between transition-all ${!isCurrentMonth ? 'opacity-20 pointer-events-none' : statusColor}`}>
                                         <span className="text-sm font-black">{day.getDate()}</span>
                                         {record && <span className="text-[8px] font-black uppercase truncate leading-none">{record.workingStatus === 'Working' ? record.placeOfVisit : record.workingStatus}</span>}
                                     </div>
@@ -494,7 +349,7 @@ const AdminPage: React.FC = () => {
                         <h2 className="text-xl font-black text-gray-800 dark:text-white uppercase mb-8">Work Record Ledger</h2>
                         <div className="space-y-4">
                             {filteredWorkLog.map((r, idx) => (
-                                <div key={idx} className="p-6 bg-gray-50 dark:bg-gray-900 rounded-3xl border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div key={`${r.date}-${idx}`} className="p-6 bg-gray-50 dark:bg-gray-900 rounded-3xl border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <span className="text-[10px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-0.5 rounded-lg">{r.date}</span>
@@ -514,7 +369,7 @@ const AdminPage: React.FC = () => {
                 </div>
             )}
 
-            {view === 'media' && (
+            {view === 'media' && user?.role !== 'field' && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in">
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] border border-gray-100">
                         <h2 className="text-xl font-black text-gray-800 dark:text-white uppercase mb-8">Publish Documentation</h2>
@@ -576,7 +431,7 @@ const AdminPage: React.FC = () => {
                         <h2 className="text-xl font-black text-gray-800 dark:text-white uppercase mb-8">Media Log</h2>
                         <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                             {mediaRegistry.map((item, idx) => (
-                                <div key={idx} className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-3xl border border-transparent hover:border-indigo-100 transition-all relative group">
+                                <div key={`${item.url}-${idx}`} className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-3xl border border-transparent hover:border-indigo-100 transition-all relative group">
                                     <img src={item.url} className="w-20 h-20 rounded-2xl object-cover flex-shrink-0" />
                                     <div className="flex-grow min-w-0">
                                         <span className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase ${item.type === 'slider' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'}`}>{item.type}</span>
@@ -597,216 +452,6 @@ const AdminPage: React.FC = () => {
                                     </button>
                                 </div>
                             ))}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {view === 'mis' && (
-                <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-700 animate-fade-in max-w-2xl mx-auto">
-                    <h2 className="text-xl font-black text-gray-800 dark:text-white uppercase mb-8">Update MIS Achievements</h2>
-                    <div className="space-y-6">
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase text-gray-400 px-1">Activity Indicator</label>
-                            <select value={selectedActivityId} onChange={e => setSelectedActivityId(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl font-bold text-sm border-none ring-1 ring-gray-100">
-                                {misTargets.map(t => <option key={t.id} value={t.id}>{t.id} - {t.name}</option>)}
-                            </select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Achievement Value</label>
-                                <input type="number" placeholder="0.00" value={achievementValue} onChange={e => setAchievementValue(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl font-bold text-sm" />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Location (GP/Village)</label>
-                                <input type="text" placeholder="Village name" value={achievementGP} onChange={e => setAchievementGP(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl font-bold text-sm" />
-                            </div>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase text-gray-400 px-1">Remarks</label>
-                            <textarea value={achievementRemarks} onChange={e => setAchievementRemarks(e.target.value)} placeholder="Narrative impact..." className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl font-bold text-sm" />
-                        </div>
-                        <button onClick={async () => {
-                            setIsSubmittingMIS(true);
-                            try {
-                                const res = await fetch(GOOGLE_APPS_SCRIPT_URL, { 
-                                    method: 'POST', 
-                                    mode: 'cors', 
-                                    headers: { 'Content-Type': 'text/plain' },
-                                    body: JSON.stringify({ action: 'addAchievement', id: selectedActivityId, value: achievementValue, gp: achievementGP, remarks: achievementRemarks }) 
-                                });
-                                const raw = await res.text();
-                                const data = JSON.parse(raw);
-                                if (data.status === 'success') { 
-                                    setAchievementValue(''); 
-                                    setAchievementGP(''); 
-                                    setAchievementRemarks(''); 
-                                    fetchData(); 
-                                    alert("MIS Achievement synced successfully!");
-                                } else {
-                                    alert("Sync failed: " + (data.message || "Unknown error"));
-                                }
-                            } catch (err) {
-                                alert("Connection error: " + (err instanceof Error ? err.message : "Unknown error"));
-                            } finally {
-                                setIsSubmittingMIS(false);
-                            }
-                        }} disabled={isSubmittingMIS} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all">
-                            {isSubmittingMIS ? "Syncing..." : "Sync MIS Achievement"}
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {view === 'maintenance' && (
-                <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border border-gray-100 animate-fade-in">
-                    <h2 className="text-xl font-black text-gray-800 dark:text-white uppercase mb-8">Financial Operations Registry</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-6">
-                            <div className="p-6 bg-gray-50 dark:bg-gray-900 rounded-3xl border border-gray-100">
-                                <h3 className="text-xs font-black uppercase text-gray-400 mb-6">Process Payment Voucher</h3>
-                                <div className="space-y-4">
-                                    <input type="file" accept="image/*,application/pdf" onChange={e => {
-                                        const file = e.target.files?.[0];
-                                        if (file) { const reader = new FileReader(); reader.onloadend = () => setBillPreview(reader.result as string); reader.readAsDataURL(file); }
-                                    }} className="w-full text-xs" />
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <input type="date" value={billDate} onChange={e => setBillDate(e.target.value)} className="p-4 bg-white rounded-xl text-xs font-bold ring-1 ring-gray-100" />
-                                        <input type="number" placeholder="Amount (₹)" value={billAmount} onChange={e => setBillAmount(e.target.value)} className="p-4 bg-white rounded-xl text-xs font-bold ring-1 ring-gray-100" />
-                                    </div>
-                                    <select value={billCategory} onChange={e => setBillCategory(e.target.value)} className="w-full p-4 bg-white rounded-xl text-xs font-bold ring-1 ring-gray-100">
-                                        <option>Car Rental Bill</option>
-                                        <option>Office Maintenance</option>
-                                        <option>Travel Bill</option>
-                                        <option>Event Bill</option>
-                                    </select>
-                                    <textarea value={billDescription} onChange={e => setBillDescription(e.target.value)} placeholder="Purpose..." className="w-full p-4 bg-white rounded-xl text-xs font-bold ring-1 ring-gray-100" />
-                                    <button onClick={async () => {
-                                        setIsSubmittingBill(true);
-                                        try {
-                                            const res = await fetch(GOOGLE_APPS_SCRIPT_URL, { 
-                                                method: 'POST', 
-                                                mode: 'cors', 
-                                                headers: { 'Content-Type': 'text/plain' },
-                                                body: JSON.stringify({ 
-                                                    action: 'addMaintenanceBill', 
-                                                    date: billDate, 
-                                                    category: billCategory, 
-                                                    amount: billAmount, 
-                                                    description: billDescription, 
-                                                    billData: billPreview?.split(',')[1],
-                                                    fileName: `bill_${Date.now()}.jpg`,
-                                                    mimeType: 'image/jpeg',
-                                                    status: 'Pending with me'
-                                                }) 
-                                            });
-                                            const raw = await res.text();
-                                            const data = JSON.parse(raw);
-                                            if (data.status === 'success') { 
-                                                setBillAmount(''); 
-                                                setBillDescription(''); 
-                                                fetchData(); 
-                                                alert("Bill published successfully!");
-                                            } else {
-                                                alert("Upload failed: " + (data.message || "Unknown error"));
-                                            }
-                                        } catch (err) {
-                                            alert("Connection error: " + (err instanceof Error ? err.message : "Unknown error"));
-                                        } finally {
-                                            setIsSubmittingBill(false);
-                                        }
-                                    }} disabled={isSubmittingBill} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-xl">
-                                        {isSubmittingBill ? "Uploading..." : "Publish to Ledger"}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                            {maintenanceBills.map(b => (
-                                <div key={b.id} className="p-5 bg-gray-50 dark:bg-gray-700/30 rounded-3xl border border-gray-100 flex justify-between items-center group">
-                                    <div>
-                                        <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{b.category}</p>
-                                        <p className="text-sm font-black text-gray-800 dark:text-white mt-1">₹{b.amount.toLocaleString()}</p>
-                                        <p className="text-[9px] text-gray-400 italic mt-1">{b.description}</p>
-                                    </div>
-                                    <select value={b.status} onChange={e => handleUpdateBillStatus(b.id, e.target.value)} className="text-[8px] font-black px-3 py-1 bg-white dark:bg-gray-800 rounded-full uppercase ring-1 ring-gray-200">
-                                        {['Pending with me', 'Pending with Patra', 'Pending with JP', 'Pending at Finance', 'Paid'].map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {view === 'assets' && (
-                <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-xl border border-gray-100 animate-fade-in">
-                    <h2 className="text-xl font-black text-gray-800 dark:text-white uppercase mb-8">Asset Control Registry</h2>
-                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                        <div className="lg:col-span-1 space-y-6">
-                            <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-3xl border border-gray-100">
-                                <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6">Commit Update</h3>
-                                <div className="space-y-4">
-                                    <select value={selectedAssetId} onChange={e => {
-                                        const id = e.target.value; 
-                                        setSelectedAssetId(id);
-                                        const found = assetsList.find(a => a.id === id);
-                                        if (found) {
-                                            setAssetForm({ 
-                                                ...found,
-                                                assetStatus: found.assetStatus, 
-                                                paymentStatus: found.paymentStatus, 
-                                                qtyReceived: found.qtyReceived 
-                                            });
-                                        }
-                                    }} className="w-full p-4 bg-white dark:bg-gray-800 rounded-2xl font-bold text-xs">
-                                        <option value="">Select Asset...</option>
-                                        {assetsList.map(a => <option key={a.id} value={a.id}>{a.assetName}</option>)}
-                                    </select>
-                                    <input type="number" placeholder="Qty Received" value={assetForm.qtyReceived || ''} onChange={e => setAssetForm({...assetForm, qtyReceived: parseFloat(e.target.value)})} className="w-full p-4 bg-white dark:bg-gray-800 rounded-2xl font-bold text-xs" />
-                                    <select value={assetForm.assetStatus || ''} onChange={e => setAssetForm({...assetForm, assetStatus: e.target.value})} className="w-full p-4 bg-white dark:bg-gray-800 rounded-2xl font-bold text-xs">
-                                        <option value="Operational">Operational</option>
-                                        <option value="New">New</option>
-                                        <option value="Maintenance">Maintenance</option>
-                                        <option value="Defunct">Defunct</option>
-                                    </select>
-                                    <button onClick={handleUpdateAsset} disabled={isSubmittingAsset || !selectedAssetId} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl">
-                                        {isSubmittingAsset ? "Syncing..." : "Update Status"}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="lg:col-span-3 overflow-x-auto rounded-[2.5rem] border border-gray-100 shadow-inner">
-                            <table className="w-full text-left border-collapse min-w-[900px]">
-                                <thead className="bg-gray-100 dark:bg-gray-800">
-                                    <tr className="text-[10px] font-black uppercase text-gray-500">
-                                        <th className="px-6 py-5">Asset Spec & Code</th>
-                                        <th className="px-6 py-5 text-center">Receipt Profile</th>
-                                        <th className="px-6 py-5 text-center">Field Health</th>
-                                        <th className="px-6 py-5 text-right">Valuation</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                                    {assetsList.map(a => (
-                                        <tr key={a.id} className="hover:bg-gray-50/50">
-                                            <td className="px-6 py-5">
-                                                <div className="font-black text-gray-900 dark:text-white text-xs uppercase">{a.assetName}</div>
-                                                <div className="text-[9px] font-bold text-indigo-500 uppercase tracking-tighter">{a.assetCode}</div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <div className="text-[11px] font-black">{a.qtyReceived} / {a.qtyPurchased}</div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${a.assetStatus === 'Operational' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>{a.assetStatus}</span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="text-xs font-black">₹{a.totalPrice.toLocaleString()}</div>
-                                                <div className="text-[8px] font-black uppercase text-emerald-500 mt-0.5">{a.paymentStatus}</div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
                         </div>
                     </div>
                 </div>

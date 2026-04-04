@@ -109,7 +109,7 @@ const BeneficiaryExplorer: React.FC = () => {
         };
 
         const headers = parseLine(lines[0]);
-        const normalize = (h: string) => h.toLowerCase().trim().replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '');
+        const normalize = (h: string) => h.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
         const normalizedHeaders = headers.map(normalize);
 
         const getVal = (row: string[], search: string) => {
@@ -142,8 +142,8 @@ const BeneficiaryExplorer: React.FC = () => {
                 unit: getVal(row, 'materials_details-material_unit'),
                 date: getVal(row, 'materials_details-distributed_date'),
                 distributor: getVal(row, 'materials_details-destributor_name'),
-                photo: getVal(row, 'Photo'),
-                parentKey: getVal(row, 'PARENT_KEY'),
+                photo: getVal(row, 'Photo') || getVal(row, 'this_material_photo') || getVal(row, 'photo') || getVal(row, 'image'),
+                parentKey: getVal(row, 'PARENT_KEY') || getVal(row, 'instanceID') || getVal(row, 'meta-instanceID') || getVal(row, 'KEY'),
             };
 
             if (beneficiaryMap.has(key)) {
@@ -155,7 +155,7 @@ const BeneficiaryExplorer: React.FC = () => {
                 beneficiaryMap.set(key, {
                     hhId: hhId,
                     hhHeadName: getVal(row, 'location-farmer_name') || getVal(row, 'location-show_farmer_name') || getVal(row, 'HH Head Name') || getVal(row, 'Beneficiary name') || getVal(row, 'farmer_name'),
-                    activity: getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || getVal(row, 'activity'),
+                    activity: (getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || getVal(row, 'activity') || '').trim().replace(/^BYP-/, ''),
                     beneficiaryName: getVal(row, 'Beneficiary name') || getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'Beneficiary Name') || getVal(row, 'bnf_name'),
                     beneficiaryId: bId,
                     age: parseInt(getVal(row, 'Age') || getVal(row, 'bnf_section_-age_') || getVal(row, 'bnf_section-age') || getVal(row, 'Age')) || 0,
@@ -288,9 +288,20 @@ const BeneficiaryExplorer: React.FC = () => {
         const total = filteredData.length;
         
         const activityCounts: Record<string, number> = {};
+        const materialCounts = {
+            'Received': 0,
+            'Not Received': 0
+        };
+
         filteredData.forEach(d => {
             const act = d.activity || 'Unassigned';
             activityCounts[act] = (activityCounts[act] || 0) + 1;
+            
+            if (d.assets && d.assets.length > 0) {
+                materialCounts['Received']++;
+            } else {
+                materialCounts['Not Received']++;
+            }
         });
 
         const activityData = Object.entries(activityCounts)
@@ -300,6 +311,11 @@ const BeneficiaryExplorer: React.FC = () => {
                 percentage: total > 0 ? (value / total) * 100 : 0
             }))
             .sort((a, b) => b.value - a.value);
+
+        const materialData = [
+            { name: 'Received', value: materialCounts['Received'], percentage: total > 0 ? (materialCounts['Received'] / total) * 100 : 0 },
+            { name: 'Not Received', value: materialCounts['Not Received'], percentage: total > 0 ? (materialCounts['Not Received'] / total) * 100 : 0 }
+        ];
 
         const genderCounts: Record<string, number> = {};
         filteredData.forEach(d => {
@@ -330,7 +346,7 @@ const BeneficiaryExplorer: React.FC = () => {
             percentage: total > 0 ? (value / total) * 100 : 0
         })).sort((a, b) => b.value - a.value);
 
-        return { total, activityData, genderData, averageAge, uniqueVillages, uniqueGPs, clusterData };
+        return { total, activityData, genderData, averageAge, uniqueVillages, uniqueGPs, clusterData, materialData };
     }, [filteredData]);
 
     const clearFilters = () => {
@@ -376,7 +392,7 @@ const BeneficiaryExplorer: React.FC = () => {
     );
 
     return (
-        <div className="flex flex-col gap-6 animate-fade-in pb-20">
+        <div className="flex flex-col gap-3 animate-fade-in pb-20">
             {/* 1. HEADER & GLOBAL ACTIONS */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -404,7 +420,7 @@ const BeneficiaryExplorer: React.FC = () => {
             </div>
 
             {/* 2. FILTERS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
                 <div className="space-y-1.5">
                     <label className="flex items-center gap-2 text-[9px] font-black uppercase text-gray-400 tracking-widest ml-1">
                         <MapPin className="w-3 h-3" /> Cluster
@@ -465,158 +481,202 @@ const BeneficiaryExplorer: React.FC = () => {
             </div>
 
             {/* 3. ANALYTICS GRID */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-1">
                 {/* Key Metrics Bento */}
-                <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2 bg-indigo-600 p-6 rounded-3xl text-white shadow-xl shadow-indigo-100 dark:shadow-none flex flex-col justify-between relative overflow-hidden group">
-                        <Users className="absolute -right-4 -bottom-4 w-32 h-32 opacity-10 group-hover:scale-110 transition-transform duration-700" />
+                <div className="lg:col-span-3 grid grid-cols-1 gap-1">
+                    <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-xl shadow-indigo-100 dark:shadow-none flex flex-col justify-between relative overflow-hidden group min-h-[120px]">
+                        <Users className="absolute -right-4 -bottom-4 w-16 h-16 opacity-10 group-hover:scale-110 transition-transform duration-700" />
                         <div>
-                            <p className="text-[10px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Beneficiaries</p>
-                            <p className="text-5xl font-black tracking-tighter">{stats.total.toLocaleString()}</p>
+                            <p className="text-[7px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Beneficiaries</p>
+                            <p className="text-2xl font-black tracking-tighter">{stats.total.toLocaleString()}</p>
                         </div>
-                        <div className="mt-6 flex items-center gap-2">
-                            <div className="h-1 w-12 bg-white/30 rounded-full"></div>
-                            <span className="text-[8px] font-black uppercase opacity-60">Live Registry Count</span>
+                        <div className="mt-2 flex items-center gap-2">
+                            <div className="h-1 w-6 bg-white/30 rounded-full"></div>
+                            <span className="text-[6px] font-black uppercase opacity-60">Live Registry</span>
                         </div>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
                         <div>
-                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Avg. Age</p>
-                            <p className="text-2xl font-black text-gray-900 dark:text-white">{stats.averageAge.toFixed(1)}</p>
+                            <p className="text-[7px] font-black uppercase text-gray-400 tracking-widest mb-1">Avg. Age</p>
+                            <p className="text-lg font-black text-gray-900 dark:text-white">{stats.averageAge.toFixed(1)}</p>
                         </div>
-                        <div className="mt-2 text-[8px] font-black uppercase text-indigo-500">Years Old</div>
+                        <div className="mt-0.5 text-[7px] font-black uppercase text-indigo-500">Years Old</div>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
                         <div>
-                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Villages</p>
-                            <p className="text-2xl font-black text-gray-900 dark:text-white">{stats.uniqueVillages}</p>
+                            <p className="text-[7px] font-black uppercase text-gray-400 tracking-widest mb-1">Coverage</p>
+                            <p className="text-lg font-black text-gray-900 dark:text-white">{stats.uniqueVillages}</p>
                         </div>
-                        <div className="mt-2 text-[8px] font-black uppercase text-emerald-500">{stats.uniqueGPs} GPs Covered</div>
+                        <div className="mt-0.5 text-[7px] font-black uppercase text-emerald-500">{stats.uniqueGPs} GPs</div>
                     </div>
                 </div>
 
-                {/* Activity Distribution Chart */}
-                <div className="lg:col-span-4 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Activity Distribution</h3>
-                        <ActivityIcon className="w-4 h-4 text-indigo-500" />
+                {/* Activity & Cluster Distribution Column */}
+                <div className="lg:col-span-5 flex flex-col gap-1">
+                    {/* Activity Distribution Chart (Vertical Bar) */}
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Activity Distribution</h3>
+                            <ActivityIcon className="w-3 h-3 text-indigo-500" />
+                        </div>
+                        <div className="flex-grow pb-1">
+                            <div className="h-[380px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={stats.activityData} margin={{ top: 30, right: 10, left: 10, bottom: 20 }}>
+                                        <XAxis 
+                                            dataKey="name" 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af', dy: 10 }}
+                                            interval={0}
+                                            angle={-45}
+                                            textAnchor="end"
+                                            height={110}
+                                        />
+                                        <YAxis hide />
+                                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
+                                        <Bar 
+                                            dataKey="value" 
+                                            radius={[4, 4, 0, 0]}
+                                            label={{ position: 'top', fill: '#6b7280', fontSize: 9, fontWeight: 900, offset: 5 }}
+                                            onClick={(data) => setFilterActivity(data.name)}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            {stats.activityData.map((_, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex-grow min-h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stats.activityData.slice(0, 6)} layout="vertical" margin={{ left: -20, right: 30 }}>
-                                <XAxis type="number" hide />
-                                <YAxis 
-                                    dataKey="name" 
-                                    type="category" 
-                                    axisLine={false} 
-                                    tickLine={false} 
-                                    width={100}
-                                    tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af' }}
-                                />
-                                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
-                                <Bar 
-                                    dataKey="value" 
-                                    radius={[0, 4, 4, 0]}
-                                    label={{ position: 'right', fill: '#6b7280', fontSize: 9, fontWeight: 900 }}
-                                    onClick={(data) => setFilterActivity(data.name)}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    {stats.activityData.map((_, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
 
-                {/* Cluster Distribution Chart */}
-                <div className="lg:col-span-4 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Cluster Distribution</h3>
-                        <MapPin className="w-4 h-4 text-emerald-500" />
-                    </div>
-                    <div className="flex-grow min-h-[160px] relative">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={stats.clusterData}
-                                    innerRadius={45}
-                                    outerRadius={65}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                                    labelLine={true}
-                                    onClick={(data) => setFilterCluster(data.name)}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    {stats.clusterData.map((_, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip content={<CustomTooltip />} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                            <span className="text-lg font-black text-gray-900 dark:text-white">{stats.uniqueGPs}</span>
-                            <span className="text-[7px] font-black uppercase text-gray-400">GPs</span>
+                    {/* Cluster Distribution Chart (Pie) */}
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                        <div className="flex justify-between items-center mb-1">
+                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Cluster Distribution</h3>
+                            <MapPin className="w-3 h-3 text-emerald-500" />
+                        </div>
+                        <div className="flex-grow h-[220px] relative">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                                    <Pie
+                                        data={stats.clusterData}
+                                        innerRadius={0}
+                                        outerRadius={70}
+                                        dataKey="value"
+                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                        labelLine={{ stroke: '#e5e7eb', strokeWidth: 1 }}
+                                        onClick={(data) => setFilterCluster(data.name)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        {stats.clusterData.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                </PieChart>
+                            </ResponsiveContainer>
                         </div>
                     </div>
                 </div>
 
-                {/* Gender Split Chart */}
-                <div className="lg:col-span-4 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Gender Split</h3>
-                        <Users className="w-4 h-4 text-pink-500" />
-                    </div>
-                    <div className="flex-grow min-h-[160px] relative">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={stats.genderData}
-                                    innerRadius={45}
-                                    outerRadius={65}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                                    labelLine={true}
-                                    onClick={(data) => setFilterGender(data.name)}
-                                    style={{ cursor: 'pointer' }}
+                {/* Gender & Material Column */}
+                <div className="lg:col-span-4 flex flex-col gap-1">
+                    {/* Gender Split Chart */}
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                        <div className="flex justify-between items-center mb-1">
+                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Gender Split</h3>
+                            <Users className="w-3 h-3 text-pink-500" />
+                        </div>
+                        <div className="flex-grow h-[280px] relative">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                                    <Pie
+                                        data={stats.genderData}
+                                        innerRadius={0}
+                                        outerRadius={65}
+                                        dataKey="value"
+                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                        labelLine={{ stroke: '#e5e7eb', strokeWidth: 1 }}
+                                        onClick={(data) => setFilterGender(data.name)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        {stats.genderData.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="mt-1 flex flex-wrap justify-center gap-x-1.5 gap-y-0.5">
+                            {stats.genderData.map((g, idx) => (
+                                <button 
+                                    key={idx} 
+                                    onClick={() => setFilterGender(g.name)}
+                                    className={cn(
+                                        "flex items-center gap-1 px-1 py-0.5 rounded-lg transition-all",
+                                        filterGender === g.name ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200" : "hover:bg-gray-50 dark:hover:bg-gray-700"
+                                    )}
                                 >
-                                    {stats.genderData.map((_, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip content={<CustomTooltip />} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                            <span className="text-lg font-black text-gray-900 dark:text-white">{stats.total}</span>
-                            <span className="text-[7px] font-black uppercase text-gray-400">Total</span>
+                                    <div className="w-1 h-1 rounded-full" style={{ background: COLORS[idx % COLORS.length] }}></div>
+                                    <span className="text-[6px] font-black uppercase text-gray-500">{g.name} {g.percentage.toFixed(0)}%</span>
+                                </button>
+                            ))}
                         </div>
                     </div>
-                    <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2">
-                        {stats.genderData.map((g, idx) => (
-                            <button 
-                                key={idx} 
-                                onClick={() => setFilterGender(g.name)}
-                                className={cn(
-                                    "flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all",
-                                    filterGender === g.name ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200" : "hover:bg-gray-50 dark:hover:bg-gray-700"
-                                )}
-                            >
-                                <div className="w-2 h-2 rounded-full" style={{ background: COLORS[idx % COLORS.length] }}></div>
-                                <span className="text-[8px] font-black uppercase text-gray-500">{g.name} {g.percentage.toFixed(0)}%</span>
-                            </button>
-                        ))}
+
+                    {/* Material Distribution Chart */}
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                        <div className="flex justify-between items-center mb-1">
+                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Material Status</h3>
+                            <Download className="w-3 h-3 text-amber-500" />
+                        </div>
+                        <div className="flex-grow h-[280px] relative">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                                    <Pie
+                                        data={stats.materialData}
+                                        innerRadius={0}
+                                        outerRadius={65}
+                                        dataKey="value"
+                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                        labelLine={{ stroke: '#e5e7eb', strokeWidth: 1 }}
+                                        onClick={(data) => setFilterMaterialStatus(data.name)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        {stats.materialData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.name === 'Received' ? '#10b981' : '#f43f5e'} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="mt-1 flex flex-wrap justify-center gap-x-1.5 gap-y-0.5">
+                            {stats.materialData.map((m, idx) => (
+                                <button 
+                                    key={idx} 
+                                    onClick={() => setFilterMaterialStatus(m.name)}
+                                    className={cn(
+                                        "flex items-center gap-1 px-1 py-0.5 rounded-lg transition-all",
+                                        filterMaterialStatus === m.name ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200" : "hover:bg-gray-50 dark:hover:bg-gray-700"
+                                    )}
+                                >
+                                    <div className="w-1 h-1 rounded-full" style={{ background: m.name === 'Received' ? '#10b981' : '#f43f5e' }}></div>
+                                    <span className="text-[6px] font-black uppercase text-gray-500">{m.name}: {m.value}</span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
 
             {/* 4. DETAILED TABLE */}
-            <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-6 border-b border-gray-50 dark:border-gray-700 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-gray-50/50 dark:bg-gray-900/20">
+            <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-gray-50 dark:border-gray-700 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-gray-50/50 dark:bg-gray-900/20">
                     <div>
                         <h2 className="text-lg font-black text-gray-800 dark:text-white uppercase tracking-tight">Beneficiary Registry</h2>
                         <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">Detailed Demographics & Activity Log</p>

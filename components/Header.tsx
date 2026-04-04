@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { ChevronDown, LayoutDashboard, Users, Database, Droplets, Bird, Home } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, Users, Database, Droplets, Bird, Home, Package } from 'lucide-react';
 
 interface HeaderProps {
     currentPage: string;
@@ -65,7 +65,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const dashboardPages = ['activity', 'beneficiary-explorer', 'asset-tracking', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed'];
+    const dashboardPages = ['activity', 'beneficiary-explorer', 'asset-tracking', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'odk-asset-distribution'];
     const isDashboardActive = dashboardPages.includes(currentPage);
 
     return (
@@ -190,6 +190,19 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                                 <div className="text-left">
                                                     <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">Elevated Goat Shed</p>
                                                     <p className="text-[8px] font-bold text-gray-400 uppercase">Project Monitoring</p>
+                                                </div>
+                                            </button>
+
+                                            <button
+                                                onClick={() => { onNavigate('odk-asset-distribution'); setIsDashboardDropdownOpen(false); }}
+                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group border-t border-gray-50 dark:border-gray-700/50"
+                                            >
+                                                <div className="p-2 bg-rose-50 dark:bg-rose-900/40 rounded-lg group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                                                    <Package className="w-4 h-4" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">ODK Asset Distribution</p>
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase">Material Status</p>
                                                 </div>
                                             </button>
                                         </div>
