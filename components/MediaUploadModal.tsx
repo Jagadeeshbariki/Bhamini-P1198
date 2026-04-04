@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { GOOGLE_APPS_SCRIPT_URL } from '../config';
+import { useAuth } from '../hooks/useAuth';
 
 interface MediaUploadModalProps {
     isOpen: boolean;
@@ -8,7 +9,8 @@ interface MediaUploadModalProps {
     onUploadSuccess: () => void;
 }
 
-const MediaUploadModal: React.FC<MediaUploadModalProps> = ({ isOpen, onClose, onUploadSuccess }) => {
+    const MediaUploadModal: React.FC<MediaUploadModalProps> = ({ isOpen, onClose, onUploadSuccess }) => {
+    const { user } = useAuth();
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [previewUrls, setPreviewUrls] = useState<string[]>([]);
     const [photoDescription, setPhotoDescription] = useState('');
@@ -50,6 +52,7 @@ const MediaUploadModal: React.FC<MediaUploadModalProps> = ({ isOpen, onClose, on
                     type: uploadType,
                     description: photoDescription || 'Field Entry',
                     activity: photoActivity,
+                    uploadedBy: user?.username || 'Unknown',
                     data: base64Data
                 };
 

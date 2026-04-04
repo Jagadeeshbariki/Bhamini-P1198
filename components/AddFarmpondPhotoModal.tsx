@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, Upload, CheckCircle2, AlertCircle, Camera } from 'lucide-react';
 import { GOOGLE_APPS_SCRIPT_URL } from '../config';
+import { useAuth } from '../hooks/useAuth';
 
 interface AddFarmpondPhotoModalProps {
     data: any[];
@@ -10,6 +11,7 @@ interface AddFarmpondPhotoModalProps {
 }
 
 const AddFarmpondPhotoModal: React.FC<AddFarmpondPhotoModalProps> = ({ data, onClose, onSuccess }) => {
+    const { user } = useAuth();
     const [selectedCluster, setSelectedCluster] = useState('');
     const [selectedGP, setSelectedGP] = useState('');
     const [selectedVillage, setSelectedVillage] = useState('');
@@ -75,7 +77,8 @@ const AddFarmpondPhotoModal: React.FC<AddFarmpondPhotoModalProps> = ({ data, onC
                     hhId: selectedBeneficiary,
                     photoData: base64Data,
                     fileName: `farmpond_${selectedBeneficiary}_${Date.now()}.jpg`,
-                    mimeType: image.type
+                    mimeType: image.type,
+                    uploadedBy: user?.username || 'Unknown'
                 };
 
                 const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
