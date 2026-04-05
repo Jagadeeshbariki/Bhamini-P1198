@@ -11,16 +11,17 @@ import BeneficiaryExplorer from './BeneficiaryExplorer';
 import AssetTrackingDashboard from './AssetTrackingDashboard';
 import ODKAssetDistribution from './ODKAssetDistribution';
 
-type DashboardType = 'activity' | 'beneficiary' | 'asset' | 'odk' | null;
+interface DashboardsPortalProps {
+    onNavigate: (page: any) => void;
+}
 
-const DashboardsPortal: React.FC = () => {
+const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
     const { user } = useAuth();
-    const [selectedDashboard, setSelectedDashboard] = useState<DashboardType>(null);
     const isProjectRole = user?.role === 'admin' || user?.role === 'da' || user?.role === 'project';
 
     const dashboards = [
         {
-            id: 'activity' as const,
+            id: 'activity-dashboards' as const,
             title: 'Activity Dashboards',
             description: 'Unified project monitoring and activity tracking with photo evidence.',
             icon: LayoutDashboard,
@@ -31,7 +32,7 @@ const DashboardsPortal: React.FC = () => {
             allowed: true
         },
         {
-            id: 'beneficiary' as const,
+            id: 'beneficiary-explorer' as const,
             title: 'Beneficiary Explorer',
             description: 'Deep dive into beneficiary demographics, socio-economic data, and mapping.',
             icon: Users,
@@ -42,7 +43,7 @@ const DashboardsPortal: React.FC = () => {
             allowed: isProjectRole
         },
         {
-            id: 'asset' as const,
+            id: 'asset-tracking' as const,
             title: 'Asset Tracking',
             description: 'Inventory management and real-time tracking of project assets and stock.',
             icon: Database,
@@ -53,7 +54,7 @@ const DashboardsPortal: React.FC = () => {
             allowed: isProjectRole
         },
         {
-            id: 'odk' as const,
+            id: 'odk-asset-distribution' as const,
             title: 'ODK Distribution',
             description: 'Material distribution status and material tracking from ODK data.',
             icon: Package,
@@ -65,60 +66,9 @@ const DashboardsPortal: React.FC = () => {
         }
     ];
 
-    if (selectedDashboard === 'activity') return (
-        <div className="space-y-6">
-            <button 
-                onClick={() => setSelectedDashboard(null)}
-                className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mb-4 group"
-            >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                Back to Dashboards
-            </button>
-            <ActivityDashboards />
-        </div>
-    );
-
-    if (selectedDashboard === 'beneficiary') return (
-        <div className="space-y-6">
-            <button 
-                onClick={() => setSelectedDashboard(null)}
-                className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-emerald-600 transition-colors mb-4 group"
-            >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                Back to Dashboards
-            </button>
-            <BeneficiaryExplorer />
-        </div>
-    );
-
-    if (selectedDashboard === 'asset') return (
-        <div className="space-y-6">
-            <button 
-                onClick={() => setSelectedDashboard(null)}
-                className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-amber-600 transition-colors mb-4 group"
-            >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                Back to Dashboards
-            </button>
-            <AssetTrackingDashboard />
-        </div>
-    );
-
-    if (selectedDashboard === 'odk') return (
-        <div className="space-y-6">
-            <button 
-                onClick={() => setSelectedDashboard(null)}
-                className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-rose-600 transition-colors mb-4 group"
-            >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                Back to Dashboards
-            </button>
-            <ODKAssetDistribution />
-        </div>
-    );
-
     return (
         <div className="max-w-7xl mx-auto space-y-12 pb-20">
+
             {/* Header */}
             <div className="relative">
                 <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
@@ -138,7 +88,7 @@ const DashboardsPortal: React.FC = () => {
                 {dashboards.filter(d => d.allowed).map((dashboard) => (
                     <button
                         key={dashboard.id}
-                        onClick={() => setSelectedDashboard(dashboard.id)}
+                        onClick={() => onNavigate(dashboard.id)}
                         className="group relative bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 text-left border border-gray-100 dark:border-gray-800 shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all duration-500 overflow-hidden"
                     >
                         {/* Background Accent */}

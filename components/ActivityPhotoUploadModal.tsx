@@ -11,7 +11,7 @@ interface ActivityPhotoUploadModalProps {
         activity: string;
     };
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (url?: string) => void;
 }
 
 const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ beneficiary, onClose, onSuccess }) => {
@@ -94,7 +94,7 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                     if (response.ok && result.status === 'success') {
                         setStatus('success');
                         setTimeout(() => {
-                            onSuccess();
+                            onSuccess(result.url);
                             onClose();
                         }, 2000);
                     } else {

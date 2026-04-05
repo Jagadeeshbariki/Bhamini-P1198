@@ -355,43 +355,63 @@ function handleUpdateBillStatus(data) {
 
 function handleUpdateBeneficiaryActivity(data) {
   const folder = DriveApp.getFolderById(FOLDER_ID);
+  
+  // 1. Decode and Upload Photo
   const blob = Utilities.newBlob(Utilities.base64Decode(data.photoData), data.mimeType, data.fileName);
   const file = folder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  const url = file.getUrl();
   
-  const sheet = getSheetByGid(0); // Assuming gid 0 is the Beneficiary Sheet
+  // 2. Set permissions and generate DIRECT link for embedding in <img> tags
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const fileId = file.getId();
+  const directUrl = "https://lh3.googleusercontent.com/d/" + fileId;
+  
+  // 3. Update Master_Sheet
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Master_Sheet');
+  
+  if (!sheet) {
+    sheet = ss.getSheets()[0]; // Fallback to first sheet
+  }
+  
   if (!sheet) throw new Error("Beneficiary sheet not found");
   
   const rows = sheet.getDataRange().getValues();
-  const headers = rows[0].map(h => h.toString().toUpperCase());
+  const headers = rows[0].map(h => h.toString().toUpperCase().replace(/[\s_]+/g, ''));
   
-  const hhIdCol = headers.findIndex(h => h.includes('HH_ID') || h.includes('HHID') || h.includes('FARMER ID') || h.includes('FARMER_ID'));
+  // Find column indices with flexible matching
+  const hhIdCol = headers.findIndex(h => h === 'HHID' || h === 'FARMERID' || h === 'ID' || h.includes('HHID'));
+  const photoCol = headers.findIndex(h => h === 'PHOTO' || h === 'IMAGE' || h === 'PHOTOLINK' || h.includes('PHOTO'));
   const latCol = headers.findIndex(h => h === 'LAT' || h === 'LATITUDE');
   const longCol = headers.findIndex(h => h === 'LONG' || h === 'LONGITUDE' || h === 'LNG');
-  const imageCol = headers.findIndex(h => h === 'IMAGE' || h === 'PHOTO' || h === 'PICTURE');
-  const uploadedByCol = headers.findIndex(h => h.includes('UPLOADED_BY') || h.includes('USER'));
+  const uploadedByCol = headers.findIndex(h => h.includes('UPLOADEDBY') || h.includes('USER'));
   
-  if (hhIdCol === -1) throw new Error("HH_ID column not found");
+  if (hhIdCol === -1) throw new Error("HH ID column not found in sheet");
   
-  let found = false;
   const targetId = data.hhId.toString().trim().toUpperCase();
+  let found = false;
   
+  // Search for the row matching HH ID
   for (let i = 1; i < rows.length; i++) {
-    if (rows[i][hhIdCol].toString().trim().toUpperCase() === targetId) {
+    const rowId = rows[i][hhIdCol].toString().trim().toUpperCase();
+    if (rowId === targetId) {
+      // Update columns if they exist
+      if (photoCol !== -1) sheet.getRange(i + 1, photoCol + 1).setValue(directUrl);
       if (latCol !== -1) sheet.getRange(i + 1, latCol + 1).setValue(data.lat);
       if (longCol !== -1) sheet.getRange(i + 1, longCol + 1).setValue(data.long);
-      if (imageCol !== -1) sheet.getRange(i + 1, imageCol + 1).setValue(url);
       if (uploadedByCol !== -1) sheet.getRange(i + 1, uploadedByCol + 1).setValue(data.uploadedBy || 'Unknown');
+      
       found = true;
       break;
     }
   }
   
-  if (!found) throw new Error("Beneficiary ID not found");
+  if (!found) throw new Error("Beneficiary ID '" + data.hhId + "' not found in sheet");
   
-  return ContentService.createTextOutput(JSON.stringify({ status: 'success', url: url }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify({ 
+    status: 'success', 
+    url: directUrl,
+    message: 'Photo and location updated successfully'
+  })).setMimeType(ContentService.MimeType.JSON);
 }
 
 function getSheetByGid(gid) {

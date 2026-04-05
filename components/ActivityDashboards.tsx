@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { 
     Search, PieChart as PieChartIcon, 
     TrendingUp, Users, IndianRupee, Globe, Camera, RefreshCw,
-    ChevronDown, LayoutDashboard, ExternalLink, Loader2
+    ChevronDown, LayoutDashboard, ExternalLink, Loader2, ArrowLeft
 } from 'lucide-react';
 import { 
     ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
@@ -34,11 +34,15 @@ interface BeneficiaryRecord {
     contribution?: number;
 }
 
+interface ActivityDashboardsProps {
+    onBack?: () => void;
+}
+
 const CHART_COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#f97316'];
 
 const ActivityDashboardContent: React.FC<{ 
     data: BeneficiaryRecord[]; 
-    onRefresh: () => void;
+    onRefresh: (url?: string, hhId?: string) => void;
 }> = ({ data, onRefresh }) => {
     const mapRef = useRef<HTMLDivElement>(null);
     const [mapLoaded, setMapLoaded] = useState(false);
@@ -332,14 +336,14 @@ const ActivityDashboardContent: React.FC<{
                 <ActivityPhotoUploadModal 
                     beneficiary={selectedBeneficiary}
                     onClose={() => setIsPhotoModalOpen(false)}
-                    onSuccess={onRefresh}
+                    onSuccess={(url) => onRefresh(url, selectedBeneficiary.hhId)}
                 />
             )}
         </div>
     );
 };
 
-const ActivityDashboards: React.FC = () => {
+const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
     const [data, setData] = useState<BeneficiaryRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
@@ -386,7 +390,7 @@ const ActivityDashboards: React.FC = () => {
                 cluster: getVal(vals, 'Cluster') || getVal(vals, 'cluster') || 'Unknown',
                 lat: parseFloat(getVal(vals, 'Lat') || getVal(vals, 'Latitude')) || 0,
                 lng: parseFloat(getVal(vals, 'long') || getVal(vals, 'Longitude') || getVal(vals, 'Lng')) || 0,
-                photo: getVal(vals, 'Photo_link') || getVal(vals, 'Photo') || getVal(vals, 'Image') || '',
+                photo: getVal(vals, 'Photo_link') || getVal(vals, 'Photo') || getVal(vals, 'Image') || getVal(vals, 'Picture') || getVal(vals, 'PhotoLink') || '',
             };
         }).filter(b => b.hhId && b.activity);
     };
@@ -405,6 +409,7 @@ const ActivityDashboards: React.FC = () => {
             const contribText = await contribRes.text();
 
             const parsedBens = parseCSV(benText);
+            
             const rawContribs = (csv: string) => {
                 const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
                 const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
@@ -458,6 +463,18 @@ const ActivityDashboards: React.FC = () => {
         fetchData();
     }, [fetchData]);
 
+    const handleRefresh = (newPhotoUrl?: string, hhId?: string) => {
+        if (newPhotoUrl && hhId) {
+            setData(prev => prev.map(b => 
+                b.hhId === hhId ? { ...b, photo: newPhotoUrl } : b
+            ));
+            // Delay fetchData to allow spreadsheet to update and avoid immediate overwrite with cached old data
+            setTimeout(() => fetchData(), 5000);
+        } else {
+            fetchData();
+        }
+    };
+
     const activities = useMemo(() => {
         const unique = Array.from(new Set(data.map(d => d.activity))).sort();
         return unique;
@@ -474,6 +491,15 @@ const ActivityDashboards: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 pb-20">
+            {onBack && (
+                <button 
+                    onClick={onBack}
+                    className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mb-4 group"
+                >
+                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                    Back to Dashboards
+                </button>
+            )}
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                 <div>
                     <h1 className="text-4xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">
@@ -540,7 +566,7 @@ const ActivityDashboards: React.FC = () => {
                                 <div className="border-t border-gray-50 dark:border-gray-800 animate-in slide-in-from-top-4 duration-500">
                                     <ActivityDashboardContent 
                                         data={activityData} 
-                                        onRefresh={fetchData}
+                                        onRefresh={handleRefresh}
                                     />
                                 </div>
                             )}

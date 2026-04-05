@@ -20,12 +20,12 @@ import DashboardsPortal from './components/DashboardsPortal';
 import AutoInstallBanner from './components/AutoInstallBanner';
 import { APP_VERSION } from './config';
 
-type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution';
+type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>(() => {
         const hash = window.location.hash.replace('#', '') as Page;
-        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
+        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
         return validPages.includes(hash) ? hash : 'home';
     });
     const { user, logout } = useAuth();
@@ -63,7 +63,7 @@ const AppContent: React.FC = () => {
     }, [user, logout]);
 
     useEffect(() => {
-        const protectedPages: Page[] = ['attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
+        const protectedPages: Page[] = ['attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
         
         // Handle unauthenticated access to protected pages
         if (!user && protectedPages.includes(page)) {
@@ -135,15 +135,15 @@ const AppContent: React.FC = () => {
             case 'contribution':
                 return <ContributionPage />;
             case 'activity-dashboards':
-                return <ActivityDashboards />;
+                return <ActivityDashboards onBack={() => handleNavigate('dashboards')} />;
             case 'dashboards':
-                return <DashboardsPortal />;
+                return <DashboardsPortal onNavigate={handleNavigate} />;
             case 'beneficiary-explorer':
-                return <BeneficiaryExplorer />;
+                return <BeneficiaryExplorer onBack={() => handleNavigate('dashboards')} />;
             case 'asset-tracking':
-                return <AssetTrackingDashboard />;
+                return <AssetTrackingDashboard onBack={() => handleNavigate('dashboards')} />;
             case 'odk-asset-distribution':
-                return <ODKAssetDistribution />;
+                return <ODKAssetDistribution onBack={() => handleNavigate('dashboards')} />;
             case 'login':
                 return <LoginPage onLoginSuccess={handleLoginSuccess} />;
             default:
