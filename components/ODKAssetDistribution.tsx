@@ -280,7 +280,12 @@ const ODKAssetDistribution: React.FC = () => {
                                             <tr className="border-b border-gray-100 dark:border-gray-800">
                                                 <th className="pb-3 font-black text-gray-400 uppercase tracking-widest">Material Name</th>
                                                 {pivotData.clusters.map(c => (
-                                                    <th key={c} className="pb-3 font-black text-gray-400 uppercase tracking-widest text-center">{c}</th>
+                                                    <th key={c} className="pb-3 font-black text-gray-400 uppercase tracking-widest text-center">
+                                                        {c}
+                                                        <div className="text-[8px] text-indigo-500 mt-1">
+                                                            ({pivotData.summary[activity].clusterBeneficiaryCounts[c] || 0} Bens)
+                                                        </div>
+                                                    </th>
                                                 ))}
                                                 <th className="pb-3 font-black text-gray-400 uppercase tracking-widest text-center">Total</th>
                                             </tr>

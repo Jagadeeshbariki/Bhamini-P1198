@@ -1,7 +1,6 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { ChevronDown, LayoutDashboard, Users, Database, Droplets, Bird, Home, Package } from 'lucide-react';
 
 interface HeaderProps {
     currentPage: string;
@@ -11,7 +10,6 @@ interface HeaderProps {
 
 interface NavLinkProps {
     page: string;
-    targetPage: string;
     currentPage: string;
     onNavigate: (page: any) => void;
     setIsMenuOpen: (open: boolean) => void;
@@ -44,8 +42,6 @@ const NavLink: React.FC<NavLinkProps> = ({ page: targetPage, currentPage, onNavi
 const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) => {
     const { user } = useAuth();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [isDashboardDropdownOpen, setIsDashboardDropdownOpen] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
 
     const navLinkProps = { currentPage, onNavigate, setIsMenuOpen };
 
@@ -53,20 +49,6 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
     const isFieldRole = user?.role === 'field' || user?.role === 'admin' || user?.role === 'da';
     const isProjectRole = user?.role === 'project' || user?.role === 'admin' || user?.role === 'da';
     const canAccessAdmin = user?.role === 'admin';
-
-    // Close dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                setIsDashboardDropdownOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    const dashboardPages = ['activity', 'beneficiary-explorer', 'asset-tracking', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'odk-asset-distribution'];
-    const isDashboardActive = dashboardPages.includes(currentPage);
 
     return (
         <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 sticky top-0 z-50">
@@ -99,115 +81,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 </>
                             )}
 
-                            {isProjectRole && (
-                                <div className="relative" ref={dropdownRef}>
-                                    <button
-                                        onClick={() => setIsDashboardDropdownOpen(!isDashboardDropdownOpen)}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
-                                            isDashboardActive 
-                                            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none' 
-                                            : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600'
-                                        }`}
-                                    >
-                                        Dashboards
-                                        <ChevronDown className={`w-3 h-3 transition-transform duration-300 ${isDashboardDropdownOpen ? 'rotate-180' : ''}`} />
-                                    </button>
-
-                                    {isDashboardDropdownOpen && (
-                                        <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                                            <button
-                                                onClick={() => { onNavigate('activity'); setIsDashboardDropdownOpen(false); }}
-                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group"
-                                            >
-                                                <div className="p-2 bg-indigo-50 dark:bg-indigo-900/40 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                                    <LayoutDashboard className="w-4 h-4" />
-                                                </div>
-                                                <div className="text-left">
-                                                    <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">Activity Dashboard</p>
-                                                    <p className="text-[8px] font-bold text-gray-400 uppercase">General Progress</p>
-                                                </div>
-                                            </button>
-
-                                            <button
-                                                onClick={() => { onNavigate('beneficiary-explorer'); setIsDashboardDropdownOpen(false); }}
-                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group"
-                                            >
-                                                <div className="p-2 bg-emerald-50 dark:bg-emerald-900/40 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                                                    <Users className="w-4 h-4" />
-                                                </div>
-                                                <div className="text-left">
-                                                    <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">Beneficiary Explorer</p>
-                                                    <p className="text-[8px] font-bold text-gray-400 uppercase">Demographics & Data</p>
-                                                </div>
-                                            </button>
-
-                                            <button
-                                                onClick={() => { onNavigate('asset-tracking'); setIsDashboardDropdownOpen(false); }}
-                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group"
-                                            >
-                                                <div className="p-2 bg-amber-50 dark:bg-amber-900/40 rounded-lg group-hover:bg-amber-600 group-hover:text-white transition-colors">
-                                                    <Database className="w-4 h-4" />
-                                                </div>
-                                                <div className="text-left">
-                                                    <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">Asset Tracking</p>
-                                                    <p className="text-[8px] font-bold text-gray-400 uppercase">Inventory & Stock</p>
-                                                </div>
-                                            </button>
-
-                                            <button
-                                                onClick={() => { onNavigate('eco-farmpond'); setIsDashboardDropdownOpen(false); }}
-                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group"
-                                            >
-                                                <div className="p-2 bg-blue-50 dark:bg-blue-900/40 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                                                    <Droplets className="w-4 h-4" />
-                                                </div>
-                                                <div className="text-left">
-                                                    <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">Eco-farmpond</p>
-                                                    <p className="text-[8px] font-bold text-gray-400 uppercase">GPS Map & Contributions</p>
-                                                </div>
-                                            </button>
-
-                                            <button
-                                                onClick={() => { onNavigate('byp-poultry'); setIsDashboardDropdownOpen(false); }}
-                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group"
-                                            >
-                                                <div className="p-2 bg-orange-50 dark:bg-orange-900/40 rounded-lg group-hover:bg-orange-600 group-hover:text-white transition-colors">
-                                                    <Bird className="w-4 h-4" />
-                                                </div>
-                                                <div className="text-left">
-                                                    <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">BYP Poultry</p>
-                                                    <p className="text-[8px] font-bold text-gray-400 uppercase">Project Monitoring</p>
-                                                </div>
-                                            </button>
-
-                                            <button
-                                                onClick={() => { onNavigate('elevated-goat-shed'); setIsDashboardDropdownOpen(false); }}
-                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group"
-                                            >
-                                                <div className="p-2 bg-purple-50 dark:bg-purple-900/40 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                                                    <Home className="w-4 h-4" />
-                                                </div>
-                                                <div className="text-left">
-                                                    <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">Elevated Goat Shed</p>
-                                                    <p className="text-[8px] font-bold text-gray-400 uppercase">Project Monitoring</p>
-                                                </div>
-                                            </button>
-
-                                            <button
-                                                onClick={() => { onNavigate('odk-asset-distribution'); setIsDashboardDropdownOpen(false); }}
-                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group border-t border-gray-50 dark:border-gray-700/50"
-                                            >
-                                                <div className="p-2 bg-rose-50 dark:bg-rose-900/40 rounded-lg group-hover:bg-rose-600 group-hover:text-white transition-colors">
-                                                    <Package className="w-4 h-4" />
-                                                </div>
-                                                <div className="text-left">
-                                                    <p className="text-[10px] font-black uppercase text-gray-900 dark:text-white">ODK Asset Distribution</p>
-                                                    <p className="text-[8px] font-bold text-gray-400 uppercase">Material Status</p>
-                                                </div>
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
+                            {user && (
+                                <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
                             )}
 
                             {isProjectRole && (
@@ -266,24 +141,12 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 <NavLink {...navLinkProps} page="baseline">Baseline Explorer</NavLink>
                                 <NavLink {...navLinkProps} page="contribution">Contributions</NavLink>
                                 <NavLink {...navLinkProps} page="field-mis" primary>Target vs Achievements</NavLink>
+                                <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
                             </>
                         )}
-                        {isProjectRole && (
+                        {user && (
                             <>
-                                <button
-                                    onClick={() => {
-                                        onNavigate('activity');
-                                        setIsMenuOpen(false);
-                                    }}
-                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
-                                        isDashboardActive 
-                                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none scale-105' 
-                                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600'
-                                    }`}
-                                >
-                                    Dashboards
-                                </button>
-                                <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>
+                                {isProjectRole && <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>}
                             </>
                         )}
                         {isFieldRole && (

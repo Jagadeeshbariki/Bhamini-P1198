@@ -75,8 +75,11 @@ function doPost(e) {
       return handleBudgetUpdate(data);
     }
     
-    return handleAttendance(data);
+    if (data.action === 'updateBeneficiaryActivity') {
+      return handleUpdateBeneficiaryActivity(data);
+    }
     
+    return handleAttendance(data);
   } catch (error) {
     console.error("Error in doPost: " + error.toString());
     return ContentService.createTextOutput(JSON.stringify({ 
@@ -135,6 +138,11 @@ function handlePhotoUpload(data) {
     const s = h.toString().toUpperCase();
     return s.includes('PHOTO_LINK') || s.includes('PHOTO');
   });
+
+  const uploadedByCol = headers.findIndex(h => {
+    const s = h.toString().toUpperCase();
+    return s.includes('UPLOADED_BY') || s.includes('UPLOADED BY') || s.includes('USER') || s.includes('NAME');
+  });
   
   if (hhIdCol === -1) throw new Error("HH_ID column not found in headers");
   if (photoCol === -1) throw new Error("PHOTO_LINK column not found in headers");
@@ -146,6 +154,9 @@ function handlePhotoUpload(data) {
   for (let i = 1; i < rows.length; i++) {
     if (normalizeId(rows[i][hhIdCol]) === targetId) {
       sheet.getRange(i + 1, photoCol + 1).setValue(fileUrl);
+      if (uploadedByCol !== -1) {
+        sheet.getRange(i + 1, uploadedByCol + 1).setValue(data.uploadedBy || 'Unknown');
+      }
       found = true;
       console.log("Updated row " + (i + 1) + " with URL: " + fileUrl);
       break;
@@ -241,7 +252,7 @@ function handleAddPhoto(data) {
   
   const sheet = getSheetByGid(14172760); // PHOTOS sheet
   if (sheet) {
-    sheet.appendRow([new Date(), url, data.type, data.description, data.activity]);
+    sheet.appendRow([new Date(), url, data.type, data.description, data.activity, data.uploadedBy || 'Unknown']);
   }
   
   return ContentService.createTextOutput(JSON.stringify({ status: 'success', url: url }))
@@ -339,6 +350,47 @@ function handleUpdateBillStatus(data) {
   }
   
   return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleUpdateBeneficiaryActivity(data) {
+  const folder = DriveApp.getFolderById(FOLDER_ID);
+  const blob = Utilities.newBlob(Utilities.base64Decode(data.photoData), data.mimeType, data.fileName);
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const url = file.getUrl();
+  
+  const sheet = getSheetByGid(0); // Assuming gid 0 is the Beneficiary Sheet
+  if (!sheet) throw new Error("Beneficiary sheet not found");
+  
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0].map(h => h.toString().toUpperCase());
+  
+  const hhIdCol = headers.findIndex(h => h.includes('HH_ID') || h.includes('HHID') || h.includes('FARMER ID') || h.includes('FARMER_ID'));
+  const latCol = headers.findIndex(h => h === 'LAT' || h === 'LATITUDE');
+  const longCol = headers.findIndex(h => h === 'LONG' || h === 'LONGITUDE' || h === 'LNG');
+  const imageCol = headers.findIndex(h => h === 'IMAGE' || h === 'PHOTO' || h === 'PICTURE');
+  const uploadedByCol = headers.findIndex(h => h.includes('UPLOADED_BY') || h.includes('USER'));
+  
+  if (hhIdCol === -1) throw new Error("HH_ID column not found");
+  
+  let found = false;
+  const targetId = data.hhId.toString().trim().toUpperCase();
+  
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][hhIdCol].toString().trim().toUpperCase() === targetId) {
+      if (latCol !== -1) sheet.getRange(i + 1, latCol + 1).setValue(data.lat);
+      if (longCol !== -1) sheet.getRange(i + 1, longCol + 1).setValue(data.long);
+      if (imageCol !== -1) sheet.getRange(i + 1, imageCol + 1).setValue(url);
+      if (uploadedByCol !== -1) sheet.getRange(i + 1, uploadedByCol + 1).setValue(data.uploadedBy || 'Unknown');
+      found = true;
+      break;
+    }
+  }
+  
+  if (!found) throw new Error("Beneficiary ID not found");
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: 'success', url: url }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 

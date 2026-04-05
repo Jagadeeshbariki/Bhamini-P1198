@@ -4,7 +4,6 @@ import { AuthProvider } from './contexts/AuthProvider';
 import { useAuth } from './hooks/useAuth';
 import Header from './components/Header';
 import HomePage from './components/HomePage';
-import ActivityPage from './components/ActivityPage';
 import LoginPage from './components/LoginPage';
 import ReportPage from './components/ReportPage';
 import MarkAttendancePage from './components/MarkAttendancePage';
@@ -15,19 +14,18 @@ import BaselinePage from './components/BaselinePage';
 import ContributionPage from './components/ContributionPage';
 import BeneficiaryExplorer from './components/BeneficiaryExplorer';
 import AssetTrackingDashboard from './components/AssetTrackingDashboard';
-import EcoFarmpondPage from './components/EcoFarmpondPage';
-import BYPPage from './components/BYPPage';
-import ElevatedGoatShedPage from './components/ElevatedGoatShedPage';
+import ActivityDashboards from './components/ActivityDashboards';
 import ODKAssetDistribution from './components/ODKAssetDistribution';
+import DashboardsPortal from './components/DashboardsPortal';
 import AutoInstallBanner from './components/AutoInstallBanner';
 import { APP_VERSION } from './config';
 
-type Page = 'home' | 'activity' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'eco-farmpond' | 'byp-poultry' | 'elevated-goat-shed' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution';
+type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>(() => {
         const hash = window.location.hash.replace('#', '') as Page;
-        const validPages: Page[] = ['home', 'activity', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
+        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
         return validPages.includes(hash) ? hash : 'home';
     });
     const { user, logout } = useAuth();
@@ -37,7 +35,7 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         const handleHashChange = () => {
             const hash = window.location.hash.replace('#', '') as Page;
-            const validPages: Page[] = ['home', 'activity', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
+            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
             if (validPages.includes(hash)) {
                 setPage(hash);
             }
@@ -65,7 +63,7 @@ const AppContent: React.FC = () => {
     }, [user, logout]);
 
     useEffect(() => {
-        const protectedPages: Page[] = ['activity', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
+        const protectedPages: Page[] = ['attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
         
         // Handle unauthenticated access to protected pages
         if (!user && protectedPages.includes(page)) {
@@ -84,7 +82,7 @@ const AppContent: React.FC = () => {
 
             if (isField) {
                 // Field staff: Allow Gallery, Attendance, Reports, MIS, Baseline, Contribution
-                const restrictedPages: Page[] = ['activity', 'budget-tracker', 'admin', 'eco-farmpond', 'byp-poultry', 'elevated-goat-shed', 'beneficiary-explorer', 'asset-tracking'];
+                const restrictedPages: Page[] = ['budget-tracker', 'admin', 'beneficiary-explorer', 'asset-tracking'];
                 if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
             } else if (isProject) {
                 // Project staff: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution
@@ -122,8 +120,6 @@ const AppContent: React.FC = () => {
         switch (page) {
             case 'home':
                 return <HomePage />;
-            case 'activity':
-                return <ActivityPage />;
             case 'attendance-report':
                 return <ReportPage />;
             case 'mark-attendance':
@@ -138,12 +134,10 @@ const AppContent: React.FC = () => {
                 return <BaselinePage />;
             case 'contribution':
                 return <ContributionPage />;
-            case 'eco-farmpond':
-                return <EcoFarmpondPage />;
-            case 'byp-poultry':
-                return <BYPPage />;
-            case 'elevated-goat-shed':
-                return <ElevatedGoatShedPage />;
+            case 'activity-dashboards':
+                return <ActivityDashboards />;
+            case 'dashboards':
+                return <DashboardsPortal />;
             case 'beneficiary-explorer':
                 return <BeneficiaryExplorer />;
             case 'asset-tracking':
