@@ -103,7 +103,7 @@ const ContributionPage: React.FC = () => {
     };
 
     const normalizeId = (id: any): string => {
-        if (!id) return '';
+        if (id === null || id === undefined) return '';
         const str = id.toString().trim();
         if (/^\d+$/.test(str)) {
             return parseInt(str, 10).toString();
@@ -143,7 +143,7 @@ const ContributionPage: React.FC = () => {
                     const normId = normalizeId(rawId);
                     if (normId) {
                         baselineMap.set(normId, {
-                            farmerId: rawId.toString(),
+                            farmerId: (rawId || '').toString(),
                             hhHeadName: getFuzzyValue(row, ['HHHEADNAME', 'FARMERNAME', 'NAME', 'BENEFICIARYNAME']),
                             cluster: getFuzzyValue(row, ['CLUSTER']),
                             gp: getFuzzyValue(row, ['GP', 'GRAMPANCHAYAT']),
@@ -174,7 +174,7 @@ const ContributionPage: React.FC = () => {
                         if (baseline) {
                             foundActivityColumns.forEach((colName) => {
                                 const valStr = row[colName] || row[headersInSheet.find(h => h.includes(colName)) || ''] || '0';
-                                const amount = parseFloat(valStr.toString().replace(/[^0-9.]/g, '')) || 0;
+                                const amount = parseFloat((valStr || '').toString().replace(/[^0-9.]/g, '')) || 0;
 
                                 if (amount > 0) {
                                     merged.push({

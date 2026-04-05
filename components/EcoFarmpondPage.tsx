@@ -77,7 +77,7 @@ const EcoFarmpondPage: React.FC = () => {
     };
 
     const normalizeId = (id: any): string => {
-        if (!id) return '';
+        if (id === null || id === undefined) return '';
         const str = id.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         if (/^\d+$/.test(str)) {
             return parseInt(str, 10).toString();
@@ -134,7 +134,7 @@ const EcoFarmpondPage: React.FC = () => {
                 const pondCol = Object.keys(row).find(k => k.toUpperCase().includes('ECO-FARMPOND') || k.toUpperCase().includes('FARMPOND'));
                 
                 if (normId && pondCol) {
-                    const amount = parseFloat(row[pondCol].toString().replace(/[^0-9.]/g, '')) || 0;
+                    const amount = parseFloat((row[pondCol] || '').toString().replace(/[^0-9.]/g, '')) || 0;
                     if (amount > 0) {
                         contribMap.set(normId, (contribMap.get(normId) || 0) + amount);
                     }

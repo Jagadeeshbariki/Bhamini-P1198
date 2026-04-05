@@ -84,7 +84,7 @@ const ElevatedGoatShedPage: React.FC = () => {
     };
 
     const normalizeId = (id: any): string => {
-        if (!id) return '';
+        if (id === null || id === undefined) return '';
         const str = id.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         if (/^\d+$/.test(str)) {
             return parseInt(str, 10).toString();
@@ -150,12 +150,12 @@ const ElevatedGoatShedPage: React.FC = () => {
                     const isRowGoatActivity = rowActivity && rowActivity.toUpperCase().includes('GOAT');
                     
                     if ((rowActivity && rowActivity.toUpperCase().includes(activity.toUpperCase())) || (isGoatActivity && isRowGoatActivity)) {
-                        const amount = parseFloat(getFuzzyValue(cRow, ['Amount', 'Contribution', 'Total']).toString().replace(/[^0-9.]/g, '')) || 0;
+                        const amount = parseFloat((getFuzzyValue(cRow, ['Amount', 'Contribution', 'Total']) || '').toString().replace(/[^0-9.]/g, '')) || 0;
                         contribution += amount;
                     } else {
                         const activityCol = Object.keys(cRow).find(k => k.toUpperCase().includes(activity.toUpperCase()) || (isGoatActivity && k.toUpperCase().includes('GOAT')));
                         if (activityCol) {
-                            const amount = parseFloat(cRow[activityCol].toString().replace(/[^0-9.]/g, '')) || 0;
+                            const amount = parseFloat((cRow[activityCol] || '').toString().replace(/[^0-9.]/g, '')) || 0;
                             contribution += amount;
                         }
                     }

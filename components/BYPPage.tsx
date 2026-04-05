@@ -84,7 +84,7 @@ const BYPPage: React.FC = () => {
     };
 
     const normalizeId = (id: any): string => {
-        if (!id) return '';
+        if (id === null || id === undefined) return '';
         const str = id.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         if (/^\d+$/.test(str)) {
             return parseInt(str, 10).toString();
@@ -150,12 +150,12 @@ const BYPPage: React.FC = () => {
                     const isRowPoultryActivity = rowActivity && (rowActivity.toUpperCase().includes('POULTRY') || rowActivity.toUpperCase().includes('BYP'));
                     
                     if ((rowActivity && rowActivity.toUpperCase().includes(activity.toUpperCase())) || (isPoultryActivity && isRowPoultryActivity)) {
-                        const amount = parseFloat(getFuzzyValue(cRow, ['Amount', 'Contribution', 'Total']).toString().replace(/[^0-9.]/g, '')) || 0;
+                        const amount = parseFloat((getFuzzyValue(cRow, ['Amount', 'Contribution', 'Total']) || '').toString().replace(/[^0-9.]/g, '')) || 0;
                         contribution += amount;
                     } else {
                         const activityCol = Object.keys(cRow).find(k => k.toUpperCase().includes(activity.toUpperCase()) || (isPoultryActivity && (k.toUpperCase().includes('POULTRY') || k.toUpperCase().includes('BYP'))));
                         if (activityCol) {
-                            const amount = parseFloat(cRow[activityCol].toString().replace(/[^0-9.]/g, '')) || 0;
+                            const amount = parseFloat((cRow[activityCol] || '').toString().replace(/[^0-9.]/g, '')) || 0;
                             contribution += amount;
                         }
                     }
