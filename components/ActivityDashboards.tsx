@@ -421,11 +421,11 @@ const ActivityDashboards: React.FC = () => {
             parsedContribs.forEach(row => {
                 const hhId = row['FARMERID'] || row['FID'] || row['ID'] || row['FARMER ID'] || row['HH_ID'];
                 if (hhId) {
-                    const normId = hhId.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    const normId = (hhId || '').toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
                     const current = contribMap.get(normId) || {};
                     Object.entries(row).forEach(([key, val]) => {
                         if (key !== 'FARMERID' && key !== 'FID' && key !== 'ID' && key !== 'FARMER ID' && key !== 'HH_ID') {
-                            const amount = parseFloat(val?.toString().replace(/[^0-9.]/g, '') || '0') || 0;
+                            const amount = parseFloat((val?.toString() || '').replace(/[^0-9.]/g, '') || '0') || 0;
                             if (amount > 0) {
                                 current[key] = (current[key] || 0) + amount;
                             }
@@ -436,7 +436,7 @@ const ActivityDashboards: React.FC = () => {
             });
 
             const finalData = parsedBens.map(b => {
-                const normId = b.hhId.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+                const normId = (b.hhId || '').toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
                 const userContribs = contribMap.get(normId) || {};
                 
                 // Find contribution matching activity

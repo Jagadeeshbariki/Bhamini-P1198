@@ -66,36 +66,44 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
             const reader = new FileReader();
             reader.readAsDataURL(image);
             reader.onloadend = async () => {
-                const base64Data = (reader.result as string).split(',')[1];
-                
-                const payload = {
-                    action: 'updateBeneficiaryActivity',
-                    hhId: beneficiary.hhId,
-                    photoData: base64Data,
-                    fileName: `activity_${beneficiary.activity}_${beneficiary.hhId}_${Date.now()}.jpg`,
-                    mimeType: image.type,
-                    lat: location.lat,
-                    long: location.lng,
-                    uploadedBy: user?.username || 'Unknown'
-                };
+                try {
+                    if (!reader.result) throw new Error("Failed to read image file.");
+                    
+                    const base64Data = (reader.result as string).split(',')[1];
+                    
+                    const payload = {
+                        action: 'updateBeneficiaryActivity',
+                        hhId: String(beneficiary.hhId || ''),
+                        photoData: base64Data,
+                        fileName: `activity_${String(beneficiary.activity || 'unknown')}_${String(beneficiary.hhId || 'unknown')}_${Date.now()}.jpg`,
+                        mimeType: image.type,
+                        lat: location.lat,
+                        long: location.lng,
+                        uploadedBy: user?.username || 'Unknown'
+                    };
 
-                const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(payload)
-                });
+                    const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain' },
+                        body: JSON.stringify(payload)
+                    });
 
-                const result = await response.json();
+                    const result = await response.json();
 
-                if (response.ok && result.status === 'success') {
-                    setStatus('success');
-                    setTimeout(() => {
-                        onSuccess();
-                        onClose();
-                    }, 2000);
-                } else {
-                    throw new Error(result.message || 'Failed to upload image');
+                    if (response.ok && result.status === 'success') {
+                        setStatus('success');
+                        setTimeout(() => {
+                            onSuccess();
+                            onClose();
+                        }, 2000);
+                    } else {
+                        throw new Error(result.message || 'Failed to upload image');
+                    }
+                } catch (err: any) {
+                    console.error("Upload error:", err);
+                    setStatus('error');
+                    setError(err.message || "An unexpected error occurred during upload.");
                 }
             };
         } catch (err: any) {
