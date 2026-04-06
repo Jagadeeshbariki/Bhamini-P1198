@@ -137,7 +137,7 @@ const ElevatedGoatShedPage: React.FC = () => {
             const parsedData: GoatShedRecord[] = rawData.map(row => {
                 const hhId = getFuzzyValue(row, ['HH_id', 'HH ID', 'HHID', 'Farmer ID', 'FARMERID']) || '';
                 const normHhId = normalizeId(hhId);
-                const activity = getFuzzyValue(row, ['Activity']) || 'Goat Shed';
+                const activity = getFuzzyValue(row, ['Activity']) || 'Goatery';
                 
                 let contribution = 0;
                 const contribRows = contribMap.get(normHhId) || [];
@@ -313,7 +313,7 @@ const ElevatedGoatShedPage: React.FC = () => {
     if (loading) return (
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-sm font-medium text-gray-500">Loading Goat Shed Data...</p>
+            <p className="text-sm font-medium text-gray-500">Loading Goatery Data...</p>
         </div>
     );
 
@@ -333,7 +333,7 @@ const ElevatedGoatShedPage: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Elevated Goat Sheds Dashboard</h1>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Goatery Dashboard</h1>
                     <p className="text-sm text-gray-500 mt-1">Project Monitoring & Activity Analysis</p>
                 </div>
                 

@@ -104,7 +104,7 @@ const ContributionPage: React.FC = () => {
 
     const normalizeId = (id: any): string => {
         if (id === null || id === undefined) return '';
-        const str = id.toString().trim();
+        const str = id.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         if (/^\d+$/.test(str)) {
             return parseInt(str, 10).toString();
         }
@@ -114,7 +114,11 @@ const ContributionPage: React.FC = () => {
     const getFuzzyValue = (row: any, keys: string[]) => {
         const rowKeys = Object.keys(row);
         for (const k of keys) {
-            const match = rowKeys.find(rk => rk === k.toUpperCase() || rk.includes(k.toUpperCase()) || k.toUpperCase().includes(rk));
+            const match = rowKeys.find(rk => {
+                const rkUpper = rk.toUpperCase();
+                const kUpper = k.toUpperCase();
+                return rkUpper === kUpper || rkUpper.includes(kUpper) || kUpper.includes(rkUpper);
+            });
             if (match) return row[match];
         }
         return '';
@@ -139,7 +143,7 @@ const ContributionPage: React.FC = () => {
 
                 const baselineMap = new Map<string, BaselineRecord>();
                 rawBaseline.forEach(row => {
-                    const rawId = getFuzzyValue(row, ['FARMERID', 'FID', 'ID']);
+                    const rawId = getFuzzyValue(row, ['FARMERID', 'FID', 'ID', 'FARMER ID', 'HHID', 'HH ID', 'HH_ID']);
                     const normId = normalizeId(rawId);
                     if (normId) {
                         baselineMap.set(normId, {
@@ -155,25 +159,38 @@ const ContributionPage: React.FC = () => {
 
                 const activityHeaders = [
                     'BYP-NS', 'MOBILE IRR', 'PROCESSING', 'ASC', 'CROP MOD', 
-                    'BYP-BFE', 'FISHERIES', 'GOAT SHED', 'ECO-FARMPOND', 'FIXED IRRIG'
+                    'BYP-BFE', 'FISHERIES', 'GOAT SHED', 'GOATERY', 'GOAT', 'ECO-FARMPOND', 'FIXED IRRIG'
                 ];
 
                 const headersInSheet = Object.keys(rawContrib[0] || {});
-                const foundActivityColumns = activityHeaders.filter(ah => 
-                    headersInSheet.some(h => h.includes(ah.toUpperCase()))
-                );
+                
+                // Identify which columns in the sheet are actually activity columns
+                // We map each sheet header to its normalized activity name if it matches
+                const sheetActivityMap = new Map<string, string>();
+                headersInSheet.forEach(h => {
+                    const hUpper = h.toUpperCase();
+                    const matchedActivity = activityHeaders.find(ah => hUpper === ah.toUpperCase() || hUpper.includes(ah.toUpperCase()));
+                    if (matchedActivity) {
+                        let normalized = matchedActivity;
+                        if (normalized.toUpperCase().includes('GOAT')) {
+                            normalized = 'GOATERY';
+                        }
+                        sheetActivityMap.set(h, normalized);
+                    }
+                });
 
                 const merged: MergedContribution[] = [];
                 rawContrib.forEach((row, rowIndex) => {
-                    const rawId = getFuzzyValue(row, ['FARMERID', 'FID', 'ID']);
+                    const rawId = getFuzzyValue(row, ['FARMERID', 'FID', 'ID', 'FARMER ID', 'HHID', 'HH ID', 'HH_ID']);
                     const normId = normalizeId(rawId);
                     const date = getFuzzyValue(row, ['DATE', 'TIMESTAMP', 'TIME', 'SUBMISSIONDATE']) || 'N/A';
 
                     if (normId) {
                         const baseline = baselineMap.get(normId);
                         if (baseline) {
-                            foundActivityColumns.forEach((colName) => {
-                                const valStr = row[colName] || row[headersInSheet.find(h => h.includes(colName)) || ''] || '0';
+                            // Iterate over the identified activity columns in the sheet
+                            sheetActivityMap.forEach((normalizedActivity, colName) => {
+                                const valStr = row[colName] || '0';
                                 const amount = parseFloat((valStr || '').toString().replace(/[^0-9.]/g, '')) || 0;
 
                                 if (amount > 0) {
@@ -186,7 +203,7 @@ const ContributionPage: React.FC = () => {
                                         village: baseline.village,
                                         category: baseline.category,
                                         amount: amount,
-                                        activity: colName,
+                                        activity: normalizedActivity,
                                         date: date
                                     });
                                 }

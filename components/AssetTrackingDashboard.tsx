@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { ASSETS_DATA_URL } from '../config';
 
 interface AssetRecord {
@@ -28,7 +29,11 @@ interface AssetRecord {
     distCluster3: number;
 }
 
-const AssetTrackingDashboard: React.FC = () => {
+interface AssetTrackingDashboardProps {
+    onBack?: () => void;
+}
+
+const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack }) => {
     const [data, setData] = useState<AssetRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -218,6 +223,15 @@ const AssetTrackingDashboard: React.FC = () => {
 
     return (
         <div className="flex flex-col gap-8 animate-fade-in pb-20 overflow-visible">
+            {onBack && (
+                <button 
+                    onClick={onBack}
+                    className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mb-4 group w-fit"
+                >
+                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                    Back to Dashboards
+                </button>
+            )}
             {/* 1. TOP FILTERS */}
             <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-gray-800 p-4 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
                 <div className="flex items-center gap-2">

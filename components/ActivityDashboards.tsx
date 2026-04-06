@@ -40,6 +40,33 @@ interface ActivityDashboardsProps {
 
 const CHART_COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#f97316'];
 
+const parseLine = (line: string): string[] => {
+    const values = [];
+    let inQuote = false, val = '';
+    for (let j = 0; j < line.length; j++) {
+        if (line[j] === '"') inQuote = !inQuote;
+        else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
+        else val += line[j];
+    }
+    values.push(val.trim().replace(/^"|"$/g, ''));
+    return values;
+};
+
+const normalizeActivity = (act: string) => {
+    const upper = (act || '').trim().toUpperCase();
+    if (upper.includes('GOAT')) return 'Goatery';
+    return act.trim();
+};
+
+const normalizeId = (id: any): string => {
+    if (!id) return '';
+    const str = id.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (/^\d+$/.test(str)) {
+        return parseInt(str, 10).toString();
+    }
+    return str;
+};
+
 const ActivityDashboardContent: React.FC<{ 
     data: BeneficiaryRecord[]; 
     onRefresh: (url?: string, hhId?: string) => void;
@@ -161,43 +188,43 @@ const ActivityDashboardContent: React.FC<{
     const clusters = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.cluster))).sort()], [data]);
 
     return (
-        <div className="space-y-6 p-4">
+        <div className="space-y-4 md:space-y-6 p-2 md:p-4">
             {/* KPI Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-4">
-                    <div className="p-4 bg-indigo-50 dark:bg-indigo-900/40 rounded-2xl text-indigo-600">
-                        <Users className="w-6 h-6" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
+                    <div className="p-3 md:p-4 bg-indigo-50 dark:bg-indigo-900/40 rounded-xl md:rounded-2xl text-indigo-600">
+                        <Users className="w-5 h-5 md:w-6 md:h-6" />
                     </div>
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Beneficiaries</p>
-                        <p className="text-2xl font-black text-gray-900 dark:text-white">{stats.achieved}</p>
+                        <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Beneficiaries</p>
+                        <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{stats.achieved}</p>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-4">
-                    <div className="p-4 bg-emerald-50 dark:bg-emerald-900/40 rounded-2xl text-emerald-600">
-                        <IndianRupee className="w-6 h-6" />
+                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
+                    <div className="p-3 md:p-4 bg-emerald-50 dark:bg-emerald-900/40 rounded-xl md:rounded-2xl text-emerald-600">
+                        <IndianRupee className="w-5 h-5 md:w-6 md:h-6" />
                     </div>
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Contribution</p>
-                        <p className="text-2xl font-black text-gray-900 dark:text-white">₹{stats.totalContribution.toLocaleString()}</p>
+                        <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Contribution</p>
+                        <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">₹{stats.totalContribution.toLocaleString()}</p>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-4">
-                    <div className="p-4 bg-amber-50 dark:bg-amber-900/40 rounded-2xl text-amber-600">
-                        <Globe className="w-6 h-6" />
+                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
+                    <div className="p-3 md:p-4 bg-amber-50 dark:bg-amber-900/40 rounded-xl md:rounded-2xl text-amber-600">
+                        <Globe className="w-5 h-5 md:w-6 md:h-6" />
                     </div>
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Mapped Locations</p>
-                        <p className="text-2xl font-black text-gray-900 dark:text-white">{stats.mapPoints.length}</p>
+                        <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Mapped Locations</p>
+                        <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{stats.mapPoints.length}</p>
                     </div>
                 </div>
             </div>
 
             {/* Charts & Map */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
                             <PieChartIcon className="w-4 h-4 text-indigo-600" />
@@ -235,8 +262,8 @@ const ActivityDashboardContent: React.FC<{
             </div>
 
             {/* Table & Filters */}
-            <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-                <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div className="p-4 md:p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row gap-4 items-center justify-between">
                     <div className="relative w-full md:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                         <input
@@ -247,7 +274,7 @@ const ActivityDashboardContent: React.FC<{
                             className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500"
                         />
                     </div>
-                    <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                    <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
                         {clusters.map(c => {
                             const count = c === 'All' ? stats.achieved : (stats.clusterDist.find(d => d.name === c)?.value || 0);
                             return (
@@ -352,18 +379,6 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
         const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
         if (lines.length < 1) return [];
         
-        const parseLine = (line: string): string[] => {
-            const values = [];
-            let inQuote = false, val = '';
-            for (let j = 0; j < line.length; j++) {
-                if (line[j] === '"') inQuote = !inQuote;
-                else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
-                else val += line[j];
-            }
-            values.push(val.trim().replace(/^"|"$/g, ''));
-            return values;
-        };
-
         const rawHeaders = parseLine(lines[0]);
         const normalize = (h: string) => h.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
         const normalizedHeaders = rawHeaders.map(normalize);
@@ -377,12 +392,12 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             return idx !== -1 ? row[idx] : '';
         };
         
-        return lines.slice(1).map(line => {
+        const beneficiaries = lines.slice(1).map(line => {
             const vals = parseLine(line);
             return {
                 hhId: getVal(vals, 'Farmer ID') || getVal(vals, 'HH_id') || getVal(vals, 'HH ID') || getVal(vals, 'HHID') || '',
                 name: getVal(vals, 'Beneficiary name') || getVal(vals, 'Farmer Name') || getVal(vals, 'Name') || '',
-                activity: (getVal(vals, 'Activity') || getVal(vals, 'activity') || '').trim().replace(/^(BYP-|BFE-|AFT-)/, ''),
+                activity: normalizeActivity((getVal(vals, 'Activity') || getVal(vals, 'activity') || '').trim().replace(/^(BYP-|BFE-|AFT-)/, '')),
                 gp: getVal(vals, 'GP') || getVal(vals, 'Beneficiary_GP') || '',
                 village: getVal(vals, 'Village') || getVal(vals, 'Beneficiary_village') || '',
                 age: getVal(vals, 'Age') || getVal(vals, 'Beneficiary_age') || '',
@@ -393,6 +408,18 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 photo: getVal(vals, 'Photo_link') || getVal(vals, 'Photo') || getVal(vals, 'Image') || getVal(vals, 'Picture') || getVal(vals, 'PhotoLink') || '',
             };
         }).filter(b => b.hhId && b.activity);
+
+        // Deduplicate by normalized hhId and activity to prevent double-counting contributions
+        const uniqueBens = new Map<string, any>();
+        beneficiaries.forEach(b => {
+            const normId = normalizeId(b.hhId);
+            const key = `${normId}-${b.activity.toUpperCase()}`;
+            if (!uniqueBens.has(key)) {
+                uniqueBens.set(key, b);
+            }
+        });
+
+        return Array.from(uniqueBens.values());
     };
 
     const fetchData = useCallback(async () => {
@@ -412,11 +439,12 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             
             const rawContribs = (csv: string) => {
                 const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
-                const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
+                if (lines.length < 1) return [];
+                const headers = parseLine(lines[0]).map(h => h.trim().toUpperCase());
                 return lines.slice(1).map(line => {
-                    const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+                    const vals = parseLine(line);
                     const obj: any = {};
-                    headers.forEach((h, i) => obj[h] = vals[i]);
+                    headers.forEach((h, i) => obj[h] = vals[i] || '');
                     return obj;
                 });
             };
@@ -424,12 +452,19 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
 
             const contribMap = new Map<string, Record<string, number>>();
             parsedContribs.forEach(row => {
-                const hhId = row['FARMERID'] || row['FID'] || row['ID'] || row['FARMER ID'] || row['HH_ID'];
+                const hhId = row['FARMERID'] || row['FID'] || row['ID'] || row['FARMER ID'] || row['HHID'] || row['HH ID'] || row['HH_ID'];
                 if (hhId) {
-                    const normId = (hhId || '').toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    const normId = normalizeId(hhId);
                     const current = contribMap.get(normId) || {};
+                    const idHeaders = [
+                        'FARMERID', 'FID', 'ID', 'FARMER ID', 'HHID', 'HH ID', 'HH_ID', 
+                        'BENID', 'BEN_ID', 'FARMER_ID', 'DATE', 'TIMESTAMP', 'TIME', 
+                        'SUBMISSIONDATE', 'VILLAGE', 'GP', 'CLUSTER', 'NAME', 'FARMER NAME',
+                        'HHHEADNAME', 'BENEFICIARYNAME', 'CASTE', 'CATEGORY'
+                    ];
                     Object.entries(row).forEach(([key, val]) => {
-                        if (key !== 'FARMERID' && key !== 'FID' && key !== 'ID' && key !== 'FARMER ID' && key !== 'HH_ID') {
+                        const kUpper = key.toUpperCase();
+                        if (!idHeaders.includes(kUpper)) {
                             const amount = parseFloat((val?.toString() || '').replace(/[^0-9.]/g, '') || '0') || 0;
                             if (amount > 0) {
                                 current[key] = (current[key] || 0) + amount;
@@ -441,11 +476,23 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             });
 
             const finalData = parsedBens.map(b => {
-                const normId = (b.hhId || '').toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+                const normId = normalizeId(b.hhId);
                 const userContribs = contribMap.get(normId) || {};
                 
                 // Find contribution matching activity
-                const activityKey = Object.keys(userContribs).find(k => k.includes(b.activity.toUpperCase()) || b.activity.toUpperCase().includes(k));
+                const activityUpper = b.activity.toUpperCase();
+                const isGoatActivity = activityUpper.includes('GOAT');
+                
+                const activityKey = Object.keys(userContribs).find(k => {
+                    const keyUpper = k.toUpperCase();
+                    const isKeyGoat = keyUpper.includes('GOAT');
+                    
+                    // Match if keys are similar or both are goat-related
+                    return keyUpper.includes(activityUpper) || 
+                           activityUpper.includes(keyUpper) || 
+                           (isGoatActivity && isKeyGoat);
+                });
+                
                 const contribution = activityKey ? userContribs[activityKey] : 0;
 
                 return { ...b, contribution };

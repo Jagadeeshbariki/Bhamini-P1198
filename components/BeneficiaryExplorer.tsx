@@ -8,7 +8,7 @@ import {
     Users, MapPin, Filter, Search, 
     Download, X, ArrowUpDown,
     Activity as ActivityIcon, UserCheck,
-    ChevronDown, ChevronUp
+    ChevronDown, ChevronUp, ArrowLeft
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -67,7 +67,11 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
-const BeneficiaryExplorer: React.FC = () => {
+interface BeneficiaryExplorerProps {
+    onBack?: () => void;
+}
+
+const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => {
     const [data, setData] = useState<Beneficiary[]>([]);
     const [loading, setLoading] = useState(true);
     
@@ -393,6 +397,15 @@ const BeneficiaryExplorer: React.FC = () => {
 
     return (
         <div className="flex flex-col gap-3 animate-fade-in pb-20">
+            {onBack && (
+                <button 
+                    onClick={onBack}
+                    className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mb-4 group w-fit"
+                >
+                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                    Back to Dashboards
+                </button>
+            )}
             {/* 1. HEADER & GLOBAL ACTIONS */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>

@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { 
     Package, Activity, Database, TrendingUp,
-    Info, AlertCircle, ChevronDown, ChevronUp
+    Info, AlertCircle, ChevronDown, ChevronUp, ArrowLeft
 } from 'lucide-react';
 
 interface DistributionRecord {
@@ -23,7 +23,11 @@ interface DistributionRecord {
 
 const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
-const ODKAssetDistribution: React.FC = () => {
+interface ODKAssetDistributionProps {
+    onBack?: () => void;
+}
+
+const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) => {
     const [data, setData] = useState<DistributionRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -210,71 +214,80 @@ const ODKAssetDistribution: React.FC = () => {
     }
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-700">
+        <div className="space-y-8 animate-in fade-in duration-700 pb-20">
+            {onBack && (
+                <button 
+                    onClick={onBack}
+                    className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mb-4 group"
+                >
+                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                    Back to Dashboards
+                </button>
+            )}
             {/* Header Section */}
-            <div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] shadow-2xl shadow-indigo-100/50 dark:shadow-none border border-gray-100 dark:border-gray-800 relative overflow-hidden">
+            <div className="bg-white dark:bg-gray-900 p-4 md:p-6 rounded-2xl md:rounded-[2.5rem] shadow-2xl shadow-indigo-100/50 dark:shadow-none border border-gray-100 dark:border-gray-800 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
-                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="flex items-center gap-5">
-                        <div className="w-16 h-16 bg-indigo-600 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-indigo-200 rotate-3">
-                            <Package className="w-8 h-8" />
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
+                    <div className="flex items-center gap-4 md:gap-5">
+                        <div className="w-12 h-12 md:w-16 md:h-16 bg-indigo-600 rounded-2xl md:rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-indigo-200 rotate-3">
+                            <Package className="w-6 h-6 md:w-8 md:h-8" />
                         </div>
                         <div>
-                            <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-tighter leading-none uppercase">ODK Material distribution status</h1>
-                            <p className="text-xs font-bold text-indigo-500 uppercase tracking-[0.3em] mt-2">Material Distribution Insights</p>
+                            <h1 className="text-xl md:text-3xl font-black text-gray-900 dark:text-white tracking-tighter leading-none uppercase">ODK Material distribution status</h1>
+                            <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-[0.3em] mt-1 md:mt-2">Material Distribution Insights</p>
                         </div>
                     </div>
                     
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="px-6 py-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800/50">
-                            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Total Assets</p>
-                            <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 leading-none">{totalAssets.toLocaleString()}</p>
+                    <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                        <div className="px-4 py-2 md:px-6 md:py-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl md:rounded-2xl border border-indigo-100 dark:border-indigo-800/50">
+                            <p className="text-[9px] md:text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-0.5 md:mb-1">Total Assets</p>
+                            <p className="text-lg md:text-2xl font-black text-indigo-600 dark:text-indigo-400 leading-none">{totalAssets.toLocaleString()}</p>
                         </div>
-                        <div className="px-6 py-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/50">
-                            <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Beneficiaries</p>
-                            <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 leading-none">{uniqueBeneficiaries.toLocaleString()}</p>
+                        <div className="px-4 py-2 md:px-6 md:py-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl md:rounded-2xl border border-emerald-100 dark:border-emerald-800/50">
+                            <p className="text-[9px] md:text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-0.5 md:mb-1">Beneficiaries</p>
+                            <p className="text-lg md:text-2xl font-black text-emerald-600 dark:text-emerald-400 leading-none">{uniqueBeneficiaries.toLocaleString()}</p>
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* Activity Wise Accordion Section */}
-            <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-                <div className="p-8 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl md:rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+                <div className="p-4 md:p-6 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between">
                     <div>
-                        <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight uppercase">Activity Wise Distribution</h3>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Click on an activity to see material details</p>
+                        <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tight uppercase">Activity Wise Distribution</h3>
+                        <p className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Click on an activity to see material details</p>
                     </div>
-                    <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl text-indigo-600">
-                        <Database className="w-5 h-5" />
+                    <div className="p-2 md:p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl md:rounded-2xl text-indigo-600">
+                        <Database className="w-4 h-4 md:w-5 md:h-5" />
                     </div>
                 </div>
-                <div className="p-4 space-y-3">
+                <div className="p-2 md:p-4 space-y-2 md:space-y-3">
                     {pivotData.activities.map(activity => (
-                        <div key={activity} className="border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden">
+                        <div key={activity} className="border border-gray-100 dark:border-gray-800 rounded-xl md:rounded-2xl overflow-hidden">
                             <button 
                                 onClick={() => {
                                     setOpenAccordion(openAccordion === activity ? null : activity);
                                     setSelectedActivity(openAccordion === activity ? 'All' : activity);
                                 }}
-                                className="w-full flex items-center justify-between p-5 bg-gray-50/50 dark:bg-gray-800/50 hover:bg-gray-100/50 transition-colors"
+                                className="w-full flex items-center justify-between p-3 md:p-4 bg-gray-50/50 dark:bg-gray-800/50 hover:bg-gray-100/50 transition-colors"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center text-indigo-600">
-                                        <Activity className="w-5 h-5" />
+                                <div className="flex items-center gap-2 md:gap-3">
+                                    <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg md:rounded-xl flex items-center justify-center text-indigo-600">
+                                        <Activity className="w-4 h-4 md:w-5 md:h-5" />
                                     </div>
                                     <div className="text-left">
-                                        <p className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                                        <p className="text-xs md:text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">
                                             {activity}- {pivotData.summary[activity].beneficiaryCount}
                                         </p>
-                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{pivotData.summary[activity].total.toLocaleString()} Units Distributed</p>
+                                        <p className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest">{pivotData.summary[activity].total.toLocaleString()} Units Distributed</p>
                                     </div>
                                 </div>
-                                {openAccordion === activity ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                                {openAccordion === activity ? <ChevronUp className="w-4 h-4 md:w-5 md:h-5 text-gray-400" /> : <ChevronDown className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />}
                             </button>
                             
                             {openAccordion === activity && (
-                                <div className="p-5 overflow-x-auto animate-in slide-in-from-top-2 duration-300">
+                                <div className="p-3 md:p-4 overflow-x-auto animate-in slide-in-from-top-2 duration-300">
                                     <table className="w-full text-left border-collapse text-xs">
                                         <thead>
                                             <tr className="border-b border-gray-100 dark:border-gray-800">

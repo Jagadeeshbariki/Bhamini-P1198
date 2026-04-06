@@ -383,6 +383,7 @@ function handleUpdateBeneficiaryActivity(data) {
   const photoCol = headers.findIndex(h => h === 'PHOTO' || h === 'IMAGE' || h === 'PHOTOLINK' || h.includes('PHOTO'));
   const latCol = headers.findIndex(h => h === 'LAT' || h === 'LATITUDE');
   const longCol = headers.findIndex(h => h === 'LONG' || h === 'LONGITUDE' || h === 'LNG');
+  const accuracyCol = headers.findIndex(h => h === 'ACCURACY' || h === 'GPS_ACCURACY');
   const uploadedByCol = headers.findIndex(h => h.includes('UPLOADEDBY') || h.includes('USER'));
   
   if (hhIdCol === -1) throw new Error("HH ID column not found in sheet");
@@ -398,6 +399,7 @@ function handleUpdateBeneficiaryActivity(data) {
       if (photoCol !== -1) sheet.getRange(i + 1, photoCol + 1).setValue(directUrl);
       if (latCol !== -1) sheet.getRange(i + 1, latCol + 1).setValue(data.lat);
       if (longCol !== -1) sheet.getRange(i + 1, longCol + 1).setValue(data.long);
+      if (accuracyCol !== -1) sheet.getRange(i + 1, accuracyCol + 1).setValue(data.accuracy || 0);
       if (uploadedByCol !== -1) sheet.getRange(i + 1, uploadedByCol + 1).setValue(data.uploadedBy || 'Unknown');
       
       found = true;

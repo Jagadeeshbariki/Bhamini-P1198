@@ -18,7 +18,7 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
     const { user } = useAuth();
     const [image, setImage] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(null);
-    const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+    const [location, setLocation] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
     const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [error, setError] = useState<string | null>(null);
 
@@ -29,12 +29,18 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                 (position) => {
                     setLocation({
                         lat: position.coords.latitude,
-                        lng: position.coords.longitude
+                        lng: position.coords.longitude,
+                        accuracy: position.coords.accuracy
                     });
                 },
                 (err) => {
                     console.error("Geolocation error:", err);
                     setError("Could not get location. Please enable GPS.");
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
                 }
             );
         }
@@ -79,6 +85,7 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                         mimeType: image.type,
                         lat: location.lat,
                         long: location.lng,
+                        accuracy: location.accuracy,
                         uploadedBy: user?.username || 'Unknown'
                     };
 
@@ -94,7 +101,7 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                     if (response.ok && result.status === 'success') {
                         setStatus('success');
                         setTimeout(() => {
-                            onSuccess(result.url);
+                            onSuccess(result.url || result.fileUrl);
                             onClose();
                         }, 2000);
                     } else {
@@ -113,19 +120,19 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
-                <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 md:p-4 bg-black/60 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl md:rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+                <div className="p-4 md:p-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                     <div>
-                        <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Upload Activity Photo</h3>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">{beneficiary.name} ({beneficiary.hhId})</p>
+                        <h3 className="text-lg md:text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Upload Activity Photo</h3>
+                        <p className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase mt-1">{beneficiary.name} ({beneficiary.hhId})</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">
-                        <X className="w-6 h-6 text-gray-400" />
+                        <X className="w-5 h-5 md:w-6 md:h-6 text-gray-400" />
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                <form onSubmit={handleSubmit} className="p-4 md:p-6 space-y-4 md:space-y-6">
                     {/* Image Preview / Input */}
                     <div className="relative group">
                         {preview ? (
@@ -144,8 +151,8 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                                 <div className="p-4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm group-hover:scale-110 transition-transform">
                                     <Camera className="w-8 h-8 text-indigo-600" />
                                 </div>
-                                <span className="mt-4 text-xs font-black text-gray-400 uppercase tracking-widest">Click to Capture/Upload</span>
-                                <input type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
+                                <span className="mt-4 text-xs font-black text-gray-400 uppercase tracking-widest text-center px-4">Click to Capture or Choose from Gallery</span>
+                                <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
                             </label>
                         )}
                     </div>
@@ -159,9 +166,16 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                             <div className="flex-1">
                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">GPS Location</p>
                                 {location ? (
-                                    <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                                        {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
-                                    </p>
+                                    <div className="flex flex-col">
+                                        <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                            {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+                                        </p>
+                                        {location.accuracy && (
+                                            <p className="text-[9px] font-black text-indigo-500 uppercase tracking-tighter mt-0.5">
+                                                Accuracy: ±{location.accuracy.toFixed(1)}m
+                                            </p>
+                                        )}
+                                    </div>
                                 ) : (
                                     <p className="text-xs font-bold text-amber-600 animate-pulse">Acquiring Location...</p>
                                 )}

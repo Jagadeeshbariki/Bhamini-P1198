@@ -19,7 +19,7 @@ const ACTIVITIES: ActivityType[] = [
     { id: 'beneficiary', name: 'Beneficiary Explorer', description: 'Detailed explorer for project beneficiaries and demographics.' },
     { id: 'eco-farmpond', name: 'Eco-farmpond', description: 'Project monitoring and contribution analysis for farmpond beneficiaries.' },
     { id: 'byp-poultry', name: 'BYP Poultry Explorer', description: 'Backyard Poultry project monitoring and tracking.' },
-    { id: 'elevated-goat-shed', name: 'Elevated Goat Shed Explorer', description: 'Monitoring and tracking for elevated goat shed beneficiaries.' },
+    { id: 'elevated-goat-shed', name: 'Goatery Explorer', description: 'Monitoring and tracking for goatery beneficiaries.' },
 ];
 
 const ActivityPage: React.FC = () => {

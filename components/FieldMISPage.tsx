@@ -431,7 +431,7 @@ const FieldMISPage: React.FC = () => {
         else if (hCode.includes('a1.2') || hCode.includes('a.1.2') || hName.includes('mobile irrigation')) colNames = ['Mobile Irrigation'];
         else if (hCode.includes('a1.9') || hCode.includes('a.1.9') || hName.includes('processing hub')) colNames = ['Processing Hubs'];
         else if (hCode.includes('a1.10') || hCode.includes('a.1.10') || hName.includes('fish')) colNames = ['Fisheries'];
-        else if (hCode.includes('a1.8') || hCode.includes('a.1.8') || hName.includes('goatery')) colNames = ['Goat Sheds'];
+        else if (hCode.includes('a1.8') || hCode.includes('a.1.8') || hName.includes('goatery')) colNames = ['Goatery'];
         else if (hCode.includes('a1.3') || hCode.includes('a.1.3') || hName.includes('farm pond')) colNames = ['Eco-Farmpond'];
         else if (hCode.includes('a1.1') || hCode.includes('a.1.1') || hName.includes('irrigation(solar/fixed)')) colNames = ['Fixed Irrigation'];
         
