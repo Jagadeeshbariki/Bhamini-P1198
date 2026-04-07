@@ -80,6 +80,7 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                     const payload = {
                         action: 'updateBeneficiaryActivity',
                         hhId: String(beneficiary.hhId || ''),
+                        activity: beneficiary.activity,
                         photoData: base64Data,
                         fileName: `activity_${String(beneficiary.activity || 'unknown')}_${String(beneficiary.hhId || 'unknown')}_${Date.now()}.jpg`,
                         mimeType: image.type,
