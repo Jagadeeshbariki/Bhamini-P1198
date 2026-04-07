@@ -1,5 +1,5 @@
 /**
- * BHAMINI P1198 - MASTER BACKEND v4
+ * BHAMINI P1198 - MASTER BACKEND v5
  * FULLY INTEGRATED: Attendance, Photos, MIS, and Maintenance
  */
 
@@ -9,7 +9,7 @@ const BILL_FOLDER_ID = "1g7H-IBWQEN_bKOHTbkFv1j0QrvMLpFB0";
 
 // The ID of your "Beneficiary List" spreadsheet (the one with Master_Sheet)
 // You can find this in the URL of that spreadsheet: docs.google.com/spreadsheets/d/[ID_HERE]/edit
-const BENEFICIARY_SS_ID = "PASTE_BENEFICIARY_SPREADSHEET_ID_HERE"; 
+const BENEFICIARY_SS_ID = "1Fex87lW89bQE1cafm_JE0wK8tFZkGtdasI2u0zYCbEo"; 
 
 const SPREADSHEET_ID = SpreadsheetApp.getActiveSpreadsheet().getId();
 
@@ -89,10 +89,10 @@ function handlePhotoUpload(data) {
   const sheet = ss.getSheetByName("Photos") || getSheetByGid(14172760);
   if (sheet) {
     sheet.appendRow([
-      new Date(), 
       url, 
-      data.type || data.activity || "General", 
+      data.type || "General", 
       data.description || "", 
+      new Date(), 
       data.activity || "", 
       data.uploadedBy || 'Unknown'
     ]);
@@ -116,27 +116,18 @@ function handleUpdateBeneficiaryActivity(data) {
   try {
     ss = SpreadsheetApp.openById(BENEFICIARY_SS_ID);
   } catch (e) {
-    // Fallback to active spreadsheet if ID is not set or invalid
     ss = SpreadsheetApp.getActiveSpreadsheet();
   }
   
   // 2. TARGET THE MASTER SHEET
-  // As per user request, all activity data is now in "Master_Sheet"
   let sheet = ss.getSheetByName("Master_Sheet") || ss.getSheets()[0];
   
   const rows = sheet.getDataRange().getValues();
   const headers = rows[0].map(h => h.toString().toUpperCase().replace(/[\s_]+/g, ''));
   
   const hhIdCol = headers.findIndex(h => h === 'HHID' || h === 'FARMERID' || h === 'ID' || h.includes('HHID'));
-  
-  // Find the correct photo column based on activity
-  let activity = (data.activity || "").trim().toUpperCase();
-  let photoColName = "PHOTO";
-  if (activity.includes("FARMPOND")) photoColName = "FARMPONDPHOTO";
-  else if (activity.includes("POULTRY")) photoColName = "POULTRYPHOTO";
-  else if (activity.includes("GOAT")) photoColName = "GOATPHOTO";
-  
-  let photoCol = headers.findIndex(h => h === photoColName || h === 'PHOTO' || h === 'IMAGE' || h.includes('PHOTO'));
+  const activityCol = headers.findIndex(h => h === 'ACTIVITY' || h === 'BENEFICIARYACTIVITY' || h.includes('ACTIVITY'));
+  const imageCol = headers.findIndex(h => h === 'IMAGE' || h === 'PHOTO' || h.includes('IMAGE'));
   
   const latCol = headers.findIndex(h => h === 'LAT' || h === 'LATITUDE');
   const longCol = headers.findIndex(h => h === 'LONG' || h === 'LONGITUDE' || h === 'LNG');
@@ -146,10 +137,16 @@ function handleUpdateBeneficiaryActivity(data) {
   if (hhIdCol === -1) return createResponse("error", "HH ID column not found in " + sheet.getName());
 
   const targetId = normalizeId(data.hhId);
+  const targetActivity = (data.activity || "").trim().toUpperCase();
+  
   let found = false;
   for (let i = 1; i < rows.length; i++) {
-    if (normalizeId(rows[i][hhIdCol]) === targetId) {
-      if (photoCol !== -1) sheet.getRange(i + 1, photoCol + 1).setValue(fileUrl);
+    const rowId = normalizeId(rows[i][hhIdCol]);
+    const rowActivity = (rows[i][activityCol] || "").toString().trim().toUpperCase();
+    
+    // Match HH ID and Activity
+    if (rowId === targetId && (activityCol === -1 || rowActivity === targetActivity)) {
+      if (imageCol !== -1) sheet.getRange(i + 1, imageCol + 1).setValue(fileUrl);
       if (latCol !== -1) sheet.getRange(i + 1, latCol + 1).setValue(data.lat);
       if (longCol !== -1) sheet.getRange(i + 1, longCol + 1).setValue(data.long);
       if (accuracyCol !== -1) sheet.getRange(i + 1, accuracyCol + 1).setValue(data.accuracy || 0);
@@ -159,23 +156,10 @@ function handleUpdateBeneficiaryActivity(data) {
     }
   }
 
-  // 3. LOG TO PHOTOS SHEET (In the Bhamini Application Spreadsheet)
-  const appSS = SpreadsheetApp.getActiveSpreadsheet();
-  const photoLogSheet = appSS.getSheetByName("Photos") || getSheetByGid(14172760);
-  if (photoLogSheet) {
-    photoLogSheet.appendRow([
-      new Date(), 
-      data.hhId, 
-      data.activity || "Activity Update", 
-      fileUrl, 
-      data.lat || "", 
-      data.long || "", 
-      data.uploadedBy || "Unknown"
-    ]);
-  }
-
+  // User requested NOT to log to Photos sheet for activity updates
+  
   if (found) return createResponse("success", "Activity photo updated in Master_Sheet.", { url: fileUrl });
-  return createResponse("error", "Beneficiary ID not found in Master_Sheet of Beneficiary Spreadsheet.");
+  return createResponse("error", "Beneficiary ID and Activity match not found in Master_Sheet.");
 }
 
 /**
@@ -333,7 +317,8 @@ function handleDeletePhoto(data) {
   
   const rows = sheet.getDataRange().getValues();
   for (let i = 1; i < rows.length; i++) {
-    if (rows[i][1] === data.url) {
+    // URL is now in the first column (index 0)
+    if (rows[i][0] === data.url) {
       sheet.deleteRow(i + 1);
       break;
     }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
     Search, Filter, PieChart as PieChartIcon, BarChart as BarChartIcon,
-    Target, TrendingUp, Users, MapPin, Globe, Camera, RefreshCw, IndianRupee
+    Target, TrendingUp, Users, MapPin, Globe, Camera, RefreshCw, IndianRupee,
+    Download
 } from 'lucide-react';
 import { 
     ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
@@ -310,6 +311,28 @@ const BYPPage: React.FC = () => {
     const clusters = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.cluster)))], [data]);
     const activities = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.activity)))], [data]);
 
+    const downloadCSV = () => {
+        const headers = ['HH ID', 'Name', 'GP', 'Village', 'Age', 'Ben ID', 'Cluster', 'Activity', 'Contribution', 'Lat', 'Lng', 'Photo'];
+        const csvContent = [
+            headers.join(','),
+            ...filteredData.map(d => [
+                `"${d.hhId}"`, `"${d.name}"`, `"${d.gp}"`, `"${d.village}"`, 
+                `"${d.age}"`, `"${d.benId}"`, `"${d.cluster}"`, `"${d.activity}"`, d.contribution || 0,
+                d.lat, d.lng, `"${d.photo}"`
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `byp_report_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     if (loading) return (
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -345,6 +368,14 @@ const BYPPage: React.FC = () => {
                         title="Refresh Data"
                     >
                         <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
+
+                    <button 
+                        onClick={downloadCSV}
+                        className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-lg text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+                    >
+                        <Download className="w-4 h-4" />
+                        Export
                     </button>
 
                     <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm">

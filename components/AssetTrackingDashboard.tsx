@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 import { ASSETS_DATA_URL } from '../config';
 
 interface AssetRecord {
@@ -121,6 +121,35 @@ const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack 
 
     const budgetHeadOptions = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.budgetHead))).sort()], [data]);
     const clusterOptions = ['All', 'Cluster 1', 'Cluster 2', 'Cluster 3'];
+
+    const downloadCSV = () => {
+        const headers = [
+            'SNO', 'Project Code', 'Budget Head', 'Activity Code', 'Asset Code', 'Asset Name', 
+            'Date of Purchase', 'Date of Receipt', 'Cost Per Unit', 'HDFC Contribution', 
+            'Community Contribution', 'Qty Purchased', 'Qty Received', 'Pending', 'Total Price', 
+            'Payment Status', 'Asset Status', 'Qty C1', 'Dist C1', 'Qty C2', 'Dist C2', 'Qty C3', 'Dist C3'
+        ];
+        const csvContent = [
+            headers.join(','),
+            ...filteredLedgerData.map(d => [
+                `"${d.id}"`, `"${d.projectCode}"`, `"${d.budgetHead}"`, `"${d.activityCode}"`, 
+                `"${d.assetCode}"`, `"${d.assetName}"`, `"${d.dateOfPurchase}"`, `"${d.dateOfReceipt}"`,
+                d.costPerUnit, d.hdfcContribution, d.communityContribution, d.qtyPurchased, 
+                d.qtyReceived, d.pending, d.totalPrice, `"${d.paymentStatus}"`, `"${d.assetStatus}"`,
+                d.qtyCluster1, d.distCluster1, d.qtyCluster2, d.distCluster2, d.qtyCluster3, d.distCluster3
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `asset_tracking_report_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const filteredLedgerData = useMemo(() => {
         return data.filter(d => {
@@ -255,6 +284,13 @@ const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack 
                     <option value="All">All Clusters (Summary)</option>
                     {clusterOptions.filter(o => o !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
+                <button 
+                    onClick={downloadCSV}
+                    className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+                >
+                    <Download className="w-4 h-4" />
+                    Export
+                </button>
             </div>
 
             {/* 2. KPI STRIP */}

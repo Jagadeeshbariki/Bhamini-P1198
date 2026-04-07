@@ -8,9 +8,11 @@ interface GalleryImage {
 
 interface PhotoGalleryProps {
     images: GalleryImage[];
+    onDelete?: (url: string) => void;
+    deletingUrl?: string | null;
 }
 
-const PhotoGallery: React.FC<PhotoGalleryProps> = ({ images }) => {
+const PhotoGallery: React.FC<PhotoGalleryProps> = ({ images, onDelete, deletingUrl }) => {
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
     const openLightbox = (index: number) => setSelectedIndex(index);
@@ -45,7 +47,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ images }) => {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4 px-2 md:px-4">
                 {images.map((image, index) => (
                     <div key={index} onClick={() => openLightbox(index)} className="cursor-pointer">
-                        <GalleryItem image={image} index={index} />
+                        <GalleryItem image={image} index={index} onDelete={onDelete} isDeleting={deletingUrl === image.url} />
                     </div>
                 ))}
             </div>
@@ -109,6 +111,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ images }) => {
                                     src={images[selectedIndex].url} 
                                     alt={images[selectedIndex].description || "Field documentation image"} 
                                     className="max-w-full max-h-[75vh] md:max-h-full object-contain pointer-events-auto shadow-[0_0_80px_rgba(0,0,0,0.5)]"
+                                    referrerPolicy="no-referrer"
                                 />
                             </div>
                         </div>
@@ -156,13 +159,13 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ images }) => {
     );
 };
 
-const GalleryItem: React.FC<{ image: GalleryImage; index: number }> = ({ image, index }) => {
+const GalleryItem: React.FC<{ image: GalleryImage; index: number; onDelete?: (url: string) => void; isDeleting?: boolean }> = ({ image, index, onDelete, isDeleting }) => {
     const [isLoaded, setIsLoaded] = useState(false);
 
     return (
         <div className="group relative overflow-hidden rounded-xl md:rounded-2xl shadow-sm bg-gray-100 dark:bg-gray-800 aspect-square border border-gray-100 dark:border-gray-700 hover:shadow-indigo-500/30 transition-all duration-500">
-            {!isLoaded && (
-                <div className="absolute inset-0 flex items-center justify-center">
+            {(!isLoaded || isDeleting) && (
+                <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/10 backdrop-blur-[2px]">
                     <div className="w-5 h-5 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin"></div>
                 </div>
             )}
@@ -174,12 +177,27 @@ const GalleryItem: React.FC<{ image: GalleryImage; index: number }> = ({ image, 
                     isLoaded ? 'opacity-100' : 'opacity-0'
                 }`}
                 loading="lazy"
+                referrerPolicy="no-referrer"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-3">
                 <p className="text-white text-[9px] font-black uppercase tracking-widest line-clamp-1">
                     {image.description || "Open Record"}
                 </p>
             </div>
+            {onDelete && (
+                <button 
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(image.url);
+                    }}
+                    className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-red-600 shadow-lg z-10"
+                    title="Delete Image"
+                >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+            )}
         </div>
     );
 };

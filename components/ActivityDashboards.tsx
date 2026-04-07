@@ -3,7 +3,8 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { 
     Search, PieChart as PieChartIcon, 
     TrendingUp, Users, IndianRupee, Globe, Camera, RefreshCw,
-    ChevronDown, LayoutDashboard, ExternalLink, Loader2, ArrowLeft
+    ChevronDown, LayoutDashboard, ExternalLink, Loader2, ArrowLeft,
+    Download
 } from 'lucide-react';
 import { 
     ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
@@ -187,6 +188,28 @@ const ActivityDashboardContent: React.FC<{
 
     const clusters = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.cluster))).sort()], [data]);
 
+    const downloadCSV = () => {
+        const headers = ['HH ID', 'Name', 'Activity', 'GP', 'Village', 'Age', 'Ben ID', 'Cluster', 'Contribution', 'Lat', 'Lng', 'Photo'];
+        const csvContent = [
+            headers.join(','),
+            ...filteredData.map(d => [
+                `"${d.hhId}"`, `"${d.name}"`, `"${d.activity}"`, `"${d.gp}"`, `"${d.village}"`, 
+                `"${d.age}"`, `"${d.benId}"`, `"${d.cluster}"`, d.contribution || 0,
+                d.lat, d.lng, `"${d.photo}"`
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `activity_report_${data[0]?.activity || 'data'}_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <div className="space-y-4 md:space-y-6 p-2 md:p-4">
             {/* KPI Row */}
@@ -275,6 +298,13 @@ const ActivityDashboardContent: React.FC<{
                         />
                     </div>
                     <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+                        <button 
+                            onClick={downloadCSV}
+                            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm mr-2"
+                        >
+                            <Download className="w-3.5 h-3.5" />
+                            Export
+                        </button>
                         {clusters.map(c => {
                             const count = c === 'All' ? stats.achieved : (stats.clusterDist.find(d => d.name === c)?.value || 0);
                             return (

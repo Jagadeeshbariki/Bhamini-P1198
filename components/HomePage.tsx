@@ -5,7 +5,8 @@ import PhotoGallery from './PhotoGallery';
 import MediaUploadModal from './MediaUploadModal';
 import { useAuth } from '../hooks/useAuth';
 import { 
-    GOOGLE_SHEET_PHOTOS_URL 
+    GOOGLE_SHEET_PHOTOS_URL,
+    GOOGLE_APPS_SCRIPT_URL
 } from '../config';
 
 interface ImageData {
@@ -22,6 +23,7 @@ const HomePage: React.FC = () => {
     const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const filterRef = useRef<HTMLDivElement>(null);
 
     const getDriveDirectUrl = (input: string) => {
@@ -130,6 +132,35 @@ const HomePage: React.FC = () => {
         setSelectedActivities(prev => 
             prev.includes(activity) ? prev.filter(a => a !== activity) : [...prev, activity]
         );
+    };
+
+    const handleDeleteMedia = async (imageUrl: string) => {
+        if (!window.confirm('Permanently remove this documentation from the registry?')) return;
+        setIsDeleting(imageUrl);
+        try {
+            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({ action: 'deletePhoto', url: imageUrl })
+            });
+            const raw = await response.text();
+            try {
+                const data = JSON.parse(raw);
+                if (data.status === 'success') {
+                    fetchPhotos();
+                } else {
+                    alert('Deletion failed: ' + (data.message || 'Unknown error'));
+                }
+            } catch {
+                alert('Invalid response from server. Image might have been deleted, please refresh.');
+                fetchPhotos();
+            }
+        } catch (err) {
+            alert('Connection error while deleting: ' + (err instanceof Error ? err.message : 'Unknown error'));
+        } finally {
+            setIsDeleting(null);
+        }
     };
 
     // Close dropdown on outside click
@@ -242,7 +273,11 @@ const HomePage: React.FC = () => {
                 </div>
 
                 {filteredGallery.length > 0 ? (
-                    <PhotoGallery images={filteredGallery} />
+                    <PhotoGallery 
+                        images={filteredGallery} 
+                        onDelete={user?.role === 'admin' ? handleDeleteMedia : undefined}
+                        deletingUrl={isDeleting}
+                    />
                 ) : (
                     <div className="text-center py-24 bg-gray-50 dark:bg-gray-900 rounded-[2.5rem] border-4 border-dashed border-gray-100 dark:border-gray-800 mx-4">
                         <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest">No documentation matches filter</p>

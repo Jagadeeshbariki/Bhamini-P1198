@@ -70,6 +70,17 @@ const AdminPage: React.FC = () => {
         return `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2]}`;
     };
 
+    const getDirectDriveUrl = (url: string) => {
+        if (!url) return '';
+        const trimmed = url.trim();
+        if (trimmed.includes('drive.google.com') || trimmed.includes('google.com/open')) {
+            const idMatch = trimmed.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
+            const id = idMatch ? idMatch[1] : '';
+            return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1600` : trimmed;
+        }
+        return trimmed;
+    };
+
     const parseCSVToObjects = (csv: string): Record<string, string>[] => {
         if (!csv) return [];
         const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
@@ -126,13 +137,16 @@ const AdminPage: React.FC = () => {
             })));
 
             const mediaCsv = await mediaRes.text();
-            setMediaRegistry(parseCSVToObjects(mediaCsv).map(row => ({
-                url: getFuzzy(row, ['URL', 'LINK', 'IMAGE', 'PHOTO']),
-                type: (getFuzzy(row, ['TYPE', 'CAT', 'PLACEMENT']) || 'gallery').toLowerCase(),
-                description: getFuzzy(row, ['DESC', 'CAPTION']),
-                activity: (getFuzzy(row, ['ACTIVITY', 'ACT', 'WORK']) || 'Uncategorized').trim().replace(/^(BYP-|BFE-|AFT-)/, ''),
-                timestamp: getFuzzy(row, ['TIMESTAMP'])
-            })).filter(r => r.url).reverse());
+            setMediaRegistry(parseCSVToObjects(mediaCsv).map(row => {
+                // The CSV headers are URL, CATEGORY, DESCRIPTION, TIMESTAMP, ACTIVITY, PHOTOUPLOADEDBY
+                return {
+                    url: getFuzzy(row, ['URL', 'LINK', 'IMAGE', 'PHOTO']),
+                    type: (getFuzzy(row, ['CATEGORY', 'TYPE', 'CAT', 'PLACEMENT']) || 'gallery').toLowerCase(),
+                    description: getFuzzy(row, ['DESCRIPTION', 'DESC', 'CAPTION']),
+                    activity: (getFuzzy(row, ['ACTIVITY', 'ACT', 'WORK']) || 'Uncategorized').trim().replace(/^(BYP-|BFE-|AFT-)/, ''),
+                    timestamp: getFuzzy(row, ['TIMESTAMP'])
+                };
+            }).filter(r => r.url).reverse());
 
             setUsersList(userRes);
             if (userRes.length > 0 && !selectedUsername) setSelectedUsername(userRes[0].username);
@@ -256,14 +270,20 @@ const AdminPage: React.FC = () => {
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({ action: 'deletePhoto', url: imageUrl })
             });
-            const data = await response.json();
-            if (data.status === 'success') {
+            const raw = await response.text();
+            try {
+                const data = JSON.parse(raw);
+                if (data.status === 'success') {
+                    fetchData();
+                } else {
+                    alert('Deletion failed: ' + (data.message || 'Unknown error'));
+                }
+            } catch {
+                alert('Invalid response from server. Image might have been deleted, please refresh.');
                 fetchData();
-            } else {
-                alert('Deletion failed: ' + data.message);
             }
-        } catch {
-            alert('Connection error while deleting.');
+        } catch (err) {
+            alert('Connection error while deleting: ' + (err instanceof Error ? err.message : 'Unknown error'));
         } finally {
             setIsDeletingMedia(null);
         }
@@ -408,7 +428,7 @@ const AdminPage: React.FC = () => {
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                     {previewUrls.map((url, idx) => (
                                         <div key={idx} className="relative aspect-video rounded-2xl overflow-hidden border-2 border-white shadow-md">
-                                            <img src={url} className="w-full h-full object-cover" />
+                                            <img src={url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                             <div className="absolute top-1 right-1 bg-black/50 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black">
                                                 {idx + 1}
                                             </div>
@@ -432,24 +452,26 @@ const AdminPage: React.FC = () => {
                         <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                             {mediaRegistry.map((item, idx) => (
                                 <div key={`${item.url}-${idx}`} className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-3xl border border-transparent hover:border-indigo-100 transition-all relative group">
-                                    <img src={item.url} className="w-20 h-20 rounded-2xl object-cover flex-shrink-0" />
+                                    <img src={getDirectDriveUrl(item.url)} className="w-20 h-20 rounded-2xl object-cover flex-shrink-0" referrerPolicy="no-referrer" />
                                     <div className="flex-grow min-w-0">
                                         <span className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase ${item.type === 'slider' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'}`}>{item.type}</span>
                                         <p className="text-[11px] font-black text-gray-800 dark:text-white truncate mt-1">{item.activity}</p>
                                         <p className="text-[10px] text-gray-400 line-clamp-2 italic leading-tight mt-1">{item.description}</p>
                                     </div>
-                                    <button 
-                                        onClick={() => handleDeleteMedia(item.url)}
-                                        disabled={isDeletingMedia === item.url}
-                                        className="absolute top-4 right-4 p-2 bg-red-50 text-red-500 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:text-white disabled:opacity-50"
-                                        title="Delete Image"
-                                    >
-                                        {isDeletingMedia === item.url ? (
-                                            <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-                                        ) : (
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                        )}
-                                    </button>
+                                    {user?.role === 'admin' && (
+                                        <button 
+                                            onClick={() => handleDeleteMedia(item.url)}
+                                            disabled={isDeletingMedia === item.url}
+                                            className="absolute top-4 right-4 p-2 bg-red-50 text-red-500 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:text-white disabled:opacity-50"
+                                            title="Delete Image"
+                                        >
+                                            {isDeletingMedia === item.url ? (
+                                                <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                                            ) : (
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                            )}
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>

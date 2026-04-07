@@ -7,7 +7,8 @@ import {
 } from 'recharts';
 import { 
     Package, Activity, Database, TrendingUp,
-    Info, AlertCircle, ChevronDown, ChevronUp, ArrowLeft
+    Info, AlertCircle, ChevronDown, ChevronUp, ArrowLeft,
+    Download
 } from 'lucide-react';
 
 interface DistributionRecord {
@@ -193,6 +194,27 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
         };
     }, [data]);
 
+    const downloadCSV = () => {
+        const headers = ['Cluster', 'Activity', 'Material', 'Count', 'Date', 'Beneficiary', 'GP', 'Village'];
+        const csvContent = [
+            headers.join(','),
+            ...data.map(d => [
+                `"${d.cluster}"`, `"${d.activity}"`, `"${d.material}"`, d.count,
+                `"${d.date}"`, `"${d.beneficiary}"`, `"${d.gp}"`, `"${d.village}"`
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `asset_distribution_report_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -239,6 +261,13 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
                     </div>
                     
                     <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                        <button 
+                            onClick={downloadCSV}
+                            className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+                        >
+                            <Download className="w-4 h-4" />
+                            Export
+                        </button>
                         <div className="px-4 py-2 md:px-6 md:py-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl md:rounded-2xl border border-indigo-100 dark:border-indigo-800/50">
                             <p className="text-[9px] md:text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-0.5 md:mb-1">Total Assets</p>
                             <p className="text-lg md:text-2xl font-black text-indigo-600 dark:text-indigo-400 leading-none">{totalAssets.toLocaleString()}</p>
