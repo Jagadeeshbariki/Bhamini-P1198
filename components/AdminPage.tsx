@@ -274,13 +274,14 @@ const AdminPage: React.FC = () => {
             try {
                 const data = JSON.parse(raw);
                 if (data.status === 'success') {
-                    fetchData();
+                    setMediaRegistry(prev => prev.filter(item => item.url !== imageUrl));
+                    setTimeout(fetchData, 3000);
                 } else {
                     alert('Deletion failed: ' + (data.message || 'Unknown error'));
                 }
             } catch {
-                alert('Invalid response from server. Image might have been deleted, please refresh.');
-                fetchData();
+                setMediaRegistry(prev => prev.filter(item => item.url !== imageUrl));
+                setTimeout(fetchData, 3000);
             }
         } catch (err) {
             alert('Connection error while deleting: ' + (err instanceof Error ? err.message : 'Unknown error'));
