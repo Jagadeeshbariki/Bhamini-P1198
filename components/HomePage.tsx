@@ -80,8 +80,8 @@ const HomePage: React.FC = () => {
         return '';
     };
 
-    const fetchPhotos = useCallback(async () => {
-        setLoading(true);
+    const fetchPhotos = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const response = await fetch(`${GOOGLE_SHEET_PHOTOS_URL}&t=${Date.now()}`);
             const csvText = await response.text();
@@ -149,13 +149,13 @@ const HomePage: React.FC = () => {
                 const data = JSON.parse(raw);
                 if (data.status === 'success') {
                     setGalleryImages(prev => prev.filter(item => item.url !== imageUrl));
-                    setTimeout(fetchPhotos, 3000);
+                    setTimeout(() => fetchPhotos(true), 3000);
                 } else {
                     alert('Deletion failed: ' + (data.message || 'Unknown error'));
                 }
             } catch {
                 setGalleryImages(prev => prev.filter(item => item.url !== imageUrl));
-                setTimeout(fetchPhotos, 3000);
+                setTimeout(() => fetchPhotos(true), 3000);
             }
         } catch (err) {
             alert('Connection error while deleting: ' + (err instanceof Error ? err.message : 'Unknown error'));

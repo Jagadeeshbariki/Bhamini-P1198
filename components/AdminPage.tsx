@@ -114,8 +114,8 @@ const AdminPage: React.FC = () => {
         return '';
     };
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
+    const fetchData = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const [attRes, mediaRes, userRes] = await Promise.all([
                 fetch(`${GOOGLE_SHEET_CSV_URL}&_=${Date.now()}`),
@@ -275,13 +275,13 @@ const AdminPage: React.FC = () => {
                 const data = JSON.parse(raw);
                 if (data.status === 'success') {
                     setMediaRegistry(prev => prev.filter(item => item.url !== imageUrl));
-                    setTimeout(fetchData, 3000);
+                    setTimeout(() => fetchData(true), 3000);
                 } else {
                     alert('Deletion failed: ' + (data.message || 'Unknown error'));
                 }
             } catch {
                 setMediaRegistry(prev => prev.filter(item => item.url !== imageUrl));
-                setTimeout(fetchData, 3000);
+                setTimeout(() => fetchData(true), 3000);
             }
         } catch (err) {
             alert('Connection error while deleting: ' + (err instanceof Error ? err.message : 'Unknown error'));
