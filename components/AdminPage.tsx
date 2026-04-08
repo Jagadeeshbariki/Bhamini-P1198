@@ -271,20 +271,20 @@ const AdminPage: React.FC = () => {
                 body: JSON.stringify({ action: 'deletePhoto', url: imageUrl })
             });
             const raw = await response.text();
+            let data;
             try {
-                const data = JSON.parse(raw);
-                if (data.status === 'success') {
-                    setMediaRegistry(prev => prev.filter(item => item.url !== imageUrl));
-                    setTimeout(() => fetchData(true), 3000);
-                } else {
-                    alert('Deletion failed: ' + (data.message || 'Unknown error'));
-                }
-            } catch {
+                data = JSON.parse(raw);
+            } catch (e) {
+                throw new Error('Invalid server response: ' + raw.substring(0, 100));
+            }
+
+            if (data.status === 'success') {
                 setMediaRegistry(prev => prev.filter(item => item.url !== imageUrl));
-                setTimeout(() => fetchData(true), 3000);
+            } else {
+                alert('Deletion failed: ' + (data.message || 'Unknown error'));
             }
         } catch (err) {
-            alert('Connection error while deleting: ' + (err instanceof Error ? err.message : 'Unknown error'));
+            alert('Error while deleting: ' + (err instanceof Error ? err.message : 'Unknown error'));
         } finally {
             setIsDeletingMedia(null);
         }
