@@ -131,13 +131,12 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
             const row = parseLine(line);
             if (row.length < 3) return;
 
-            const bId = getVal(row, 'Ben_Id') || getVal(row, 'bnf_section_-adhaar_number_') || getVal(row, 'bnf_section-adhaar_number') || getVal(row, 'Beneficiary ID') || getVal(row, 'adhaar');
-            const hhId = getVal(row, 'Farmer ID') || getVal(row, 'location-farmer_id') || getVal(row, 'location-show_farmer_id') || getVal(row, 'HH Id') || getVal(row, 'farmer_id');
+            const bId = (getVal(row, 'Beneficiary ID') || getVal(row, 'Ben_Id') || getVal(row, 'bnf_section_-adhaar_number_') || getVal(row, 'bnf_section-adhaar_number') || getVal(row, 'adhaar')).trim();
+            const hhId = getVal(row, 'HH ID') || getVal(row, 'Farmer ID') || getVal(row, 'location-farmer_id') || getVal(row, 'location-show_farmer_id') || getVal(row, 'farmer_id');
             
-            if (!bId && !hhId) return;
+            if (!bId) return;
 
-            const key = (bId || hhId).trim();
-            if (!key) return;
+            const key = bId;
             
             const asset: Asset = {
                 code: getVal(row, 'this_material_code'),
@@ -159,13 +158,13 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 beneficiaryMap.set(key, {
                     hhId: hhId,
                     hhHeadName: getVal(row, 'location-farmer_name') || getVal(row, 'location-show_farmer_name') || getVal(row, 'HH Head Name') || getVal(row, 'Beneficiary name') || getVal(row, 'farmer_name'),
-                    activity: (getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || getVal(row, 'activity') || '').trim().replace(/^(BYP-|BFE-|AFT-)/, ''),
-                    beneficiaryName: getVal(row, 'Beneficiary name') || getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'Beneficiary Name') || getVal(row, 'bnf_name'),
+                    activity: (getVal(row, 'activity') || getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || '').trim().replace(/^(BYP-|BFE-|AFT-)/, ''),
+                    beneficiaryName: getVal(row, 'Name') || getVal(row, 'Beneficiary name') || getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'Beneficiary Name') || getVal(row, 'bnf_name'),
                     beneficiaryId: bId,
-                    age: parseInt(getVal(row, 'Age') || getVal(row, 'bnf_section_-age_') || getVal(row, 'bnf_section-age') || getVal(row, 'Age')) || 0,
-                    gender: getVal(row, 'Gender') || getVal(row, 'bnf_section_-gender_') || getVal(row, 'bnf_section-gender') || getVal(row, 'Gender'),
-                    phoneNumber: getVal(row, 'Ben_phone') || getVal(row, 'bnf_section_-phone_number_') || getVal(row, 'bnf_section-phone_number') || getVal(row, 'phone number'),
-                    cluster: getVal(row, 'Cluster') || getVal(row, 'cluster') || getVal(row, 'location-block') || getVal(row, 'CLUSTER'),
+                    age: parseInt(getVal(row, 'age') || getVal(row, 'Age') || getVal(row, 'bnf_section_-age_') || getVal(row, 'bnf_section-age')) || 0,
+                    gender: getVal(row, 'gender') || getVal(row, 'Gender') || getVal(row, 'bnf_section_-gender_') || getVal(row, 'bnf_section-gender'),
+                    phoneNumber: getVal(row, 'phone number') || getVal(row, 'Ben_phone') || getVal(row, 'bnf_section_-phone_number_') || getVal(row, 'bnf_section-phone_number'),
+                    cluster: getVal(row, 'cluster') || getVal(row, 'Cluster') || getVal(row, 'location-block') || getVal(row, 'CLUSTER'),
                     gp: getVal(row, 'GP') || getVal(row, 'location-gp') || getVal(row, 'GP'),
                     village: getVal(row, 'Village') || getVal(row, 'location-village') || getVal(row, 'village'),
                     assets: asset.label ? [asset] : [],
@@ -196,13 +195,13 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 
                 // Add all from master first
                 masterData.forEach(b => {
-                    const key = b.beneficiaryId || b.hhId;
+                    const key = b.beneficiaryId;
                     if (key) mergedMap.set(key, b);
                 });
 
                 // Merge distribution data
                 distData.forEach(b => {
-                    const key = b.beneficiaryId || b.hhId;
+                    const key = b.beneficiaryId;
                     if (key) {
                         if (mergedMap.has(key)) {
                             const existing = mergedMap.get(key)!;
@@ -728,6 +727,15 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                 </th>
                                 <th 
                                     className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
+                                    onClick={() => requestSort('beneficiaryId')}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        Beneficiary ID & Name
+                                        <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'beneficiaryId' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
+                                    </div>
+                                </th>
+                                <th 
+                                    className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
                                     onClick={() => requestSort('activity')}
                                 >
                                     <div className="flex items-center gap-2">
@@ -737,11 +745,11 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                 </th>
                                 <th 
                                     className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
-                                    onClick={() => requestSort('beneficiaryName')}
+                                    onClick={() => requestSort('cluster')}
                                 >
                                     <div className="flex items-center gap-2">
-                                        Beneficiary Details
-                                        <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'beneficiaryName' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
+                                        Location
+                                        <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'cluster' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
                                     </div>
                                 </th>
                                 <th 
@@ -755,11 +763,11 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                 </th>
                                 <th 
                                     className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest cursor-pointer group hover:text-indigo-500 transition-colors"
-                                    onClick={() => requestSort('village')}
+                                    onClick={() => requestSort('phoneNumber')}
                                 >
                                     <div className="flex items-center gap-2">
-                                        Location & Contact
-                                        <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'village' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
+                                        Contact
+                                        <ArrowUpDown className={cn("w-3 h-3 transition-opacity", sortConfig?.key === 'phoneNumber' ? "opacity-100 text-indigo-500" : "opacity-20 group-hover:opacity-50")} />
                                     </div>
                                 </th>
                                 <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 tracking-widest">
@@ -776,13 +784,17 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                             <div className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">{b.hhHeadName}</div>
                                         </td>
                                         <td className="px-6 py-4">
+                                            <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{b.beneficiaryId}</div>
+                                            <div className="text-[9px] font-bold text-indigo-500 uppercase tracking-tighter opacity-80">{b.beneficiaryName}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
                                             <span className="inline-flex items-center px-2.5 py-1 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg text-[8px] font-black uppercase tracking-widest border border-indigo-100/50 dark:border-indigo-900/50">
                                                 {b.activity}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{b.beneficiaryName}</div>
-                                            <div className="text-[9px] font-bold text-indigo-500 uppercase tracking-tighter opacity-80">{b.beneficiaryId}</div>
+                                            <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{b.cluster}</div>
+                                            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">{b.gp}, {b.village}</div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2">
@@ -799,7 +811,6 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="text-[11px] font-black text-gray-600 dark:text-gray-400 font-mono tracking-tighter">{b.phoneNumber}</div>
-                                            <div className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">{b.village}, {b.gp}</div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <button 
@@ -881,10 +892,10 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                 <div key={i} className="p-4 hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
                                     <div className="flex justify-between items-start gap-4" onClick={() => toggleRow(i)}>
                                         <div className="space-y-2 flex-1">
-                                            {/* HH Head Name */}
+                                            {/* Beneficiary Name */}
                                             <div>
-                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">HH Head</p>
-                                                <p className="text-sm font-black text-gray-900 dark:text-white uppercase">{b.hhHeadName}</p>
+                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Beneficiary</p>
+                                                <p className="text-sm font-black text-gray-900 dark:text-white uppercase">{b.beneficiaryName}</p>
                                             </div>
                                             
                                             {/* Activity */}
@@ -894,10 +905,10 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                                 </span>
                                             </div>
 
-                                            {/* Beneficiary Name */}
+                                            {/* HH Head Name */}
                                             <div>
-                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Beneficiary</p>
-                                                <p className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">{b.beneficiaryName}</p>
+                                                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">HH Head</p>
+                                                <p className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">{b.hhHeadName}</p>
                                             </div>
                                         </div>
                                         
