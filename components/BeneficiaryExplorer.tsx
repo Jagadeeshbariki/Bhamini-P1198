@@ -97,56 +97,88 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
     };
 
     const parseCSV = (csv: string, sourceName: string): Beneficiary[] => {
-        const lines = csv.trim().split(/\r?\n/);
-        if (lines.length < 1) return [];
+        const rows: string[][] = [];
+        let currentRow: string[] = [];
+        let currentVal = '';
+        let inQuotes = false;
 
-        const parseLine = (line: string): string[] => {
-            const values = [];
-            let inQuote = false, val = '';
-            for (let j = 0; j < line.length; j++) {
-                if (line[j] === '"') inQuote = !inQuote;
-                else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
-                else val += line[j];
+        for (let i = 0; i < csv.length; i++) {
+            const char = csv[i];
+            const nextChar = csv[i + 1];
+
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    currentVal += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                currentRow.push(currentVal.trim());
+                currentVal = '';
+            } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                if (currentVal || currentRow.length > 0) {
+                    currentRow.push(currentVal.trim());
+                    rows.push(currentRow);
+                    currentVal = '';
+                    currentRow = [];
+                }
+                if (char === '\r' && nextChar === '\n') i++;
+            } else {
+                currentVal += char;
             }
-            values.push(val.trim().replace(/^"|"$/g, ''));
-            return values;
-        };
+        }
+        if (currentVal || currentRow.length > 0) {
+            currentRow.push(currentVal.trim());
+            rows.push(currentRow);
+        }
 
-        const headers = parseLine(lines[0]);
-        const normalize = (h: string) => h.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+        if (rows.length < 2) return [];
+
+        const headers = rows[0];
+        const normalize = (h: string) => (h || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
         const normalizedHeaders = headers.map(normalize);
 
-        const getVal = (row: string[], search: string) => {
-            const searchNorm = normalize(search);
-            let idx = normalizedHeaders.findIndex(h => h === searchNorm);
-            if (idx === -1) {
-                idx = normalizedHeaders.findIndex(h => h.includes(searchNorm));
+        const getVal = (row: string[], searchTerms: string[], allowFuzzy = false) => {
+            // 1. Try exact matches first
+            for (const term of searchTerms) {
+                const searchNorm = normalize(term);
+                const idx = normalizedHeaders.indexOf(searchNorm);
+                if (idx !== -1) return (row[idx] || '').trim();
             }
-            return idx !== -1 ? row[idx] : '';
+            
+            // 2. Try fuzzy matches only if explicitly allowed and no exact match found
+            if (allowFuzzy) {
+                for (const term of searchTerms) {
+                    const searchNorm = normalize(term);
+                    const idx = normalizedHeaders.findIndex(h => h.includes(searchNorm));
+                    if (idx !== -1) return (row[idx] || '').trim();
+                }
+            }
+            return '';
         };
 
         const beneficiaryMap = new Map<string, Beneficiary>();
 
-        lines.slice(1).forEach(line => {
-            const row = parseLine(line);
+        rows.slice(1).forEach(row => {
             if (row.length < 3) return;
 
-            const bId = (getVal(row, 'Beneficiary ID') || getVal(row, 'Ben_Id') || getVal(row, 'bnf_section_-adhaar_number_') || getVal(row, 'bnf_section-adhaar_number') || getVal(row, 'adhaar')).trim();
-            const hhId = getVal(row, 'HH ID') || getVal(row, 'Farmer ID') || getVal(row, 'location-farmer_id') || getVal(row, 'location-show_farmer_id') || getVal(row, 'farmer_id');
+            const bId = (getVal(row, ['Beneficiary ID', 'Ben_Id', 'bnf_section_-adhaar_number_', 'bnf_section-adhaar_number', 'adhaar'])).trim();
+            const hhId = getVal(row, ['HH ID', 'Farmer ID', 'location-farmer_id', 'location-show_farmer_id', 'farmer_id']);
             
             if (!bId) return;
 
             const key = bId;
             
             const asset: Asset = {
-                code: getVal(row, 'this_material_code'),
-                label: getVal(row, 'this_material_label'),
-                count: parseFloat(getVal(row, 'materials_details-material_count')) || 0,
-                unit: getVal(row, 'materials_details-material_unit'),
-                date: getVal(row, 'materials_details-distributed_date'),
-                distributor: getVal(row, 'materials_details-destributor_name'),
-                photo: getVal(row, 'Photo') || getVal(row, 'this_material_photo') || getVal(row, 'photo') || getVal(row, 'image'),
-                parentKey: getVal(row, 'PARENT_KEY') || getVal(row, 'instanceID') || getVal(row, 'meta-instanceID') || getVal(row, 'KEY'),
+                code: getVal(row, ['this_material_code'], true),
+                label: getVal(row, ['this_material_label'], true),
+                count: parseFloat(getVal(row, ['materials_details-material_count'], true)) || 0,
+                unit: getVal(row, ['materials_details-material_unit'], true),
+                date: getVal(row, ['materials_details-distributed_date'], true),
+                distributor: getVal(row, ['materials_details-destributor_name'], true),
+                photo: getVal(row, ['Photo', 'this_material_photo', 'photo', 'image'], true),
+                parentKey: getVal(row, ['PARENT_KEY', 'instanceID', 'meta-instanceID', 'KEY'], true),
             };
 
             if (beneficiaryMap.has(key)) {
@@ -157,16 +189,16 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
             } else {
                 beneficiaryMap.set(key, {
                     hhId: hhId,
-                    hhHeadName: getVal(row, 'location-farmer_name') || getVal(row, 'location-show_farmer_name') || getVal(row, 'HH Head Name') || getVal(row, 'Beneficiary name') || getVal(row, 'farmer_name'),
-                    activity: (getVal(row, 'activity') || getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || '').trim().replace(/^(BYP-|BFE-|AFT-)/, ''),
-                    beneficiaryName: getVal(row, 'Name') || getVal(row, 'Beneficiary name') || getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'Beneficiary Name') || getVal(row, 'bnf_name'),
+                    hhHeadName: getVal(row, ['location-farmer_name', 'location-show_farmer_name', 'HH Head Name', 'farmer_name']),
+                    activity: getVal(row, ['activity', 'activity_registration-activity', 'Activity']).replace(/^(BYP-|BFE-|AFT-)/, ''),
+                    beneficiaryName: getVal(row, ['Name', 'Beneficiary name', 'bnf_section_-bnf_name_', 'bnf_section-bnf_name', 'bnf_name']),
                     beneficiaryId: bId,
-                    age: parseInt(getVal(row, 'age') || getVal(row, 'Age') || getVal(row, 'bnf_section_-age_') || getVal(row, 'bnf_section-age')) || 0,
-                    gender: getVal(row, 'gender') || getVal(row, 'Gender') || getVal(row, 'bnf_section_-gender_') || getVal(row, 'bnf_section-gender'),
-                    phoneNumber: getVal(row, 'phone number') || getVal(row, 'Ben_phone') || getVal(row, 'bnf_section_-phone_number_') || getVal(row, 'bnf_section-phone_number'),
-                    cluster: getVal(row, 'cluster') || getVal(row, 'Cluster') || getVal(row, 'location-block') || getVal(row, 'CLUSTER'),
-                    gp: getVal(row, 'GP') || getVal(row, 'location-gp') || getVal(row, 'GP'),
-                    village: getVal(row, 'Village') || getVal(row, 'location-village') || getVal(row, 'village'),
+                    age: parseInt(getVal(row, ['age', 'Age', 'bnf_section_-age_', 'bnf_section-age'])) || 0,
+                    gender: getVal(row, ['gender', 'Gender', 'bnf_section_-gender_', 'bnf_section-gender']),
+                    phoneNumber: getVal(row, ['phone number', 'Ben_phone', 'bnf_section_-phone_number_', 'bnf_section-phone_number']),
+                    cluster: getVal(row, ['cluster', 'location-block', 'Cluster', 'CLUSTER']),
+                    gp: getVal(row, ['GP', 'location-gp', 'gp']),
+                    village: getVal(row, ['Village', 'location-village', 'village']),
                     assets: asset.label ? [asset] : [],
                 });
             }
@@ -233,10 +265,10 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
     }, []);
 
     // Filter Options
-    const clusterOptions = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.cluster))).filter(Boolean).sort()], [data]);
-    const gpOptions = useMemo(() => ['All', ...Array.from(new Set(data.filter(d => filterCluster === 'All' || d.cluster === filterCluster).map(d => d.gp))).filter(Boolean).sort()], [data, filterCluster]);
-    const villageOptions = useMemo(() => ['All', ...Array.from(new Set(data.filter(d => (filterCluster === 'All' || d.cluster === filterCluster) && (filterGP === 'All' || d.gp === filterGP)).map(d => d.village))).filter(Boolean).sort()], [data, filterCluster, filterGP]);
-    const activityOptions = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.activity))).filter(Boolean).sort()], [data]);
+    const clusterOptions = useMemo(() => ['All', ...Array.from(new Set(data.map(d => (d.cluster || '').trim()))).filter(Boolean).sort()], [data]);
+    const gpOptions = useMemo(() => ['All', ...Array.from(new Set(data.filter(d => filterCluster === 'All' || d.cluster === filterCluster).map(d => (d.gp || '').trim()))).filter(Boolean).sort()], [data, filterCluster]);
+    const villageOptions = useMemo(() => ['All', ...Array.from(new Set(data.filter(d => (filterCluster === 'All' || d.cluster === filterCluster) && (filterGP === 'All' || d.gp === filterGP)).map(d => (d.village || '').trim()))).filter(Boolean).sort()], [data, filterCluster, filterGP]);
+    const activityOptions = useMemo(() => ['All', ...Array.from(new Set(data.map(d => (d.activity || '').trim()))).filter(Boolean).sort()], [data]);
 
     const filteredData = useMemo(() => {
         return data.filter(d => {

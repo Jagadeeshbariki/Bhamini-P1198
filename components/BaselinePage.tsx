@@ -37,44 +37,45 @@ const BaselinePage: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
 
     const parseCSV = (csv: string): HouseholdData[] => {
-        const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
-        if (lines.length < 1) return [];
-        
-        const parseLine = (line: string): string[] => {
-            // Simple split as fallback if line is clearly malformed or has unclosed quotes
-            const commaCount = (line.match(/,/g) || []).length;
-            const simpleSplit = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-            
-            const values = [];
-            let inQuote = false, val = '';
-            for (let j = 0; j < line.length; j++) {
-                const char = line[j];
-                if (char === '"') {
-                    if (inQuote && line[j + 1] === '"') {
-                        val += '"';
-                        j++;
-                    } else {
-                        inQuote = !inQuote;
-                    }
-                } else if (char === ',' && !inQuote) {
-                    values.push(val.trim());
-                    val = '';
-                } else {
-                    val += char;
-                }
-            }
-            values.push(val.trim());
-            
-            // If the complex parser failed to find enough columns but there are many commas,
-            // or if we ended with an open quote, use the simple split.
-            if (inQuote || (values.length < 5 && commaCount > 10)) {
-                return simpleSplit;
-            }
-            
-            return values.map(v => v.replace(/^"|"$/g, '').trim());
-        };
+        const rows: string[][] = [];
+        let currentRow: string[] = [];
+        let currentVal = '';
+        let inQuotes = false;
 
-        const rawHeaders = parseLine(lines[0]);
+        for (let i = 0; i < csv.length; i++) {
+            const char = csv[i];
+            const nextChar = csv[i + 1];
+
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    currentVal += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                currentRow.push(currentVal.trim());
+                currentVal = '';
+            } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                if (currentVal || currentRow.length > 0) {
+                    currentRow.push(currentVal.trim());
+                    rows.push(currentRow);
+                    currentVal = '';
+                    currentRow = [];
+                }
+                if (char === '\r' && nextChar === '\n') i++;
+            } else {
+                currentVal += char;
+            }
+        }
+        if (currentVal || currentRow.length > 0) {
+            currentRow.push(currentVal.trim());
+            rows.push(currentRow);
+        }
+
+        if (rows.length < 2) return [];
+
+        const rawHeaders = rows[0];
         
         const headersMap: Record<string, string> = {
             'FARMERID': 'farmerId',
@@ -192,18 +193,15 @@ const BaselinePage: React.FC = () => {
             'HH INCOME OTHERS': 'otherIncome'
         };
 
-        const clean = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const clean = (s: string) => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
         const normalizedMap: Record<string, string> = {};
         Object.keys(headersMap).forEach(k => {
             normalizedMap[clean(k)] = headersMap[k];
         });
 
         const cleanHeaders = rawHeaders.map(h => clean(h));
-        console.log("Raw Headers:", rawHeaders);
-        console.log("Clean Headers:", cleanHeaders);
 
-        const parsedData = lines.slice(1).map(line => {
-            const vals = parseLine(line);
+        const parsedData = rows.slice(1).map(vals => {
             const row: any = {};
             cleanHeaders.forEach((h, i) => {
                 const key = normalizedMap[h];
@@ -212,7 +210,6 @@ const BaselinePage: React.FC = () => {
             return row as HouseholdData;
         });
 
-        console.log("Parsed sample:", parsedData.slice(0, 5));
         return parsedData;
     };
 
@@ -234,26 +231,27 @@ const BaselinePage: React.FC = () => {
         fetchData();
     }, []);
 
-    const clusters = useMemo(() => ['All', ...Array.from(new Set(allData.map(d => d.cluster).filter(Boolean))).sort()], [allData]);
+    const clusters = useMemo(() => ['All', ...Array.from(new Set(allData.map(d => (d.cluster || '').trim()))).filter(Boolean).sort()], [allData]);
     
     const gps = useMemo(() => {
-        const filtered = selectedCluster === 'All' ? allData : allData.filter(d => d.cluster === selectedCluster);
-        return ['All', ...Array.from(new Set(filtered.map(d => d.gp).filter(Boolean))).sort()];
+        const filtered = selectedCluster === 'All' ? allData : allData.filter(d => (d.cluster || '').trim() === selectedCluster);
+        return ['All', ...Array.from(new Set(filtered.map(d => (d.gp || '').trim()))).filter(Boolean).sort()];
     }, [allData, selectedCluster]);
 
     const villages = useMemo(() => {
-        const filtered = selectedGP === 'All' 
-            ? (selectedCluster === 'All' ? allData : allData.filter(d => d.cluster === selectedCluster))
-            : allData.filter(d => d.gp === selectedGP);
-        return ['All', ...Array.from(new Set(filtered.map(d => d.village).filter(Boolean))).sort()];
+        const filtered = allData.filter(d => 
+            (selectedCluster === 'All' || (d.cluster || '').trim() === selectedCluster) &&
+            (selectedGP === 'All' || (d.gp || '').trim() === selectedGP)
+        );
+        return ['All', ...Array.from(new Set(filtered.map(d => (d.village || '').trim()))).filter(Boolean).sort()];
     }, [allData, selectedCluster, selectedGP]);
 
     const filteredData = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
         return allData.filter(d => {
-            const matchesCluster = selectedCluster === 'All' || d.cluster === selectedCluster;
-            const matchesGP = selectedGP === 'All' || d.gp === selectedGP;
-            const matchesVillage = selectedVillage === 'All' || d.village === selectedVillage;
+            const matchesCluster = selectedCluster === 'All' || (d.cluster || '').trim() === selectedCluster;
+            const matchesGP = selectedGP === 'All' || (d.gp || '').trim() === selectedGP;
+            const matchesVillage = selectedVillage === 'All' || (d.village || '').trim() === selectedVillage;
             
             const matchesSearch = !query || 
                 (d.hhHeadName || '').toLowerCase().includes(query) || 
