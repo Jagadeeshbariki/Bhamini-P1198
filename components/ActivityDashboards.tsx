@@ -11,13 +11,27 @@ import {
     Legend
 } from 'recharts';
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL } from '../config';
+import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL } from '../config';
 import ActivityPhotoUploadModal from './ActivityPhotoUploadModal';
 
 declare global {
   interface Window {
     google: any;
   }
+}
+
+interface CropRecord {
+    hhId: string;
+    cropType: string;
+    extent: number;
+    sowingDate: string;
+    soilType: string;
+    irrigationSource: string;
+    cropModel: string;
+    mainCrop: string;
+    interCrops: string;
+    area: string;
+    season: string;
 }
 
 interface BeneficiaryRecord {
@@ -33,6 +47,7 @@ interface BeneficiaryRecord {
     lng: number;
     photo: string;
     contribution?: number;
+    cropDetails?: CropRecord[];
 }
 
 interface ActivityDashboardsProps {
@@ -78,6 +93,7 @@ const ActivityDashboardContent: React.FC<{
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedBeneficiary, setSelectedBeneficiary] = useState<BeneficiaryRecord | null>(null);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+    const [showCropDetails, setShowCropDetails] = useState<BeneficiaryRecord | null>(null);
 
     // Load Google Maps Script
     useEffect(() => {
@@ -110,6 +126,12 @@ const ActivityDashboardContent: React.FC<{
         const achieved = filteredData.length;
         const totalContribution = filteredData.reduce((sum, d) => sum + (d.contribution || 0), 0);
         
+        // Calculate total acres if this is the Crops dashboard
+        const totalAcres = filteredData.reduce((sum, d) => {
+            const cropSum = d.cropDetails?.reduce((s, c) => s + (c.extent || 0), 0) || 0;
+            return sum + cropSum;
+        }, 0);
+
         const clusterMap: Record<string, number> = {};
         filteredData.forEach(d => {
             clusterMap[d.cluster] = (clusterMap[d.cluster] || 0) + 1;
@@ -125,10 +147,11 @@ const ActivityDashboardContent: React.FC<{
                 village: d.village,
                 gp: d.gp,
                 cluster: d.cluster,
-                hhId: d.hhId
+                hhId: d.hhId,
+                benId: d.benId
             }));
 
-        return { achieved, totalContribution, clusterDist, mapPoints };
+        return { achieved, totalContribution, clusterDist, mapPoints, totalAcres };
     }, [filteredData]);
 
     // Initialize Map
@@ -166,10 +189,16 @@ const ActivityDashboardContent: React.FC<{
 
                 const infoWindow = new window.google.maps.InfoWindow({
                     content: `
-                        <div style="padding: 8px; font-family: sans-serif;">
-                            <p style="font-weight: 900; font-size: 12px; margin: 0; color: #4f46e5;">${p.name}</p>
-                            <p style="font-size: 10px; color: #6b7280; margin: 4px 0;">ID: ${p.hhId}</p>
-                            <p style="font-size: 10px; color: #374151; margin: 0;">${p.village}, ${p.gp}</p>
+                        <div style="padding: 12px; font-family: 'Inter', sans-serif; min-width: 180px;">
+                            <div style="margin-bottom: 8px;">
+                                <p style="font-weight: 900; font-size: 14px; margin: 0; color: #111827; text-transform: uppercase;">${p.name}</p>
+                                <p style="font-size: 10px; font-weight: 700; color: #4f46e5; margin: 2px 0; letter-spacing: 0.05em;">BEN ID: ${p.benId || 'N/A'}</p>
+                                <p style="font-size: 10px; font-weight: 700; color: #6b7280; margin: 0; letter-spacing: 0.05em;">HH ID: ${p.hhId}</p>
+                            </div>
+                            <div style="padding-top: 8px; border-top: 1px solid #f3f4f6;">
+                                <p style="font-size: 11px; font-weight: 800; color: #374151; margin: 0; text-transform: uppercase;">${p.village}</p>
+                                <p style="font-size: 10px; font-weight: 600; color: #9ca3af; margin: 2px 0; text-transform: uppercase;">${p.gp} • ${p.cluster}</p>
+                            </div>
                         </div>
                     `
                 });
@@ -224,15 +253,27 @@ const ActivityDashboardContent: React.FC<{
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
-                    <div className="p-3 md:p-4 bg-emerald-50 dark:bg-emerald-900/40 rounded-xl md:rounded-2xl text-emerald-600">
-                        <IndianRupee className="w-5 h-5 md:w-6 md:h-6" />
+                {stats.totalAcres > 0 ? (
+                    <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
+                        <div className="p-3 md:p-4 bg-amber-50 dark:bg-amber-900/40 rounded-xl md:rounded-2xl text-amber-600">
+                            <TrendingUp className="w-5 h-5 md:w-6 md:h-6" />
+                        </div>
+                        <div>
+                            <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Acres Covered</p>
+                            <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{stats.totalAcres.toFixed(2)} Ac</p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Contribution</p>
-                        <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">₹{stats.totalContribution.toLocaleString()}</p>
+                ) : (
+                    <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
+                        <div className="p-3 md:p-4 bg-emerald-50 dark:bg-emerald-900/40 rounded-xl md:rounded-2xl text-emerald-600">
+                            <IndianRupee className="w-5 h-5 md:w-6 md:h-6" />
+                        </div>
+                        <div>
+                            <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Contribution</p>
+                            <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">₹{stats.totalContribution.toLocaleString()}</p>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
                     <div className="p-3 md:p-4 bg-amber-50 dark:bg-amber-900/40 rounded-xl md:rounded-2xl text-amber-600">
@@ -341,9 +382,18 @@ const ActivityDashboardContent: React.FC<{
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                             {filteredData.map((row, idx) => (
                                 <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <p className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">{row.name}</p>
-                                        <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-0.5">{row.hhId}</p>
+                                    <td className="px-6 py-4 cursor-pointer" onClick={() => row.cropDetails && setShowCropDetails(row)}>
+                                        <div className="flex items-center gap-2">
+                                            <div>
+                                                <p className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">{row.name}</p>
+                                                <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-0.5">{row.hhId}</p>
+                                            </div>
+                                            {row.cropDetails && (
+                                                <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 text-[8px] font-black rounded uppercase">
+                                                    {row.cropDetails.length} Plots
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <p className="text-[10px] font-black text-gray-700 dark:text-gray-300 uppercase">{row.village}</p>
@@ -396,6 +446,65 @@ const ActivityDashboardContent: React.FC<{
                     onSuccess={(url) => onRefresh(url, selectedBeneficiary.hhId)}
                 />
             )}
+
+            {showCropDetails && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="p-8 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Crop Details</h2>
+                                <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest mt-1">{showCropDetails.name} • {showCropDetails.hhId}</p>
+                            </div>
+                            <button 
+                                onClick={() => setShowCropDetails(null)}
+                                className="p-3 bg-gray-100 dark:bg-gray-800 rounded-2xl hover:bg-gray-200 transition-colors"
+                            >
+                                <ChevronDown className="w-6 h-6 text-gray-500" />
+                            </button>
+                        </div>
+                        <div className="p-8 overflow-y-auto space-y-6">
+                            {showCropDetails.cropDetails?.map((crop, i) => (
+                                <div key={i} className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 space-y-4">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Main Crop</p>
+                                            <p className="text-lg font-black text-indigo-600 uppercase">{crop.mainCrop || 'N/A'}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Extent</p>
+                                            <p className="text-lg font-black text-emerald-600 uppercase">{crop.extent} Acres</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Sowing Date</p>
+                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">{crop.sowingDate || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Crop Model</p>
+                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">{crop.cropModel || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Soil Type</p>
+                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">{crop.soilType || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Irrigation</p>
+                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">{crop.irrigationSource || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                    {crop.interCrops && (
+                                        <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Inter Crops</p>
+                                            <p className="text-xs font-bold text-gray-600 dark:text-gray-400">{crop.interCrops}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -413,29 +522,38 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
         const normalize = (h: string) => h.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
         const normalizedHeaders = rawHeaders.map(normalize);
 
-        const getVal = (row: string[], search: string) => {
-            const searchNorm = normalize(search);
-            let idx = normalizedHeaders.findIndex(h => h === searchNorm);
-            if (idx === -1) {
-                idx = normalizedHeaders.findIndex(h => h.includes(searchNorm));
+        const getVal = (row: string[], terms: string[], allowFuzzy: boolean = true) => {
+            // Priority 1: Exact matches
+            for (const term of terms) {
+                const searchNorm = normalize(term);
+                const idx = normalizedHeaders.findIndex(h => h === searchNorm);
+                if (idx !== -1) return row[idx];
             }
-            return idx !== -1 ? row[idx] : '';
+            // Priority 2: Fuzzy matches (if allowed)
+            if (allowFuzzy) {
+                for (const term of terms) {
+                    const searchNorm = normalize(term);
+                    const idx = normalizedHeaders.findIndex(h => h.includes(searchNorm));
+                    if (idx !== -1) return row[idx];
+                }
+            }
+            return '';
         };
         
         const beneficiaries = lines.slice(1).map(line => {
             const vals = parseLine(line);
             return {
-                hhId: getVal(vals, 'Farmer ID') || getVal(vals, 'HH_id') || getVal(vals, 'HH ID') || getVal(vals, 'HHID') || '',
-                name: getVal(vals, 'Beneficiary name') || getVal(vals, 'Farmer Name') || getVal(vals, 'Name') || '',
-                activity: normalizeActivity((getVal(vals, 'Activity') || getVal(vals, 'activity') || '').trim().replace(/^(BYP-|BFE-|AFT-)/, '')),
-                gp: getVal(vals, 'GP') || getVal(vals, 'Beneficiary_GP') || '',
-                village: getVal(vals, 'Village') || getVal(vals, 'Beneficiary_village') || '',
-                age: getVal(vals, 'Age') || getVal(vals, 'Beneficiary_age') || '',
-                benId: getVal(vals, 'Ben_id') || getVal(vals, 'ID') || '',
-                cluster: getVal(vals, 'Cluster') || getVal(vals, 'cluster') || 'Unknown',
-                lat: parseFloat(getVal(vals, 'Lat') || getVal(vals, 'Latitude')) || 0,
-                lng: parseFloat(getVal(vals, 'long') || getVal(vals, 'Longitude') || getVal(vals, 'Lng')) || 0,
-                photo: getVal(vals, 'Photo_link') || getVal(vals, 'Photo') || getVal(vals, 'Image') || getVal(vals, 'Picture') || getVal(vals, 'PhotoLink') || '',
+                hhId: getVal(vals, ['HH ID', 'HHID', 'Farmer ID', 'FID']),
+                name: getVal(vals, ['Name', 'Beneficiary name', 'Farmer Name']),
+                activity: normalizeActivity((getVal(vals, ['activity', 'Activity']) || '').trim().replace(/^(BYP-|BFE-|AFT-)/, '')),
+                gp: getVal(vals, ['GP', 'Gram Panchayat', 'location-gp']),
+                village: getVal(vals, ['Village', 'location-village']),
+                age: getVal(vals, ['age', 'Age']),
+                benId: getVal(vals, ['Beneficiary ID', 'Ben_id', 'ID', 'location-farmer_id']),
+                cluster: getVal(vals, ['cluster', 'Cluster']),
+                lat: parseFloat(getVal(vals, ['lat', 'Latitude', 'gps-Latitude'])) || 0,
+                lng: parseFloat(getVal(vals, ['long', 'Longitude', 'gps-Longitude', 'lng'])) || 0,
+                photo: getVal(vals, ['photo', 'Photo_link', 'Image', 'Picture', 'photo_link', 'PhotoLink']),
             };
         }).filter(b => b.hhId && b.activity);
 
@@ -455,19 +573,21 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [benRes, contribRes] = await Promise.all([
+            const [benRes, contribRes, cropsRes] = await Promise.all([
                 fetch(`${BENEFICIARY_DATA_URL}&cb=${Date.now()}`),
-                fetch(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)
+                fetch(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`),
+                fetch(`${CROPS_DATA_URL}&cb=${Date.now()}`)
             ]);
 
-            if (!benRes.ok || !contribRes.ok) throw new Error("Failed to fetch data.");
+            if (!benRes.ok || !contribRes.ok || !cropsRes.ok) throw new Error("Failed to fetch data.");
 
             const benText = await benRes.text();
             const contribText = await contribRes.text();
+            const cropsText = await cropsRes.text();
 
             const parsedBens = parseCSV(benText);
             
-            const rawContribs = (csv: string) => {
+            const rawCsv = (csv: string) => {
                 const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
                 if (lines.length < 1) return [];
                 const headers = parseLine(lines[0]).map(h => h.trim().toUpperCase());
@@ -478,7 +598,31 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                     return obj;
                 });
             };
-            const parsedContribs = rawContribs(contribText);
+            const parsedContribs = rawCsv(contribText);
+            const parsedCropsRaw = rawCsv(cropsText);
+
+            const cropsMap = new Map<string, CropRecord[]>();
+            parsedCropsRaw.forEach(row => {
+                const hhId = row['HH ID'] || row['HHID'] || row['HH_ID'] || row['FARMER ID'] || row['FID'];
+                if (hhId) {
+                    const normId = normalizeId(hhId);
+                    const current = cropsMap.get(normId) || [];
+                    current.push({
+                        hhId: hhId,
+                        cropType: row['PLOT_REG-CROP_TYPE'] || '',
+                        extent: parseFloat(row['EXTENT'] || '0') || 0,
+                        sowingDate: row['PLOT_REG-SOWING_DATE'] || '',
+                        soilType: row['PLOT_REG-SOIL_TYPE'] || '',
+                        irrigationSource: row['PLOT_REG-IRRIGATION_SOURCE'] || '',
+                        cropModel: row['PLOT_REG-CROP_MODEL'] || '',
+                        mainCrop: row['PLOT_REG-MAIN_CROP'] || '',
+                        interCrops: row['PLOT_REG-INTER_CROPS'] || '',
+                        area: row['PLOT_REG-AREA'] || '',
+                        season: row['PLOT_REG-SEASON'] || '',
+                    });
+                    cropsMap.set(normId, current);
+                }
+            });
 
             const contribMap = new Map<string, Record<string, number>>();
             parsedContribs.forEach(row => {
@@ -508,6 +652,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             const finalData = parsedBens.map(b => {
                 const normId = normalizeId(b.hhId);
                 const userContribs = contribMap.get(normId) || {};
+                const cropDetails = cropsMap.get(normId);
                 
                 // Find contribution matching activity
                 const activityUpper = b.activity.toUpperCase();
@@ -525,7 +670,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 
                 const contribution = activityKey ? userContribs[activityKey] : 0;
 
-                return { ...b, contribution };
+                return { ...b, contribution, cropDetails };
             });
 
             setData(finalData);
@@ -627,10 +772,17 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                                                 {activityData.length} Beneficiaries
                                             </span>
                                             <span className="w-1 h-1 bg-gray-300 rounded-full" />
-                                            <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                                                <IndianRupee className="w-3 h-3" />
-                                                ₹{activityData.reduce((sum, d) => sum + (d.contribution || 0), 0).toLocaleString()}
-                                            </span>
+                                            {activity.toUpperCase().includes('CROP') ? (
+                                                <span className="flex items-center gap-1 text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">
+                                                    <TrendingUp className="w-3 h-3" />
+                                                    {activityData.reduce((sum, d) => sum + (d.cropDetails?.reduce((s, c) => s + (c.extent || 0), 0) || 0), 0).toFixed(2)} Acres
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
+                                                    <IndianRupee className="w-3 h-3" />
+                                                    ₹{activityData.reduce((sum, d) => sum + (d.contribution || 0), 0).toLocaleString()}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

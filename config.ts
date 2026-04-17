@@ -47,6 +47,9 @@ export const BYP_POULTRY_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1
 // 14. ELEVATED GOAT SHED DATA
 export const ELEVATED_GOAT_SHED_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS0e9wD0FOCBjNgdCArE9EuVsm4-wJNZLJZEkzDldWq2nW3dwnOjqhy7tZ3t-gLnJOLXiRiWwF1I3Qe/pub?gid=1249026473&single=true&output=csv';
 
+// 15. CROPS DATA
+export const CROPS_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR4QtZipnTgk2e8RU7NapbDg0b0re6_0YRrkd8fK34HEibBwpx6sa0g5gR9WK4UP3bEnuYSmO7fZpCN/pub?gid=1609179150&single=true&output=csv';
+
 // 9. SYSTEM ENDPOINT
 export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby4omIqQ9ANnowOT75v9b-7LJmrZ1_Fb1iZGfSNRVo8TbkmsuGv4Mf9h36MMwVPkjaiVw/exec';
 
