@@ -587,6 +587,15 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
 
             const parsedBens = parseCSV(benText);
             
+            // Create a lookup for village -> cluster to assign clusters to "crops-only" farmers
+            const villageClusterMap = new Map<string, string>();
+            parsedBens.forEach(b => {
+                const vNorm = b.village.toUpperCase();
+                if (vNorm && b.cluster && b.cluster !== 'N/A' && b.cluster !== 'All') {
+                    villageClusterMap.set(vNorm, b.cluster);
+                }
+            });
+
             const rawCsv = (csv: string) => {
                 const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
                 if (lines.length < 1) return [];
@@ -602,10 +611,24 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             const parsedCropsRaw = rawCsv(cropsText);
 
             const cropsMap = new Map<string, CropRecord[]>();
+            const cropsInfoMap = new Map<string, any>(); // To store name, gp, village for synthetic records
+            
             parsedCropsRaw.forEach(row => {
                 const hhId = row['HH ID'] || row['HHID'] || row['HH_ID'] || row['FARMER ID'] || row['FID'];
                 if (hhId) {
                     const normId = normalizeId(hhId);
+                    
+                    // Store farmer info for synthetic records
+                    if (!cropsInfoMap.has(normId)) {
+                        cropsInfoMap.set(normId, {
+                            name: row['FARMER NAME'] || row['NAME'] || 'Unknown Farmer',
+                            gp: row['GP'] || '',
+                            village: row['VILLAGE'] || '',
+                            lat: parseFloat(row['PLOT_REG-PLOT_GPS-LATITUDE'] || '0') || 0,
+                            lng: parseFloat(row['PLOT_REG-PLOT_GPS-LONGITUDE'] || '0') || 0
+                        });
+                    }
+
                     const current = cropsMap.get(normId) || [];
                     current.push({
                         hhId: hhId,
@@ -649,7 +672,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 }
             });
 
-            const finalData = parsedBens.map(b => {
+            const processedBens = parsedBens.map(b => {
                 const normId = normalizeId(b.hhId);
                 const userContribs = contribMap.get(normId) || {};
                 const cropDetails = cropsMap.get(normId);
@@ -670,10 +693,42 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 
                 const contribution = activityKey ? userContribs[activityKey] : 0;
 
-                return { ...b, contribution, cropDetails };
+                return { ...b, contribution, cropDetails, normId };
             });
 
-            setData(finalData);
+            // Augment with missing crops records
+            const existingCropsIds = new Set(
+                processedBens
+                    .filter(b => b.activity.toLowerCase() === 'crops')
+                    .map(b => b.normId)
+            );
+
+            const augmentedBens: BeneficiaryRecord[] = [...processedBens];
+            cropsMap.forEach((plots, normId) => {
+                if (!existingCropsIds.has(normId)) {
+                    const info = cropsInfoMap.get(normId);
+                    const villageNorm = (info?.village || '').toUpperCase();
+                    const cluster = villageClusterMap.get(villageNorm) || 'Other';
+                    
+                    augmentedBens.push({
+                        hhId: plots[0].hhId,
+                        name: info?.name || 'Unknown Farmer',
+                        activity: 'crops',
+                        gp: info?.gp || 'N/A',
+                        village: info?.village || 'N/A',
+                        age: '',
+                        benId: '',
+                        cluster: cluster,
+                        lat: info?.lat || 0,
+                        lng: info?.lng || 0,
+                        photo: '',
+                        contribution: 0,
+                        cropDetails: plots
+                    });
+                }
+            });
+
+            setData(augmentedBens);
         } catch (err: any) {
             console.error("Fetch error:", err.message);
         } finally {
