@@ -26,15 +26,15 @@ const HomePage: React.FC = () => {
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const filterRef = useRef<HTMLDivElement>(null);
 
-    const getDriveDirectUrl = (input: string) => {
-        if (!input || typeof input !== 'string') return '';
-        const trimmed = input.trim();
-        if (trimmed.includes('drive.google.com') || trimmed.includes('google.com/open')) {
-            const idMatch = trimmed.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
-            const id = idMatch ? idMatch[1] : '';
-            return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1600` : '';
+    const getDriveDirectUrl = (url: string) => {
+        if (!url) return '';
+        if (url.includes('drive.google.com') || url.includes('google.com/open')) {
+            const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
+            if (idMatch) {
+                return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`;
+            }
         }
-        return trimmed.startsWith('http') ? trimmed : '';
+        return url;
     };
 
     const parseCSVToObjects = (csv: string): Record<string, string>[] => {
@@ -148,7 +148,7 @@ const HomePage: React.FC = () => {
             let data;
             try {
                 data = JSON.parse(raw);
-            } catch (e) {
+            } catch {
                 throw new Error('Invalid server response: ' + raw.substring(0, 100));
             }
 

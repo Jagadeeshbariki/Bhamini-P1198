@@ -4,7 +4,7 @@ import {
     Search, PieChart as PieChartIcon, 
     TrendingUp, Users, IndianRupee, Globe, Camera, RefreshCw,
     ChevronDown, LayoutDashboard, ExternalLink, Loader2, ArrowLeft,
-    Download
+    Download, X
 } from 'lucide-react';
 import { 
     ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
@@ -83,6 +83,17 @@ const normalizeId = (id: any): string => {
     return str;
 };
 
+const formatDriveUrl = (url: string) => {
+    if (!url) return '';
+    if (url.includes('drive.google.com') || url.includes('google.com/open')) {
+        const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
+        if (idMatch) {
+            return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`;
+        }
+    }
+    return url;
+};
+
 const ActivityDashboardContent: React.FC<{ 
     data: BeneficiaryRecord[]; 
     onRefresh: (url?: string, hhId?: string) => void;
@@ -94,6 +105,7 @@ const ActivityDashboardContent: React.FC<{
     const [selectedBeneficiary, setSelectedBeneficiary] = useState<BeneficiaryRecord | null>(null);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const [showCropDetails, setShowCropDetails] = useState<BeneficiaryRecord | null>(null);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
 
     // Load Google Maps Script
     useEffect(() => {
@@ -406,17 +418,23 @@ const ActivityDashboardContent: React.FC<{
                                     </td>
                                     <td className="px-6 py-4">
                                         {row.photo ? (
-                                            <a 
-                                                href={row.photo} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 transition-colors"
+                                            <div 
+                                                onClick={() => setPreviewImage(formatDriveUrl(row.photo))}
+                                                className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 transition-colors cursor-pointer group/photo"
                                             >
-                                                <div className="w-8 h-8 rounded-lg overflow-hidden border border-indigo-100">
-                                                    <img src={row.photo} alt="Activity" className="w-full h-full object-cover" />
+                                                <div className="w-10 h-10 rounded-xl overflow-hidden border-2 border-indigo-100 group-hover/photo:border-indigo-500 transition-all shadow-sm">
+                                                    <img 
+                                                        src={formatDriveUrl(row.photo)} 
+                                                        alt="Activity" 
+                                                        className="w-full h-full object-cover" 
+                                                        referrerPolicy="no-referrer"
+                                                    />
                                                 </div>
-                                                <ExternalLink className="w-3 h-3" />
-                                            </a>
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] font-black uppercase tracking-tighter">View</span>
+                                                    <ExternalLink className="w-3 h-3 opacity-40 group-hover/photo:opacity-100 transition-opacity" />
+                                                </div>
+                                            </div>
                                         ) : (
                                             <span className="text-[9px] font-black text-gray-300 uppercase italic">No Photo</span>
                                         )}
@@ -502,6 +520,31 @@ const ActivityDashboardContent: React.FC<{
                                 </div>
                             ))}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {previewImage && (
+                <div 
+                    className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300"
+                    onClick={() => setPreviewImage(null)}
+                >
+                    <div 
+                        className="relative max-w-4xl w-full"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <button 
+                            onClick={() => setPreviewImage(null)}
+                            className="absolute -top-12 right-0 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"
+                        >
+                            <X className="w-6 h-6" />
+                        </button>
+                        <img 
+                            src={previewImage} 
+                            alt="Preview Full" 
+                            className="w-full h-auto max-h-[80vh] rounded-3xl shadow-2xl object-contain border border-white/10" 
+                            referrerPolicy="no-referrer"
+                        />
                     </div>
                 </div>
             )}

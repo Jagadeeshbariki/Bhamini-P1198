@@ -13,6 +13,17 @@ interface PhotoSliderProps {
 const PhotoSlider: React.FC<PhotoSliderProps> = ({ images }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
 
+    const formatDriveUrl = (url: string) => {
+        if (!url) return '';
+        if (url.includes('drive.google.com') || url.includes('google.com/open')) {
+            const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
+            if (idMatch) {
+                return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`;
+            }
+        }
+        return url;
+    };
+
     const nextSlide = useCallback(() => {
         setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
     }, [images.length]);
@@ -40,7 +51,7 @@ const PhotoSlider: React.FC<PhotoSliderProps> = ({ images }) => {
                         }`}
                     >
                         <img 
-                            src={img.url} 
+                            src={formatDriveUrl(img.url)} 
                             alt={img.description || `Field Photo ${index + 1}`} 
                             className="w-full h-full object-cover" 
                             loading="lazy" 

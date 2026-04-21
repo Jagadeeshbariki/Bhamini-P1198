@@ -274,7 +274,7 @@ const AdminPage: React.FC = () => {
             let data;
             try {
                 data = JSON.parse(raw);
-            } catch (e) {
+            } catch {
                 throw new Error('Invalid server response: ' + raw.substring(0, 100));
             }
 

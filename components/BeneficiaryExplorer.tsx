@@ -46,6 +46,17 @@ interface Beneficiary {
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#f43f5e'];
 
+const formatDriveUrl = (url: string) => {
+    if (!url) return '';
+    if (url.includes('drive.google.com')) {
+        const idMatch = url.match(/[-\w]{25,}/);
+        if (idMatch) {
+            return `https://docs.google.com/uc?export=view&id=${idMatch[0]}`;
+        }
+    }
+    return url;
+};
+
 const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
@@ -85,6 +96,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
     const [searchQuery, setSearchQuery] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: keyof Beneficiary; direction: 'asc' | 'desc' } | null>(null);
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
 
     const toggleRow = (index: number) => {
         const newExpanded = new Set(expandedRows);
@@ -873,21 +885,42 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                                                         <span className="text-[8px] font-bold text-gray-400 uppercase">{asset.date}</span>
                                                                         <span className="text-[8px] font-bold text-indigo-400 uppercase">{asset.distributor}</span>
                                                                     </div>
-                                                                    {asset.photo && asset.parentKey && (
-                                                                        <div className="mt-2 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 aspect-video relative group">
+                                                                    {asset.photo && (
+                                                                        <div 
+                                                                            className="mt-2 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 aspect-video relative group cursor-pointer"
+                                                                            onClick={() => {
+                                                                                if (asset.photo?.startsWith('http')) {
+                                                                                    setPreviewImage(formatDriveUrl(asset.photo));
+                                                                                } else if (asset.parentKey && asset.photo) {
+                                                                                    setPreviewImage(`/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey!)}&filename=${encodeURIComponent(asset.photo!)}`);
+                                                                                }
+                                                                            }}
+                                                                        >
                                                                             <img 
-                                                                                src={`/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey)}&filename=${encodeURIComponent(asset.photo)}`} 
+                                                                                src={asset.photo.startsWith('http') 
+                                                                                    ? formatDriveUrl(asset.photo) 
+                                                                                    : asset.parentKey 
+                                                                                        ? `/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey)}&filename=${encodeURIComponent(asset.photo)}`
+                                                                                        : ''
+                                                                                } 
                                                                                 alt={asset.label}
                                                                                 className="w-full h-full object-cover"
                                                                                 referrerPolicy="no-referrer"
                                                                                 onError={(e) => {
-                                                                                    e.currentTarget.style.display = 'none';
-                                                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                                    if (!asset.photo?.startsWith('http')) {
+                                                                                        e.currentTarget.style.display = 'none';
+                                                                                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                                    }
                                                                                 }}
                                                                             />
-                                                                            <div className="hidden absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
-                                                                                <span className="text-[10px] font-bold text-gray-500">Image Protected</span>
-                                                                                <span className="text-[8px] text-gray-400 mt-1">Requires ODK Central Login</span>
+                                                                            {!asset.photo.startsWith('http') && (
+                                                                                <div className="hidden absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                                                                                    <span className="text-[10px] font-bold text-gray-500">Image Protected</span>
+                                                                                    <span className="text-[8px] text-gray-400 mt-1">Requires ODK Central Login</span>
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                                                <span className="text-[10px] font-black text-white uppercase tracking-widest">Preview Photo</span>
                                                                             </div>
                                                                         </div>
                                                                     )}
@@ -992,22 +1025,40 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                                                     <span className="text-[7px] font-bold text-gray-400 uppercase">{asset.date}</span>
                                                                     <span className="text-[7px] font-bold text-indigo-400 uppercase">{asset.distributor}</span>
                                                                 </div>
-                                                                {asset.photo && asset.parentKey && (
-                                                                    <div className="mt-2 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 aspect-video relative group">
+                                                                {asset.photo && (
+                                                                    <div 
+                                                                        className="mt-2 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 aspect-video relative group cursor-pointer"
+                                                                        onClick={() => {
+                                                                            if (asset.photo?.startsWith('http')) {
+                                                                                setPreviewImage(formatDriveUrl(asset.photo));
+                                                                            } else if (asset.parentKey && asset.photo) {
+                                                                                setPreviewImage(`/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey!)}&filename=${encodeURIComponent(asset.photo!)}`);
+                                                                            }
+                                                                        }}
+                                                                    >
                                                                         <img 
-                                                                            src={`/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey)}&filename=${encodeURIComponent(asset.photo)}`} 
+                                                                            src={asset.photo.startsWith('http') 
+                                                                                ? formatDriveUrl(asset.photo) 
+                                                                                : asset.parentKey
+                                                                                    ? `/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey)}&filename=${encodeURIComponent(asset.photo)}`
+                                                                                    : ''
+                                                                            } 
                                                                             alt={asset.label}
                                                                             className="w-full h-full object-cover"
                                                                             referrerPolicy="no-referrer"
                                                                             onError={(e) => {
-                                                                                e.currentTarget.style.display = 'none';
-                                                                                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                                if (!asset.photo?.startsWith('http')) {
+                                                                                    e.currentTarget.style.display = 'none';
+                                                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                                }
                                                                             }}
                                                                         />
-                                                                        <div className="hidden absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
-                                                                            <span className="text-[10px] font-bold text-gray-500">Image Protected</span>
-                                                                            <span className="text-[8px] text-gray-400 mt-1">Requires ODK Central Login</span>
-                                                                        </div>
+                                                                        {!asset.photo.startsWith('http') && (
+                                                                            <div className="hidden absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                                                                                <span className="text-[10px] font-bold text-gray-500">Image Protected</span>
+                                                                                <span className="text-[8px] text-gray-400 mt-1">Requires ODK Central Login</span>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -1040,6 +1091,31 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
                 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
             `}</style>
+
+            {previewImage && (
+                <div 
+                    className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300"
+                    onClick={() => setPreviewImage(null)}
+                >
+                    <div 
+                        className="relative max-w-4xl w-full"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <button 
+                            onClick={() => setPreviewImage(null)}
+                            className="absolute -top-12 right-0 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"
+                        >
+                            <X className="w-6 h-6" />
+                        </button>
+                        <img 
+                            src={previewImage} 
+                            alt="Preview Full" 
+                            className="w-full h-auto max-h-[85vh] rounded-3xl shadow-2xl object-contain border border-white/10" 
+                            referrerPolicy="no-referrer"
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

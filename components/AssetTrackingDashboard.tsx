@@ -1,62 +1,106 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, Filter, Search, ChevronDown, Package, Truck, Clock, CheckCircle, PieChart as PieIcon, X } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { ASSETS_DATA_URL, ASSET_DISTRIBUTION_URL } from '../config';
 
 interface DistributionRecord {
     materialId: string;
+    activityName: string;
     farmerName: string;
     hhId: string;
     benId: string;
+    phone: string;
+    gender: string;
+    age: string;
     qty: number;
     date: string;
     village: string;
     gp: string;
     cluster: string;
+    submitter: string;
+    photo: string;
 }
 
 interface AssetRecord {
-    id: string;
+    id: string; // S.No
+    assetId: string; // HDFC-activityCode-s.No
     projectCode: string;
     budgetHead: string;
     activityCode: string;
-    assetCode: string;
     assetName: string;
+    assetCode: string;
+    units: string;
     dateOfPurchase: string;
-    dateOfReceipt: string;
     costPerUnit: number;
     hdfcContribution: number;
     communityContribution: number;
     qtyPurchased: number;
-    qtyReceived: number; 
+    deliveryPeriod: string;
+    qtyReceived: number;
     pending: number;
     totalPrice: number;
     paymentStatus: string;
+    dateOfAssetReceived: string;
     assetStatus: string;
-    qtyCluster1: number;
-    distCluster1: number;
-    qtyCluster2: number;
-    distCluster2: number;
-    qtyCluster3: number;
-    distCluster3: number;
-    distributions: DistributionRecord[];
-    actualDistributed: number;
+}
+
+interface AggregatedAsset {
+    assetCode: string;
+    assetName: string;
+    activityName: string;
+    activityCode: string;
+    budgetHead: string;
+    units: string;
+    qtyPurchased: number;
+    qtyReceived: number;
+    pending: number;
+    qtyDistributed: number;
+    qtyMembers: number; // Unique Member count using Ben_Id
+    totalValue: number;
+    records: AssetRecord[];
 }
 
 interface AssetTrackingDashboardProps {
     onBack?: () => void;
 }
 
+const ACTIVITY_MAP: Record<string, string> = {
+    'A1.1': 'Irrigation(Solar/Fixed)',
+    'A1.2': 'Mobile irrigation systems',
+    'A1.3': 'Eco-farm ponds with vegetables/fruits',
+    'A1.4': 'Bio resource center to promote Natural Farming',
+    'A1.5': 'Custom Hiring Centre',
+    'A1.6': 'Strengthening institutional and enterprise capacity',
+    'A1.7': 'Intensive poultry integrated farms and households',
+    'A1.8': 'Goatery sheds',
+    'A1.9': 'Processing hubs for local consumption and for value added markets',
+    'A1.10': 'Fish production in rainfed water bodies',
+    'A1.11': 'Crop improvement and diversification',
+    'A1.12': 'Capacity building',
+    'A1.13': 'Capacity Building of farmers on technical aspects on 8 themes',
+    'A1.14': 'On Field Support',
+    'A1.15': 'Video Documentation',
+    'A2.8': 'NGO Management'
+};
+
 const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack }) => {
-    const [data, setData] = useState<AssetRecord[]>([]);
+    const [assets, setAssets] = useState<AssetRecord[]>([]);
+    const [distributions, setDistributions] = useState<DistributionRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    
+    // Filters
     const [searchQuery, setSearchQuery] = useState('');
-    const [filterBudgetHead, setFilterBudgetHead] = useState('All');
     const [filterCluster, setFilterCluster] = useState('All');
-    const [expandedAssetId, setExpandedAssetId] = useState<string | null>(null);
-    const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
+    const [filterGP, setFilterGP] = useState('All');
+    const [filterVillage, setFilterVillage] = useState('All');
+    const [filterActivity, setFilterActivity] = useState('All');
+    const [filterStatus, setFilterStatus] = useState('All');
+    
+    // UI State
+    const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
 
-    const parseCSV = (csv: string): AssetRecord[] => {
+    const parseCSV = (csv: string): any[] => {
         const lines = csv.trim().split(/\r?\n/);
         if (lines.length < 1) return [];
 
@@ -75,94 +119,14 @@ const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack 
         const headers = parseLine(lines[0]);
         const cleanHeaders = headers.map(h => h.toUpperCase().replace(/[^A-Z0-9]/g, ''));
 
-        const getVal = (row: string[], search: string) => {
-            const searchClean = search.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            const idx = cleanHeaders.findIndex(h => h.includes(searchClean));
-            return idx !== -1 ? row[idx] : '';
-        };
-
-        const parseNum = (val: any) => {
-            if (val === undefined || val === null) return 0;
-            const clean = val.toString().replace(/[^0-9.]/g, '');
-            return parseFloat(clean) || 0;
-        };
-
         return lines.slice(1).map(line => {
             const row = parseLine(line);
-            if (row.length < 10) return null;
-
-            return {
-                id: getVal(row, 'SNO'),
-                projectCode: getVal(row, 'PROJECTCODE'),
-                budgetHead: getVal(row, 'BUDGETHEAD'),
-                activityCode: getVal(row, 'ACTIVITYCODE'),
-                assetCode: getVal(row, 'ASSETCODE'),
-                assetName: getVal(row, 'ASSETNAME'),
-                dateOfPurchase: getVal(row, 'DATEOFPURCHASE'),
-                dateOfReceipt: row[10] || '',
-                costPerUnit: parseNum(getVal(row, 'COSTOFUNIT')),
-                hdfcContribution: parseNum(getVal(row, 'HDFCCONTRIBUTION')),
-                communityContribution: parseNum(getVal(row, 'COMMUNITYCONTRIBUTION')),
-                qtyPurchased: parseNum(getVal(row, 'NUMBEROFASSETPURCHASED')),
-                qtyReceived: parseNum(getVal(row, 'HOWMANYRECEIVED')), 
-                pending: parseNum(getVal(row, 'PENDING')),
-                totalPrice: parseNum(getVal(row, 'TOTALPRICE')),
-                paymentStatus: getVal(row, 'PAYMENTSTATUS'),
-                assetStatus: getVal(row, 'STATUSOFTHEASSET'),
-                
-                qtyCluster1: parseNum(row[21]), 
-                distCluster1: parseNum(row[22]),
-                qtyCluster2: parseNum(row[25]), 
-                distCluster2: parseNum(row[26]),
-                qtyCluster3: parseNum(row[29]), 
-                distCluster3: parseNum(row[30]),
-                distributions: [],
-                actualDistributed: 0
-            };
-        }).filter((a): a is AssetRecord => !!a && !!a.assetName);
-    };
-
-    const parseDistCSV = (csv: string): DistributionRecord[] => {
-        const lines = csv.trim().split(/\r?\n/);
-        if (lines.length < 1) return [];
-
-        const parseLine = (line: string): string[] => {
-            const values = [];
-            let inQuote = false, val = '';
-            for (let j = 0; j < line.length; j++) {
-                if (line[j] === '"') inQuote = !inQuote;
-                else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
-                else val += line[j];
-            }
-            values.push(val.trim().replace(/^"|"$/g, ''));
-            return values;
-        };
-
-        const headers = parseLine(lines[0]);
-        const cleanHeaders = headers.map(h => h.toUpperCase().replace(/[^A-Z0-9]/g, ''));
-
-        const getVal = (row: string[], search: string) => {
-            const searchClean = search.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            const idx = cleanHeaders.findIndex(h => h.includes(searchClean));
-            return idx !== -1 ? row[idx] : '';
-        };
-
-        return lines.slice(1).map(line => {
-            const row = parseLine(line);
-            if (row.length < 5) return null;
-
-            return {
-                materialId: getVal(row, 'MATERIAL_ID'),
-                farmerName: getVal(row, 'BENEFICIARYNAME'),
-                hhId: getVal(row, 'FARMERID'),
-                benId: getVal(row, 'BEN_ID'),
-                qty: parseFloat(getVal(row, 'MATERIAL_COUNT')) || 0,
-                date: getVal(row, 'DISTRIBUTED_DATE'),
-                village: getVal(row, 'VILLAGE'),
-                gp: getVal(row, 'GP'),
-                cluster: getVal(row, 'CLUSTER'),
-            };
-        }).filter((d): d is DistributionRecord => !!d && !!d.materialId);
+            const obj: any = {};
+            headers.forEach((h, i) => {
+                obj[cleanHeaders[i]] = row[i] || '';
+            });
+            return obj;
+        });
     };
 
     useEffect(() => {
@@ -173,57 +137,68 @@ const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack 
                     fetch(`${ASSETS_DATA_URL}&t=${Date.now()}`),
                     fetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`)
                 ]);
+                
                 const assetText = await assetRes.text();
                 const distText = await distRes.text();
                 
                 const rawAssets = parseCSV(assetText);
-                const distributions = parseDistCSV(distText);
-                
-                // Aggregate assets by assetCode
-                const assetMap = new Map<string, typeof rawAssets[0]>();
-                for (const asset of rawAssets) {
-                    const code = asset.assetCode.trim().toUpperCase();
-                    if (!code) continue;
-                    
-                    if (assetMap.has(code)) {
-                        const existing = assetMap.get(code)!;
-                        existing.qtyPurchased += asset.qtyPurchased;
-                        existing.qtyReceived += asset.qtyReceived;
-                        existing.pending += asset.pending;
-                        existing.totalPrice += asset.totalPrice;
-                        existing.qtyCluster1 += asset.qtyCluster1;
-                        existing.qtyCluster2 += asset.qtyCluster2;
-                        existing.qtyCluster3 += asset.qtyCluster3;
-                    } else {
-                        assetMap.set(code, { ...asset });
-                    }
-                }
-                const aggregatedAssets = Array.from(assetMap.values());
-                
-                const merged = aggregatedAssets.map(asset => {
-                    const matchedDists = distributions.filter(d => 
-                        d.materialId.trim().toUpperCase() === asset.assetCode.trim().toUpperCase()
-                    );
-                    
-                    const actualDist = matchedDists.reduce((sum, d) => sum + d.qty, 0);
-                    
-                    const distByCluster = (clusterName: string) => 
-                        matchedDists.filter(d => d.cluster?.toUpperCase().includes(clusterName.toUpperCase()))
-                                   .reduce((sum, d) => sum + d.qty, 0);
+                const rawDists = parseCSV(distText);
 
+                const parsedAssets: AssetRecord[] = rawAssets.map(row => {
+                    const sno = (row.SNO || row.S_NO || row.ID || '').trim();
+                    const actCode = (row.ACTIVITYCODE || row.ACTIVITY_CODE || '').trim();
+                    const csvAssetId = (row.ASSETID || row.ASSET_ID || '').trim().toUpperCase();
+                    
+                    // Construct assetId as per user format: HDFC-activityCode-SNO 
+                    // This serves as a fallback if the sheet doesn't have an explicit ASSETID column
+                    const generatedId = `HDFC-${actCode}-${sno}`.toUpperCase();
+                    
                     return {
-                        ...asset,
-                        distributions: matchedDists,
-                        actualDistributed: actualDist,
-                        distCluster1: distByCluster('Cluster 1') || asset.distCluster1,
-                        distCluster2: distByCluster('Cluster 2') || asset.distCluster2,
-                        distCluster3: distByCluster('Cluster 3') || asset.distCluster3,
+                        id: sno,
+                        assetId: csvAssetId || generatedId, // Use sheet's ID if exists, else generate
+                        projectCode: row.PROJECTCODE || '',
+                        budgetHead: row.BUDGETHEAD || '',
+                        activityCode: actCode,
+                        assetName: row.ASSETNAME || '',
+                        assetCode: (row.ASSETCODE || row.ASSET_CODE || '').trim(),
+                        units: row.UNITS || '',
+                        dateOfPurchase: row.DATEOFPURCHASE || '',
+                        costPerUnit: parseFloat(row.COSTOFUNITASSET) || 0,
+                        hdfcContribution: parseFloat(row.HDFCCONTRIBUTION) || 0,
+                        communityContribution: parseFloat(row.COMMUNITYCONTRIBUTION) || 0,
+                        qtyPurchased: parseFloat(row.NUMBEROFASSETPURCHASED) || 0,
+                        deliveryPeriod: row.DELIVERYPERIOD || '',
+                        qtyReceived: parseFloat(row.HOWMANYRECEIVED) || 0,
+                        pending: parseFloat(row.PENDINGFROMVENDOR) || 0,
+                        totalPrice: parseFloat(row.TOTALPRICEINCLUDINGGST) || 0,
+                        paymentStatus: row.PAYMENTSTATUS || '',
+                        dateOfAssetReceived: row.DATEOFASSETRECEIVED || '',
+                        assetStatus: row.STATUSOFTHEASSET || ''
                     };
-                });
-                
-                setData(merged);
+                }).filter(a => a.assetName);
+
+                const parsedDists: DistributionRecord[] = rawDists.map(row => ({
+                    materialId: (row.MATERIALID || row.MATERIAL_ID || row.THISMATERIALCODE || '').trim().toUpperCase(),
+                    activityName: row.ACTIVITY || row.ACTIVITYNAME || '',
+                    farmerName: row.BENEFICIARYNAME || row.FARMERNAME || '',
+                    hhId: row.FARMERID || row.HHID || '',
+                    benId: row.BENID || row.BEN_ID || '',
+                    phone: row.BENPHONE || row.BEN_PHONE || '',
+                    gender: row.GENDER || '',
+                    age: row.AGE || '',
+                    qty: parseFloat(row.MATERIALSDETAILSMATERIALCOUNT || row.MATERIALCOUNT || row.QTY || '1') || 0,
+                    date: row.DATEOFSUBMISSION || row.DISTRIBUTEDDATE || '',
+                    village: row.VILLAGE || '',
+                    gp: row.GP || '',
+                    cluster: row.CLUSTER || '',
+                    submitter: row.SUBMITTER || '',
+                    photo: row.PHOTO || ''
+                })).filter(d => d.materialId);
+
+                setAssets(parsedAssets);
+                setDistributions(parsedDists);
             } catch (err) {
-                console.error("Asset fetch failed", err);
+                console.error("Failed to fetch asset data:", err);
             } finally {
                 setLoading(false);
             }
@@ -231,413 +206,393 @@ const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack 
         fetchData();
     }, []);
 
-    const budgetHeadOptions = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.budgetHead))).sort()], [data]);
-    const clusterOptions = ['All', 'Cluster 1', 'Cluster 2', 'Cluster 3'];
+    // Filter Options
+    const clusters = useMemo(() => ['All', ...Array.from(new Set(distributions.map(d => d.cluster))).filter(Boolean).sort()], [distributions]);
+    const gps = useMemo(() => {
+        const filtered = filterCluster === 'All' ? distributions : distributions.filter(d => d.cluster === filterCluster);
+        return ['All', ...Array.from(new Set(filtered.map(d => d.gp))).filter(Boolean).sort()];
+    }, [distributions, filterCluster]);
+    
+    const villages = useMemo(() => {
+        let filtered = distributions;
+        if (filterCluster !== 'All') filtered = filtered.filter(d => d.cluster === filterCluster);
+        if (filterGP !== 'All') filtered = filtered.filter(d => d.gp === filterGP);
+        return ['All', ...Array.from(new Set(filtered.map(d => d.village))).filter(Boolean).sort()];
+    }, [distributions, filterCluster, filterGP]);
 
-    const downloadCSV = () => {
-        const headers = [
-            'SNO', 'Project Code', 'Budget Head', 'Activity Code', 'Asset Code', 'Asset Name', 
-            'Date of Purchase', 'Date of Receipt', 'Cost Per Unit', 'HDFC Contribution', 
-            'Community Contribution', 'Qty Purchased', 'Qty Received', 'Pending', 'Total Price', 
-            'Payment Status', 'Asset Status', 'Qty C1', 'Dist C1', 'Qty C2', 'Dist C2', 'Qty C3', 'Dist C3'
-        ];
-        const csvContent = [
-            headers.join(','),
-            ...filteredLedgerData.map(d => [
-                `"${d.id}"`, `"${d.projectCode}"`, `"${d.budgetHead}"`, `"${d.activityCode}"`, 
-                `"${d.assetCode}"`, `"${d.assetName}"`, `"${d.dateOfPurchase}"`, `"${d.dateOfReceipt}"`,
-                d.costPerUnit, d.hdfcContribution, d.communityContribution, d.qtyPurchased, 
-                d.qtyReceived, d.pending, d.totalPrice, `"${d.paymentStatus}"`, `"${d.assetStatus}"`,
-                d.qtyCluster1, d.distCluster1, d.qtyCluster2, d.distCluster2, d.qtyCluster3, d.distCluster3
-            ].join(','))
-        ].join('\n');
+    // 2. Derive available activities for the filter dropdown
+    const activities = useMemo(() => {
+        return ['All', ...Array.from(new Set(assets.map(a => a.activityCode))).filter(Boolean).sort()];
+    }, [assets]);
 
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `asset_tracking_report_${new Date().toISOString().split('T')[0]}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    const filteredLedgerData = useMemo(() => {
-        return data.filter(d => {
-            const matchesSearch = d.assetName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                 d.assetCode.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesBudget = filterBudgetHead === 'All' || d.budgetHead === filterBudgetHead;
-            let matchesCluster = true;
-            if (filterCluster !== 'All') {
-                if (filterCluster === 'Cluster 1') matchesCluster = d.qtyCluster1 > 0 || d.distCluster1 > 0;
-                if (filterCluster === 'Cluster 2') matchesCluster = d.qtyCluster2 > 0 || d.distCluster2 > 0;
-                if (filterCluster === 'Cluster 3') matchesCluster = d.qtyCluster3 > 0 || d.distCluster3 > 0;
-            }
-            return matchesSearch && matchesBudget && matchesCluster;
+    // 3. Data Aggregation (Filtering and Grouping)
+    const aggregatedData = useMemo(() => {
+        // Filter distributions based on side filters
+        const filteredDists = distributions.filter(d => {
+            const matchesCluster = filterCluster === 'All' || d.cluster === filterCluster;
+            const matchesGP = filterGP === 'All' || d.gp === filterGP;
+            const matchesVillage = filterVillage === 'All' || d.village === filterVillage;
+            return matchesCluster && matchesGP && matchesVillage;
         });
-    }, [data, searchQuery, filterBudgetHead, filterCluster]);
+
+        // Filter assets based on activity filter, status filter, and search
+        const filteredAssets = assets.filter(a => {
+            const matchesActivity = filterActivity === 'All' || a.activityCode === filterActivity;
+            const matchesStatus = filterStatus === 'All' || a.assetStatus === filterStatus;
+            const matchesSearch = a.assetName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                 a.assetCode.toLowerCase().includes(searchQuery.toLowerCase());
+            return matchesActivity && matchesStatus && matchesSearch;
+        });
+
+        // Group by Activity Name -> then by Asset Code
+        const groups: Record<string, Record<string, AggregatedAsset>> = {};
+
+        filteredAssets.forEach(asset => {
+            const actCode = asset.activityCode || 'Unknown';
+            const actName = ACTIVITY_MAP[actCode] || actCode;
+            const code = asset.assetCode || 'Unknown Code';
+
+            if (!groups[actName]) groups[actName] = {};
+            if (!groups[actName][code]) {
+                groups[actName][code] = {
+                    assetCode: code,
+                    assetName: asset.assetName,
+                    activityName: actName,
+                    activityCode: actCode,
+                    budgetHead: asset.budgetHead,
+                    units: asset.units,
+                    qtyPurchased: 0,
+                    qtyReceived: 0,
+                    pending: 0,
+                    qtyDistributed: 0,
+                    totalValue: 0,
+                    records: []
+                };
+            }
+
+            const g = groups[actName][code];
+            g.qtyPurchased += asset.qtyPurchased;
+            g.qtyReceived += asset.qtyReceived;
+            g.pending += asset.pending;
+            g.totalValue += asset.totalPrice;
+            g.records.push(asset);
+        });
+
+        // Attach distribution sums and member counts
+        Object.keys(groups).forEach(act => {
+            Object.keys(groups[act]).forEach(code => {
+                const g = groups[act][code];
+                const activeDists = filteredDists
+                    .filter(d => {
+                        const dId = d.materialId.trim().toUpperCase();
+                        const aCode = code.trim().toUpperCase();
+                        // Exact match: Asset_code from asset sheet with Material_ID from distribution
+                        return dId === aCode;
+                    });
+                
+                g.qtyDistributed = activeDists.reduce((sum, d) => sum + d.qty, 0);
+                g.qtyMembers = new Set(activeDists.map(d => d.benId).filter(Boolean)).size;
+            });
+        });
+
+        return groups;
+    }, [assets, distributions, filterCluster, filterGP, filterVillage, filterActivity, searchQuery, filterStatus]);
 
     const stats = useMemo(() => {
-        const baseFiltered = data.filter(d => {
-            const matchesSearch = d.assetName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                 d.assetCode.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesBudget = filterBudgetHead === 'All' || d.budgetHead === filterBudgetHead;
-            return matchesSearch && matchesBudget;
-        });
+        let totalPurchased = 0;
+        let totalReceived = 0;
+        let totalPending = 0;
+        let totalDistributed = 0;
 
-        const ordered = baseFiltered.reduce((acc, d) => acc + d.qtyPurchased, 0);
-        const receivedCentral = baseFiltered.reduce((acc, d) => acc + d.qtyReceived, 0); 
-        const investment = baseFiltered.reduce((acc, d) => acc + d.totalPrice, 0);
-
-        let fieldReached = 0;
-        let fieldDistributed = 0;
-
-        baseFiltered.forEach(d => {
-            if (filterCluster === 'All' || filterCluster === 'Cluster 1') {
-                fieldReached += d.qtyCluster1;
-                fieldDistributed += d.distCluster1;
-            }
-            if (filterCluster === 'All' || filterCluster === 'Cluster 2') {
-                fieldReached += d.qtyCluster2;
-                fieldDistributed += d.distCluster2;
-            }
-            if (filterCluster === 'All' || filterCluster === 'Cluster 3') {
-                fieldReached += d.qtyCluster3;
-                fieldDistributed += d.distCluster3;
-            }
-        });
-
-        const totalStock = fieldReached - fieldDistributed;
-
-        const expenseMap: Record<string, number> = {};
-        baseFiltered.forEach(d => {
-            const activity = d.activityCode || 'N/A';
-            expenseMap[activity] = (expenseMap[activity] || 0) + d.totalPrice;
-        });
-        const activityExpenseData = Object.entries(expenseMap).map(([label, total]) => ({ label, total })).sort((a,b) => b.total - a.total).slice(0, 10);
-        const maxActivityExpense = Math.max(...activityExpenseData.map(d => d.total), 1);
-
+        // Status counts for the pie chart
+        // We calculate this based on the side filters but BEFORE status filter to show available options
         const statusMap: Record<string, number> = {};
-        baseFiltered.forEach(d => {
-            const status = d.assetStatus || 'Unknown';
-            statusMap[status] = (statusMap[status] || 0) + 1;
-        });
-        const totalCount = baseFiltered.length || 1;
-        const statusData = Object.entries(statusMap).map(([label, count]) => ({
-            label,
-            percent: (count / totalCount) * 100,
-            count
-        })).sort((a, b) => b.percent - a.percent);
-
-        const c1Rec = baseFiltered.reduce((acc, d) => acc + d.qtyCluster1, 0);
-        const c1Dist = baseFiltered.reduce((acc, d) => acc + d.distCluster1, 0);
-        const c2Rec = baseFiltered.reduce((acc, d) => acc + d.qtyCluster2, 0);
-        const c2Dist = baseFiltered.reduce((acc, d) => acc + d.distCluster2, 0);
-        const c3Rec = baseFiltered.reduce((acc, d) => acc + d.qtyCluster3, 0);
-        const c3Dist = baseFiltered.reduce((acc, d) => acc + d.distCluster3, 0);
-
-        const getPct = (dist: number, rec: number) => rec > 0 ? (dist / rec) * 100 : 0;
-        const distributionEfficiency = [
-            { label: 'Cluster 1', value: getPct(c1Dist, c1Rec) },
-            { label: 'Cluster 2', value: getPct(c2Dist, c2Rec) },
-            { label: 'Cluster 3', value: getPct(c3Dist, c3Rec) },
-        ];
         
-        const clusterStatus = [
-            { label: 'Cluster 1', purchased: c1Rec, distributed: c1Dist },
-            { label: 'Cluster 2', purchased: c2Rec, distributed: c2Dist },
-            { label: 'Cluster 3', purchased: c3Rec, distributed: c3Dist },
-        ];
-        const maxClusterValue = Math.max(...clusterStatus.flatMap(c => [c.purchased, c.distributed]), 1);
+        assets.forEach(a => {
+            // Apply other filters to the status calculation
+            const matchesActivity = filterActivity === 'All' || a.activityCode === filterActivity;
+            const matchesSearch = a.assetName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                 a.assetCode.toLowerCase().includes(searchQuery.toLowerCase());
+            
+            if (matchesActivity && matchesSearch) {
+                const s = a.assetStatus || 'Not Specified';
+                statusMap[s] = (statusMap[s] || 0) + 1;
+            }
+        });
 
-        return { 
-            ordered: Math.round(ordered), 
-            receivedCentral: Math.round(receivedCentral), 
-            fieldReached: Math.round(fieldReached), 
-            fieldDistributed: Math.round(fieldDistributed),
-            investment, 
-            totalStock: Math.round(totalStock),
-            activityExpenseData, maxActivityExpense, statusData, distributionEfficiency,
-            clusterStatus, maxClusterValue
-        };
-    }, [data, searchQuery, filterBudgetHead, filterCluster]);
+        const statusData = Object.entries(statusMap).map(([name, value]) => ({ name, value }));
+
+        Object.values(aggregatedData).forEach(actGroup => {
+            Object.values(actGroup).forEach(asset => {
+                totalPurchased += asset.qtyPurchased;
+                totalReceived += asset.qtyReceived;
+                totalPending += asset.pending;
+                totalDistributed += asset.qtyDistributed;
+            });
+        });
+
+        return { totalPurchased, totalReceived, totalPending, totalDistributed, statusData };
+    }, [aggregatedData, assets, filterActivity, searchQuery]);
+
+    const STATUS_COLORS: Record<string, string> = {
+        'Received': '#10b981',    // Emerald 500
+        'Ordered': '#3b82f6',     // Blue 500
+        'In Transit': '#f59e0b',  // Amber 500
+        'Pending': '#ef4444',     // Red 500
+        'Distributed': '#8b5cf6', // Violet 500
+        'Not Specified': '#94a3b8',// Slate 400
+        'Cancelled': '#64748b',   // Gray 500
+        'Returned': '#f43f5e',    // Rose 500
+        'Shipped': '#06b6d4',     // Cyan 500
+        'Processing': '#ec4899',  // Pink 500
+        'Approved': '#22c55e',    // Green 500
+        'Rejected': '#b91c1c',    // Red 700
+    };
+
+    const UI_PALETTE = [
+        '#6366f1', '#10b981', '#3b82f6', '#f59e0b', '#ef4444', 
+        '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#84cc16',
+        '#14b8a6', '#facc15', '#6366f1', '#a855f7', '#d946ef',
+        '#fb7185', '#2dd4bf', '#22c55e', '#eab308', '#fb923c'
+    ];
+
+    const getStatusColor = (status: string, index: number) => {
+        if (STATUS_COLORS[status]) return STATUS_COLORS[status];
+        return UI_PALETTE[(index + 10) % UI_PALETTE.length]; // Offset to avoid collision with common mapped colors
+    };
+
+    const getActivityColor = (activityName: string, index: number) => {
+        // Deterministic color based on name if possible, or just index
+        return UI_PALETTE[index % UI_PALETTE.length];
+    };
+
+    const toggleActivity = (activity: string) => {
+        const next = new Set(expandedActivities);
+        if (next.has(activity)) next.delete(activity);
+        else next.add(activity);
+        setExpandedActivities(next);
+    };
 
     if (loading) return (
-        <div className="flex flex-col items-center justify-center min-h-[50vh]">
-            <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="mt-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Asset Pipeline Syncing...</p>
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+            <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="mt-4 text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Syncing Asset Registry...</p>
         </div>
     );
 
     return (
-        <div className="flex flex-col gap-8 animate-fade-in pb-20 overflow-visible">
-            {onBack && (
-                <button 
-                    onClick={onBack}
-                    className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mb-4 group w-fit"
-                >
-                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                    Back to Dashboards
-                </button>
-            )}
-            {/* 1. TOP FILTERS */}
-            <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-gray-800 p-4 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-indigo-600 rounded-lg text-white">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
-                    </div>
-                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Filters:</span>
-                </div>
-                <input 
-                    type="text" 
-                    placeholder="Search Asset/Code..." 
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none w-32 md:w-48 focus:ring-2 focus:ring-indigo-500 font-bold"
-                />
-                <select value={filterBudgetHead} onChange={e => setFilterBudgetHead(e.target.value)} className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer">
-                    <option value="All">All Budget Heads</option>
-                    {budgetHeadOptions.filter(o => o !== 'All').map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-                <select value={filterCluster} onChange={e => setFilterCluster(e.target.value)} className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase ring-1 ring-gray-200 dark:ring-gray-700 border-none cursor-pointer">
-                    <option value="All">All Clusters (Summary)</option>
-                    {clusterOptions.filter(o => o !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <button 
-                    onClick={downloadCSV}
-                    className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
-                >
-                    <Download className="w-4 h-4" />
-                    Export
-                </button>
-            </div>
-
-            {/* 2. KPI STRIP */}
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                <KPICard label="Ordered Assets" value={stats.ordered} color="bg-blue-600" />
-                <KPICard label="Central Received" value={stats.receivedCentral} color="bg-emerald-600" />
-                <KPICard label="Field Reached" value={stats.fieldReached} color="bg-indigo-500" />
-                <KPICard label="Field Distributed" value={stats.fieldDistributed} color="bg-indigo-700" />
-                <KPICard label="Stock In Hand" value={stats.totalStock} color="bg-teal-600" />
-                <KPICard label="Total Valuation" value={`₹${(stats.investment/100000).toFixed(1)}L`} color="bg-gray-900" />
-            </div>
-
-            {/* 3. ANALYTICS & INSIGHTS - Adjusted to 4 equal columns on xl desktops */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col min-h-[350px]">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-6 px-2">Cluster Distribution Efficiency (%)</h3>
-                    <div className="flex-grow flex items-end justify-around gap-4 px-2">
-                        {stats.distributionEfficiency.map((c, i) => (
-                            <EfficiencyBar key={i} label={c.label} percent={c.value} />
-                        ))}
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col min-h-[350px]">
-                    <div className="flex items-center justify-between mb-6 px-2">
-                        <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Cluster Distribution Status</h3>
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-sm bg-blue-500"></span><span className="text-[8px] font-black text-gray-400 uppercase">Purchased</span>
-                            <span className="w-2 h-2 rounded-sm bg-emerald-500 ml-1"></span><span className="text-[8px] font-black text-gray-400 uppercase">Distributed</span>
-                        </div>
-                    </div>
-                    <div className="flex-grow flex items-end justify-around gap-2 px-2 pb-6">
-                        {stats.clusterStatus.map((c, i) => (
-                            <GroupedBar key={i} label={c.label} val1={c.purchased} val2={c.distributed} max={stats.maxClusterValue} />
-                        ))}
-                    </div>
-                </div>
-
-                {/* Activity Wise Expenses */}
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col min-h-[350px]">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-6 px-2">Activity Wise Expenses</h3>
-                    <div className="flex-grow flex items-end justify-between gap-1 px-4 h-full">
-                        {stats.activityExpenseData.map((d, i) => (
-                            <ActivityBar key={i} label={d.label} value={d.total} max={stats.maxActivityExpense} />
-                        ))}
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col items-center min-h-[350px]">
-                    <h3 className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-4 px-2 text-center">Asset Physical Status</h3>
-                    <div className="relative w-28 h-28 flex items-center justify-center">
-                        <PieChart data={stats.statusData} />
-                    </div>
-                    <div className="mt-4 grid grid-cols-1 gap-1 w-full overflow-y-auto custom-scrollbar max-h-[140px]">
-                        {stats.statusData.map((s, idx) => (
-                            <div key={idx} className="flex items-center justify-between gap-1.5 py-1">
-                                <div className="flex items-center gap-1">
-                                    <div className={`w-1.5 h-1.5 rounded-full`} style={{ background: COLORS[idx % COLORS.length] }}></div>
-                                    <span className="text-[8px] font-black uppercase text-gray-500 truncate max-w-[100px]">{s.label}</span>
-                                </div>
-                                <span className="text-[8px] font-black text-gray-400">{s.percent.toFixed(0)}%</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* 4. BUDGET HEAD & ACTIVITY-WISE DISTRIBUTION TRACKER */}
-            <div className="flex flex-col gap-6">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-4">
-                    <div className="flex flex-col">
-                        <h2 className="text-lg sm:text-xl font-black text-gray-800 dark:text-white uppercase tracking-tight leading-none">Categorized Asset Tracking</h2>
-                        <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1">Grouped by Budget Head & Activity pipeline</span>
-                    </div>
-                    <span className="text-[10px] font-black bg-indigo-100 text-indigo-600 px-4 py-1.5 rounded-full uppercase tracking-tighter">{filteredLedgerData.length} Registry Items</span>
+        <div className="flex flex-col gap-6 animate-in fade-in duration-500 pb-20">
+            {/* Header Area */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <button 
+                        onClick={onBack}
+                        className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mb-2"
+                    >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        Management Suite
+                    </button>
+                    <h1 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Asset Tracking Dashboard</h1>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Real-time procurement & distribution audit</p>
                 </div>
                 
-                {Object.entries(
-                    filteredLedgerData.reduce((acc, asset) => {
-                        const budget = asset.budgetHead || 'Uncategorized Budget Head';
-                        if (!acc[budget]) acc[budget] = {};
-                        
-                        const act = asset.activityCode || 'Uncategorized Activity';
-                        if (!acc[budget][act]) acc[budget][act] = [];
-                        
-                        acc[budget][act].push(asset);
-                        return acc;
-                    }, {} as Record<string, Record<string, typeof filteredLedgerData>>)
-                ).map(([budgetHead, activities]) => (
-                    <div key={budgetHead} className="flex flex-col gap-3 relative">
-                        {/* Budget Head Section Header */}
-                        <div className="flex items-center gap-3 pl-2 pb-1 border-b-2 border-gray-100 dark:border-gray-800">
-                            <div className="w-2.5 h-2.5 rounded-sm bg-indigo-500"></div>
-                            <h3 className="text-xs sm:text-sm font-black text-gray-800 dark:text-gray-200 uppercase tracking-widest">{budgetHead}</h3>
-                            <span className="text-[9px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md">{Object.keys(activities).length} Activities</span>
+                <div className="flex items-center gap-2">
+                    <button className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase shadow-lg shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95">
+                        <Download className="w-4 h-4" />
+                        Export Audit
+                    </button>
+                </div>
+            </div>
+
+            {/* Stats & Pie Chart Container */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-2">
+                {/* Distribution Summary */}
+                <div className="lg:col-span-2 grid grid-cols-2 xl:grid-cols-4 gap-4">
+                    <StatCard label="Purchased" value={stats.totalPurchased} icon={<Package className="w-4 h-4" />} color="text-blue-600" bg="bg-blue-50" />
+                    <StatCard label="Received" value={stats.totalReceived} icon={<Truck className="w-4 h-4" />} color="text-emerald-600" bg="bg-emerald-50" />
+                    <StatCard label="Distributed" value={stats.totalDistributed} icon={<CheckCircle className="w-4 h-4" />} color="text-indigo-600" bg="bg-indigo-50" />
+                    <StatCard label="Pending" value={stats.totalPending} icon={<Clock className="w-4 h-4" />} color="text-orange-600" bg="bg-orange-50" />
+                </div>
+
+                {/* Status Pie Chart */}
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden group">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-indigo-500">
+                                <PieIcon size={16} />
+                            </div>
+                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Asset Status Distribution</span>
                         </div>
-                        
-                        <div className="flex flex-col gap-3 pl-1 sm:pl-3">
-                            {Object.entries(activities).map(([activity, assets]) => {
-                                const isExpanded = expandedActivity === activity;
-                                const totalPurchased = assets.reduce((sum, a) => sum + a.qtyPurchased, 0);
-                                const totalDistributed = assets.reduce((sum, a) => sum + a.actualDistributed, 0);
-                                
-                                return (
-                                    <div key={activity} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden transition-all duration-300 shadow-sm flex flex-col">
-                                        <button 
-                                            onClick={() => setExpandedActivity(isExpanded ? null : activity)}
-                                            className="w-full flex items-center justify-between p-4 sm:p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+                        {filterStatus !== 'All' && (
+                            <button 
+                                onClick={() => setFilterStatus('All')}
+                                className="flex items-center gap-1 text-[9px] font-black text-indigo-600 uppercase hover:text-indigo-800"
+                            >
+                                <X size={12} /> Clear Filter
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="h-[200px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={stats.statusData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                    onClick={(data) => {
+                                        if (data && data.name) {
+                                            setFilterStatus(data.name === filterStatus ? 'All' : data.name);
+                                        }
+                                    }}
+                                    className="cursor-pointer"
+                                    isAnimationActive={true}
+                                >
+                                    {stats.statusData.map((entry, index) => (
+                                        <Cell 
+                                            key={`cell-${index}`} 
+                                            fill={getStatusColor(entry.name, index)} 
+                                            strokeWidth={filterStatus === entry.name ? 3 : 0}
+                                            stroke="#fff"
+                                            className={`transition-all duration-300 ${filterStatus !== 'All' && filterStatus !== entry.name ? 'opacity-30' : 'opacity-100'}`}
+                                        />
+                                    ))}
+                                </Pie>
+                                <Tooltip 
+                                    contentStyle={{ 
+                                        borderRadius: '1rem', 
+                                        border: 'none', 
+                                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                                        fontSize: '10px',
+                                        fontWeight: '900',
+                                        textTransform: 'uppercase'
+                                    }} 
+                                />
+                                <Legend 
+                                    verticalAlign="bottom" 
+                                    height={36} 
+                                iconType="circle"
+                                    formatter={(value) => <span className="text-[9px] font-black uppercase text-gray-500 ml-1">{value}</span>}
+                                />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+
+            {/* Advanced Filters */}
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-4">
+                <div className="flex items-center gap-3 pb-4 border-b border-gray-50 dark:border-gray-700">
+                    <Filter className="w-4 h-4 text-indigo-600" />
+                    <h2 className="text-[11px] font-black text-gray-900 dark:text-white uppercase tracking-widest">Audit Filters</h2>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                        <input 
+                            type="text"
+                            placeholder="SEARCH ASSET..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 rounded-xl text-[10px] font-black uppercase border-none ring-1 ring-gray-100 dark:ring-gray-700 focus:ring-2 focus:ring-indigo-500"
+                        />
+                    </div>
+                    
+                    <FilterDropdown label="Cluster" value={filterCluster} options={clusters} onChange={setFilterCluster} />
+                    <FilterDropdown label="GP" value={filterGP} options={gps} onChange={setFilterGP} />
+                    <FilterDropdown label="Village" value={filterVillage} options={villages} onChange={setFilterVillage} />
+                    <FilterDropdown label="Activity" value={filterActivity} options={activities} onChange={setFilterActivity} />
+                </div>
+            </div>
+
+            {/* Main Content: Accordions */}
+            <div className="flex flex-col gap-4">
+                {Object.entries(aggregatedData).length > 0 ? (
+                    Object.entries(aggregatedData).map(([activity, assetsMap], actIdx) => {
+                        const themeColor = getActivityColor(activity, actIdx);
+                        return (
+                            <div key={activity} className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm transition-all">
+                                <button 
+                                    onClick={() => toggleActivity(activity)}
+                                    className="w-full h-16 px-8 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div 
+                                            className="p-2 rounded-xl text-white shadow-sm"
+                                            style={{ backgroundColor: themeColor }}
                                         >
-                                            <div className="flex items-center gap-3 sm:gap-4">
-                                                <div className={`p-2 rounded-xl transition-transform duration-300 ${isExpanded ? 'rotate-180 bg-indigo-100 text-indigo-600' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>
-                                                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"/></svg>
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <h4 className="text-sm sm:text-base font-black text-gray-900 dark:text-white uppercase tracking-tight">{activity}</h4>
-                                                    <p className="text-[10px] sm:text-xs font-bold text-gray-400 mt-0.5 uppercase tracking-widest">{assets.length} Item{assets.length !== 1 ? 's' : ''} in Pipeline</p>
-                                                </div>
-                                            </div>
-                                            <div className="hidden sm:flex items-center gap-6 text-right">
-                                                <div>
-                                                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest leading-none mb-1">Purchased</p>
-                                                    <p className="text-sm font-black text-blue-600 dark:text-blue-400">{Math.round(totalPurchased)}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest leading-none mb-1">Distributed</p>
-                                                    <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{Math.round(totalDistributed)}</p>
-                                                </div>
-                                            </div>
-                                        </button>
-                                        
-                                        {isExpanded && (
-                                <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/20">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left min-w-[700px]">
+                                            <Package className="w-5 h-5" />
+                                        </div>
+                                        <div className="text-left">
+                                            <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">{activity}</h3>
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{Object.keys(assetsMap).length} Distinct Asset Codes</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-6">
+                                        <div className="hidden sm:flex items-center gap-8">
+                                            <TinyStat label="Purchased" value={Object.values(assetsMap).reduce((s, a) => s + a.qtyPurchased, 0)} />
+                                            <TinyStat label="Received" value={Object.values(assetsMap).reduce((s, a) => s + a.qtyReceived, 0)} />
+                                        </div>
+                                        <div className={`p-2 rounded-full transition-all duration-300 ${expandedActivities.has(activity) ? 'rotate-180 text-white shadow-lg shadow-indigo-100' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}
+                                             style={expandedActivities.has(activity) ? { backgroundColor: themeColor } : {}}>
+                                            <ChevronDown className="w-4 h-4" />
+                                        </div>
+                                    </div>
+                                </button>
+
+                            {expandedActivities.has(activity) && (
+                                <div className="p-4 sm:p-8 pt-0 border-t border-gray-50 dark:border-gray-700 animate-in slide-in-from-top-2 duration-300">
+                                    <div className="overflow-x-auto custom-scrollbar">
+                                        <table className="w-full text-left min-w-[900px]">
                                             <thead>
                                                 <tr>
-                                                    <th className="px-4 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 border-b border-gray-200 dark:border-gray-700 shadow-sm w-1/3">Asset Code & Name</th>
-                                                    <th className="px-4 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Cluster 1 (Dist/Rec)</th>
-                                                    <th className="px-4 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Cluster 2 (Dist/Rec)</th>
-                                                    <th className="px-4 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 text-center border-b border-gray-200 dark:border-gray-700 shadow-sm">Cluster 3 (Dist/Rec)</th>
-                                                    <th className="px-4 sm:px-6 py-4 text-[9px] sm:text-[10px] font-black uppercase text-gray-500 text-right border-b border-gray-200 dark:border-gray-700 shadow-sm">Overall (Dist / Purchased)</th>
+                                                    <th className="pb-4 pt-6 px-4 text-[9px] font-black uppercase text-gray-400 tracking-widest">Asset Details</th>
+                                                    <th className="pb-4 pt-6 px-4 text-[9px] font-black uppercase text-gray-400 tracking-widest text-center">Purchased</th>
+                                                    <th className="pb-4 pt-6 px-4 text-[9px] font-black uppercase text-gray-400 tracking-widest text-center">Received</th>
+                                                    <th className="pb-4 pt-6 px-4 text-[9px] font-black uppercase text-gray-400 tracking-widest text-center">Pending</th>
+                                                    <th className="pb-4 pt-6 px-4 text-[10px] font-black uppercase text-indigo-600 tracking-widest text-center bg-indigo-50/50 dark:bg-indigo-900/10 rounded-t-2xl">Distributed</th>
+                                                    <th className="pb-4 pt-6 px-4 text-[10px] font-black uppercase text-emerald-600 tracking-widest text-center">Members</th>
+                                                    <th className="pb-4 pt-6 px-4 text-[9px] font-black uppercase text-gray-400 tracking-widest text-right">Progress</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-800">
-                                                {assets.map((asset, i) => (
-                                                    <React.Fragment key={i}>
-                                                        <tr 
-                                                            className={`group hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${expandedAssetId === asset.assetCode ? 'bg-indigo-50/30 dark:bg-indigo-900/10' : ''}`}
-                                                            onClick={() => setExpandedAssetId(expandedAssetId === asset.assetCode ? null : asset.assetCode)}
-                                                        >
-                                                            <td className="px-4 sm:px-6 py-4 relative">
-                                                                <div className={`absolute left-0 top-0 bottom-0 w-1 transition-opacity ${expandedAssetId === asset.assetCode ? 'bg-indigo-500 opacity-100' : 'bg-indigo-400 opacity-0 group-hover:opacity-100'}`}></div>
-                                                                <div className="font-black text-gray-900 dark:text-white text-[10px] sm:text-[12px] leading-tight uppercase mb-1">{asset.assetName}</div>
-                                                                <div className="text-[8px] sm:text-[9px] font-bold text-indigo-500 uppercase tracking-tighter truncate max-w-[120px] sm:max-w-none">{asset.assetCode}</div>
-                                                            </td>
-                                                            <td className="px-4 sm:px-6 py-4 text-center">
-                                                                <div className="inline-flex items-center gap-1 bg-gray-50 dark:bg-gray-900/50 px-2 sm:px-3 py-1 rounded-lg border border-gray-100 dark:border-gray-700">
-                                                                    <span className="text-[10px] sm:text-[12px] font-black text-indigo-600 dark:text-indigo-400">{Math.round(asset.distCluster1)}</span>
-                                                                    <span className="text-[8px] font-bold text-gray-400">/ {Math.round(asset.qtyCluster1)}</span>
+                                            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                                                {Object.values(assetsMap).map((asset, idx) => (
+                                                    <tr key={idx} className="group hover:bg-gray-50/50 dark:hover:bg-gray-900/20 transition-colors">
+                                                        <td className="py-4 px-4">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-xs font-black text-gray-900 dark:text-white uppercase leading-tight">{asset.assetName}</span>
+                                                                <div className="flex items-center flex-wrap gap-2 mt-1">
+                                                                    <span className="text-[9px] font-black text-emerald-500 uppercase px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-md">
+                                                                        {asset.assetCode}
+                                                                    </span>
+                                                                    <span className="text-[9px] font-bold text-gray-400 uppercase">/ {asset.units || 'Units'}</span>
                                                                 </div>
-                                                            </td>
-                                                            <td className="px-4 sm:px-6 py-4 text-center">
-                                                                <div className="inline-flex items-center gap-1 bg-gray-50 dark:bg-gray-900/50 px-2 sm:px-3 py-1 rounded-lg border border-gray-100 dark:border-gray-700">
-                                                                    <span className="text-[10px] sm:text-[12px] font-black text-indigo-600 dark:text-indigo-400">{Math.round(asset.distCluster2)}</span>
-                                                                    <span className="text-[8px] font-bold text-gray-400">/ {Math.round(asset.qtyCluster2)}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 sm:px-6 py-4 text-center">
-                                                                <div className="inline-flex items-center gap-1 bg-gray-50 dark:bg-gray-900/50 px-2 sm:px-3 py-1 rounded-lg border border-gray-100 dark:border-gray-700">
-                                                                    <span className="text-[10px] sm:text-[12px] font-black text-indigo-600 dark:text-indigo-400">{Math.round(asset.distCluster3)}</span>
-                                                                    <span className="text-[8px] font-bold text-gray-400">/ {Math.round(asset.qtyCluster3)}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 sm:px-6 py-4 text-right">
-                                                                <div className="inline-flex items-center gap-1.5 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 px-2 py-1 rounded-lg mb-1">
-                                                                    <span className="text-[11px] sm:text-[13px] font-black text-emerald-600 dark:text-emerald-400">{Math.round(asset.actualDistributed)}</span>
-                                                                    <span className="text-[10px] font-black text-gray-400">/</span>
-                                                                    <span className="text-[10px] font-black text-blue-600 dark:text-blue-400">{Math.round(asset.qtyPurchased)}</span>
-                                                                </div>
-                                                                <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden ml-auto max-w-[80px]">
+                                                            </div>
+                                                        </td>
+                                                        <td className="py-4 px-4 text-center font-black text-gray-600 dark:text-gray-300 text-sm">{Math.round(asset.qtyPurchased)}</td>
+                                                        <td className="py-4 px-4 text-center font-black text-emerald-600 text-sm">{Math.round(asset.qtyReceived)}</td>
+                                                        <td className="py-4 px-4 text-center font-black text-orange-600 text-sm">{Math.round(asset.pending)}</td>
+                                                        <td className="py-4 px-4 text-center font-black text-indigo-700 dark:text-indigo-400 text-sm bg-indigo-50/30 dark:bg-indigo-900/5">{Math.round(asset.qtyDistributed)}</td>
+                                                        <td className="py-4 px-4 text-center font-black text-emerald-700 dark:text-emerald-400 text-sm">{asset.qtyMembers}</td>
+                                                        <td className="py-4 px-4">
+                                                            <div className="flex flex-col items-end gap-1.5">
+                                                                <div className="w-16 sm:w-24 bg-gray-100 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
                                                                     <div 
-                                                                        className="bg-gradient-to-r from-emerald-400 to-emerald-500 h-1.5 rounded-full transition-all duration-500" 
-                                                                        style={{ width: `${Math.min(100, asset.qtyPurchased > 0 ? (asset.actualDistributed / asset.qtyPurchased) * 100 : 0)}%` }}
+                                                                        className="h-full bg-indigo-600 rounded-full transition-all duration-1000"
+                                                                        style={{ width: `${Math.min(100, asset.qtyPurchased > 0 ? (asset.qtyDistributed / asset.qtyPurchased) * 100 : 0)}%` }}
                                                                     ></div>
                                                                 </div>
-                                                            </td>
-                                                        </tr>
-                                                        {expandedAssetId === asset.assetCode && (
-                                                            <tr>
-                                                                <td colSpan={5} className="px-4 sm:px-6 py-4 bg-gray-50/80 dark:bg-gray-900/30 animate-in fade-in slide-in-from-top-2 duration-300 shadow-inner">
-                                                                    <div className="space-y-4">
-                                                                        <div className="flex items-center justify-between">
-                                                                            <h4 className="text-[10px] font-black uppercase text-indigo-600 tracking-widest flex items-center gap-2">
-                                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                                                                                Beneficiary Distribution Log
-                                                                            </h4>
-                                                                            <span className="text-[9px] font-black bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full uppercase tracking-widest">{asset.distributions.length} Beneficiaries Reached</span>
-                                                                        </div>
-                                                                        {asset.distributions.length > 0 ? (
-                                                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                                                                {asset.distributions.map((dist, idx) => (
-                                                                                    <div key={idx} className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-1.5 transition-transform hover:-translate-y-0.5">
-                                                                                        <div className="flex justify-between items-start">
-                                                                                            <span className="text-[11px] font-black text-gray-900 dark:text-white uppercase leading-tight">{dist.farmerName}</span>
-                                                                                            <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-lg border border-emerald-100 dark:border-emerald-800">Qty: {dist.qty}</span>
-                                                                                        </div>
-                                                                                        <div className="flex items-center gap-1.5">
-                                                                                            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                                                                                            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter truncate">{dist.village} • {dist.gp}</span>
-                                                                                        </div>
-                                                                                        <div className="flex justify-between items-center mt-1 pt-2 border-t border-gray-50 dark:border-gray-700">
-                                                                                            <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">{dist.hhId}</span>
-                                                                                            <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">{dist.date}</span>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                ))}
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div className="text-center py-6 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-3xl bg-white/50 dark:bg-gray-800/50">
-                                                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">No distribution entries mapped</p>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        )}
-                                                    </React.Fragment>
+                                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">
+                                                                    {asset.qtyPurchased > 0 ? ((asset.qtyDistributed / asset.qtyPurchased) * 100).toFixed(0) : 0}% Complete
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
                                                 ))}
                                             </tbody>
                                         </table>
@@ -646,136 +601,51 @@ const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack 
                             )}
                         </div>
                     );
-                })}
-                        </div>
-                    </div>
-                ))}
-            </div>
-            
-            <style>{`
-                @keyframes fade-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-                .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
-                .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
-                .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
-                .no-scrollbar::-webkit-scrollbar { display: none; }
-            `}</style>
-        </div>
-    );
-};
-
-const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6'];
-
-const KPICard: React.FC<{ label: string; value: any; color: string }> = ({ label, value, color }) => (
-    <div className={`${color} p-5 rounded-[2.5rem] text-white shadow-xl shadow-black/5`}>
-        <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em] mb-1.5">{label}</p>
-        <p className="text-2xl font-black tracking-tight">{value}</p>
-    </div>
-);
-
-const EfficiencyBar: React.FC<{ label: string; percent: number }> = ({ label, percent }) => (
-    <div className="flex-1 flex flex-col items-center h-full justify-end group relative max-w-[80px]">
-        <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50 pointer-events-none whitespace-nowrap bg-gray-900 text-white p-2 rounded-xl shadow-xl text-[10px] font-black">
-            {percent.toFixed(1)}% Distributed
-        </div>
-        <div className="w-full flex flex-col items-center gap-2 h-full justify-end">
-            <div className="w-8 sm:w-10 bg-indigo-50 dark:bg-gray-700/50 rounded-xl relative overflow-hidden h-full border border-gray-100 dark:border-gray-700">
-                <div 
-                    className="absolute bottom-0 left-0 right-0 bg-indigo-600 transition-all duration-1000 shadow-inner" 
-                    style={{ height: `${percent}%` }}
-                >
-                    <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[7px] font-black text-white/40 rotate-90">
-                        {percent > 20 ? `${percent.toFixed(0)}%` : ''}
+                })
+            ) : (
+                <div className="p-20 text-center bg-white dark:bg-gray-800 rounded-[3rem] border-2 border-dashed border-gray-100 dark:border-gray-700">
+                    <div className="flex flex-col items-center gap-4 opacity-30">
+                        <Package className="w-12 h-12" />
+                        <p className="text-xs font-black uppercase tracking-widest text-gray-400">No Asset Records Found matching filters</p>
                     </div>
                 </div>
-            </div>
-            <span className="text-[9px] font-black text-gray-500 uppercase truncate w-full text-center tracking-tighter leading-tight">{label}</span>
-        </div>
-    </div>
-);
-
-const ActivityBar: React.FC<{ label: string; value: number; max: number }> = ({ label, value, max }) => (
-    <div className="flex-1 min-w-0 flex flex-col items-center h-full justify-end group relative">
-        {/* Value Tooltip */}
-        <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50 pointer-events-none whitespace-nowrap bg-gray-900 text-white p-2 rounded-xl shadow-xl text-[10px] font-black">
-            ₹{value.toLocaleString()}
-        </div>
-        
-        {/* The Column Bar - Flexible Width */}
-        <div 
-            className="w-1/2 min-w-[12px] max-w-[40px] bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-xl transition-all duration-700 shadow-lg group-hover:scale-y-105 origin-bottom border-t border-white/20" 
-            style={{ height: `${(value/max)*100}%`, minHeight: '8px' }}
-        ></div>
-        
-        {/* RE-ALIGNED LABEL */}
-        <div className="h-12 mt-4 relative w-full flex justify-center overflow-visible">
-            <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-start">
-                <span className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase rotate-45 origin-top-left whitespace-nowrap leading-none mt-2">
-                    {label}
-                </span>
+            )}
             </div>
         </div>
-    </div>
-);
-
-const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({ data }) => {
-    const radius = 40;
-    const circ = 2 * Math.PI * radius;
-
-    return (
-        <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-            {data.map((item, idx) => {
-                const dash = (item.percent / 100) * circ;
-                const offset = circ - dash;
-                const stroke = COLORS[idx % COLORS.length];
-                
-                // Calculate cumulative rotation based on previous items
-                const rotation = (data.slice(0, idx).reduce((acc, curr) => acc + curr.percent, 0) / 100) * 360;
-                
-                return (
-                    <circle 
-                        key={idx}
-                        cx="50" cy="50" r={radius} 
-                        fill="transparent" 
-                        stroke={stroke} 
-                        strokeWidth="14" 
-                        strokeDasharray={circ}
-                        strokeDashoffset={offset}
-                        style={{ transformOrigin: 'center', transform: `rotate(${rotation}deg)`, transition: 'all 1s ease' }}
-                    />
-                );
-            })}
-            <text x="50" y="50" className="text-[9px] font-black fill-gray-400 transform rotate-90" textAnchor="middle" dominantBaseline="middle">
-                STATUS
-            </text>
-        </svg>
     );
 };
 
-const GroupedBar: React.FC<{ label: string; val1: number; val2: number; max: number }> = ({ label, val1, val2, max }) => (
-    <div className="flex-1 flex flex-col items-center h-full justify-end group mt-4 relative max-w-[80px]">
-        {/* Tooltip */}
-        <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50 pointer-events-none whitespace-nowrap bg-gray-900 text-white p-2.5 rounded-xl shadow-xl text-[10px] font-black flex flex-col gap-1">
-            <span className="text-blue-400">Purchased: {Math.round(val1)}</span>
-            <span className="text-emerald-400">Distributed: {Math.round(val2)}</span>
+const StatCard: React.FC<{ label: string; value: number; icon: React.ReactNode; color: string; bg: string }> = ({ label, value, icon, color, bg }) => (
+    <div className={`${bg} p-5 rounded-[2rem] border border-transparent hover:border-black/5 transition-all shadow-sm`}>
+        <div className="flex items-center justify-between mb-3">
+            <div className={`p-2 rounded-xl bg-white shadow-sm ${color}`}>{icon}</div>
+            <span className={`text-[10px] font-black uppercase tracking-widest ${color} opacity-60`}>{label}</span>
         </div>
-        
-        <div className="w-full flex items-end justify-center gap-1 h-full mb-2">
-            {/* Bar 1 (Purchased) */}
-            <div 
-                className="w-1/2 min-w-[12px] max-w-[24px] bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg transition-all duration-700 shadow-md relative group-hover:scale-y-105 origin-bottom border-t border-white/20"
-                style={{ height: `${max > 0 ? (val1/max)*100 : 0}%`, minHeight: '4px' }}
-            ></div>
-            {/* Bar 2 (Distributed) */}
-            <div 
-                className="w-1/2 min-w-[12px] max-w-[24px] bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-lg transition-all duration-700 shadow-md relative group-hover:scale-y-105 origin-bottom border-t border-white/20"
-                style={{ height: `${max > 0 ? (val2/max)*100 : 0}%`, minHeight: '4px' }}
-            ></div>
-        </div>
-        
-        <div className="absolute -bottom-6 w-full flex justify-center items-center">
-            <span className="text-[9px] font-black text-gray-500 uppercase tracking-tighter w-full text-center">{label}</span>
-        </div>
+        <p className={`text-2xl font-black ${color}`}>{Math.round(value).toLocaleString()}</p>
+    </div>
+);
+
+const FilterDropdown: React.FC<{ label: string; value: string; options: string[]; onChange: (v: string) => void }> = ({ label, value, options, onChange }) => (
+    <div className="flex flex-col gap-1.5">
+        <label className="text-[8px] font-black text-gray-400 uppercase tracking-[0.2em] px-3">{label}</label>
+        <select 
+            value={value} 
+            onChange={e => onChange(e.target.value)}
+            className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 rounded-xl text-[10px] font-black uppercase border-none ring-1 ring-gray-100 dark:ring-gray-700 cursor-pointer focus:ring-2 focus:ring-indigo-500"
+        >
+            {options.map(opt => (
+                <option key={opt} value={opt}>
+                    {label === 'Activity' && opt !== 'All' ? (ACTIVITY_MAP[opt] || opt) : opt}
+                </option>
+            ))}
+        </select>
+    </div>
+);
+
+const TinyStat: React.FC<{ label: string; value: number }> = ({ label, value }) => (
+    <div className="flex flex-col items-end">
+        <span className="text-[8px] font-black uppercase text-gray-400 tracking-widest leading-none mb-1">{label}</span>
+        <span className="text-xs font-black text-gray-900 dark:text-white leading-none">{Math.round(value)}</span>
     </div>
 );
 

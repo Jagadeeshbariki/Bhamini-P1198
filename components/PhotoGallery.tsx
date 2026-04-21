@@ -18,6 +18,17 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ images, onDelete, deletingU
     const openLightbox = (index: number) => setSelectedIndex(index);
     const closeLightbox = () => setSelectedIndex(null);
 
+    const formatDriveUrl = (url: string) => {
+        if (!url) return '';
+        if (url.includes('drive.google.com') || url.includes('google.com/open')) {
+            const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
+            if (idMatch) {
+                return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`;
+            }
+        }
+        return url;
+    };
+
     const nextImage = useCallback(() => {
         if (selectedIndex !== null) {
             setSelectedIndex((selectedIndex + 1) % images.length);
@@ -108,7 +119,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ images, onDelete, deletingU
                             {/* The Image View */}
                             <div className="w-full h-full flex items-center justify-center animate-scale-up">
                                 <img 
-                                    src={images[selectedIndex].url} 
+                                    src={formatDriveUrl(images[selectedIndex].url)} 
                                     alt={images[selectedIndex].description || "Field documentation image"} 
                                     className="max-w-full max-h-[75vh] md:max-h-full object-contain pointer-events-auto shadow-[0_0_80px_rgba(0,0,0,0.5)]"
                                     referrerPolicy="no-referrer"
@@ -162,6 +173,17 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ images, onDelete, deletingU
 const GalleryItem: React.FC<{ image: GalleryImage; index: number; onDelete?: (url: string) => void; isDeleting?: boolean }> = ({ image, index, onDelete, isDeleting }) => {
     const [isLoaded, setIsLoaded] = useState(false);
 
+    const formatDriveUrl = (url: string) => {
+        if (!url) return '';
+        if (url.includes('drive.google.com') || url.includes('google.com/open')) {
+            const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
+            if (idMatch) {
+                return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`;
+            }
+        }
+        return url;
+    };
+
     return (
         <div className="group relative overflow-hidden rounded-xl md:rounded-2xl shadow-sm bg-gray-100 dark:bg-gray-800 aspect-square border border-gray-100 dark:border-gray-700 hover:shadow-indigo-500/30 transition-all duration-500">
             {(!isLoaded || isDeleting) && (
@@ -170,7 +192,7 @@ const GalleryItem: React.FC<{ image: GalleryImage; index: number; onDelete?: (ur
                 </div>
             )}
             <img
-                src={image.url}
+                src={formatDriveUrl(image.url)}
                 alt={image.description || `Field Record ${index + 1}`}
                 onLoad={() => setIsLoaded(true)}
                 className={`w-full h-full object-cover transform transition-all duration-700 ease-in-out group-hover:scale-110 ${
