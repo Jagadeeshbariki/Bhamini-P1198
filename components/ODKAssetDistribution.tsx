@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ASSET_DISTRIBUTION_URL } from '../config';
+import { ASSET_DISTRIBUTION_URL, ASSETS_DATA_URL } from '../config';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line
@@ -15,6 +15,7 @@ interface DistributionRecord {
     cluster: string;
     activity: string;
     material: string;
+    materialId: string;
     count: number;
     date: string;
     beneficiary: string;
@@ -30,6 +31,7 @@ interface ODKAssetDistributionProps {
 
 const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) => {
     const [data, setData] = useState<DistributionRecord[]>([]);
+    const [assetMap, setAssetMap] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedActivity, setSelectedActivity] = useState('All');
@@ -70,6 +72,7 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
                 cluster: getVal(row, 'Cluster') || getVal(row, 'cluster') || getVal(row, 'location-block') || getVal(row, 'CLUSTER') || 'Unknown',
                 activity: (getVal(row, 'activity_registration-activity') || getVal(row, 'Activity') || getVal(row, 'activity') || 'Uncategorized').trim().replace(/^(BYP-|BFE-|AFT-)/, ''),
                 material: getVal(row, 'this_material_label') || 'Unknown Material',
+                materialId: (getVal(row, 'Material_ID') || getVal(row, 'material_id') || getVal(row, 'MATERIAL_ID') || '').trim().toUpperCase(),
                 count: parseFloat(getVal(row, 'materials_details-material_count')) || 0,
                 date: getVal(row, 'materials_details-distributed_date') || '',
                 beneficiary: getVal(row, 'Beneficiary name') || getVal(row, 'bnf_section_-bnf_name_') || getVal(row, 'bnf_section-bnf_name') || getVal(row, 'Beneficiary Name') || getVal(row, 'bnf_name') || 'Unknown',
@@ -83,10 +86,51 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
         const fetchData = async () => {
             setLoading(true);
             try {
-                const response = await fetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`);
-                if (!response.ok) throw new Error('Failed to fetch distribution data');
-                const csvText = await response.text();
-                const parsed = parseCSV(csvText);
+                const [distResponse, assetResponse] = await Promise.all([
+                    fetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`),
+                    fetch(`${ASSETS_DATA_URL}&t=${Date.now()}`)
+                ]);
+
+                if (!distResponse.ok) throw new Error('Failed to fetch distribution data');
+                if (!assetResponse.ok) throw new Error('Failed to fetch asset tracking data');
+
+                const distCsvText = await distResponse.text();
+                const assetCsvText = await assetResponse.text();
+
+                // Parse assets for lookup
+                const assetLines = assetCsvText.trim().split(/\r?\n/);
+                const assetMapObj: Record<string, string> = {};
+                if (assetLines.length > 1) {
+                    const parseLine = (line: string): string[] => {
+                        const values = [];
+                        let inQuote = false, val = '';
+                        for (let j = 0; j < line.length; j++) {
+                            if (line[j] === '"') inQuote = !inQuote;
+                            else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
+                            else val += line[j];
+                        }
+                        values.push(val.trim().replace(/^"|"$/g, ''));
+                        return values;
+                    };
+                    const headers = parseLine(assetLines[0]);
+                    const normalize = (h: string) => h.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                    const normHeaders = headers.map(normalize);
+                    
+                    const idIdx = normHeaders.findIndex(h => h === 'assetid' || h === 'assetcode' || h === 'id');
+                    const nameIdx = normHeaders.findIndex(h => h === 'assetname' || h === 'name' || h === 'itemname');
+
+                    if (idIdx !== -1 && nameIdx !== -1) {
+                        assetLines.slice(1).forEach(line => {
+                            const row = parseLine(line);
+                            const id = (row[idIdx] || '').trim().toUpperCase();
+                            const name = (row[nameIdx] || '').trim();
+                            if (id) assetMapObj[id] = name;
+                        });
+                    }
+                }
+                setAssetMap(assetMapObj);
+
+                const parsed = parseCSV(distCsvText);
                 setData(parsed);
             } catch (err: any) {
                 setError(err.message);
@@ -117,10 +161,15 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
         const stats: Record<string, number> = {};
         data.forEach(d => {
             if (selectedActivity !== 'All' && d.activity !== selectedActivity) return;
-            stats[d.material] = (stats[d.material] || 0) + d.count;
+            // Use materialId for consistent tracking, but fall back to material label if ID is missing
+            const key = d.materialId || d.material;
+            stats[key] = (stats[key] || 0) + d.count;
         });
-        return Object.entries(stats).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 15);
-    }, [data, selectedActivity]);
+        return Object.entries(stats).map(([id, value]) => ({ 
+            name: assetMap[id.toUpperCase()] || id, 
+            value 
+        })).sort((a, b) => b.value - a.value).slice(0, 15);
+    }, [data, selectedActivity, assetMap]);
 
     const totalAssets = useMemo(() => data.reduce((acc, curr) => acc + curr.count, 0), [data]);
     const uniqueBeneficiaries = useMemo(() => new Set(data.map(d => d.beneficiary)).size, [data]);
@@ -164,11 +213,11 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
             }
             clusterBeneficiarySets[d.activity][d.cluster].add(d.beneficiary);
             
-            if (!summary[d.activity].materials[d.material]) {
-                summary[d.activity].materials[d.material] = {};
+            if (!summary[d.activity].materials[d.materialId]) {
+                summary[d.activity].materials[d.materialId] = {};
             }
             
-            summary[d.activity].materials[d.material][d.cluster] = (summary[d.activity].materials[d.material][d.cluster] || 0) + d.count;
+            summary[d.activity].materials[d.materialId][d.cluster] = (summary[d.activity].materials[d.materialId][d.cluster] || 0) + d.count;
             summary[d.activity].clusterTotals[d.cluster] = (summary[d.activity].clusterTotals[d.cluster] || 0) + d.count;
             summary[d.activity].total += d.count;
         });
@@ -344,9 +393,14 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                            {Object.entries(pivotData.summary[activity].materials).map(([material, clusters]) => (
-                                                <tr key={material} className="hover:bg-gray-50/30 transition-colors">
-                                                    <td className="py-3 font-bold text-gray-600 dark:text-gray-400">{material}</td>
+                                            {Object.entries(pivotData.summary[activity].materials).map(([materialId, clusters]) => (
+                                                <tr key={materialId} className="hover:bg-gray-50/30 transition-colors">
+                                                    <td className="py-3 font-bold text-gray-600 dark:text-gray-400">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-gray-900 dark:text-white font-black">{assetMap[materialId.toUpperCase()] || materialId}</span>
+                                                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">{materialId}</span>
+                                                        </div>
+                                                    </td>
                                                     {pivotData.clusters.map(c => (
                                                         <td key={c} className="py-3 text-center font-bold text-gray-900 dark:text-white">
                                                             {clusters[c]?.toLocaleString() || '-'}
@@ -525,7 +579,9 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
                         </div>
                         <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/10">
                             <p className="text-[10px] font-black uppercase tracking-widest text-indigo-200 mb-2">Most Distributed</p>
-                            <p className="text-xl font-black truncate">{materialStats[0]?.name || 'N/A'}</p>
+                            <p className="text-xl font-black truncate" title={materialStats[0]?.name || 'N/A'}>
+                                {materialStats[0]?.name || 'N/A'}
+                            </p>
                             <p className="text-xs font-bold text-indigo-300 mt-1">Highest frequency material item</p>
                         </div>
                         <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/10">
