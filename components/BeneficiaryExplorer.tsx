@@ -5,15 +5,14 @@ import {
     XAxis, YAxis, Tooltip 
 } from 'recharts';
 import { 
-    Users, MapPin, Filter, Search, Package,
+    Users, MapPin, Filter, Search, 
     Download, X, ArrowUpDown,
     Activity as ActivityIcon, UserCheck,
-    ChevronDown, ChevronUp, ArrowLeft, Loader2
+    ChevronDown, ChevronUp, ArrowLeft
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, ASSETS_DATA_URL } from '../config';
+import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL } from '../config';
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
@@ -97,46 +96,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
     const [searchQuery, setSearchQuery] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: keyof Beneficiary; direction: 'asc' | 'desc' } | null>(null);
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
-    const [previewData, setPreviewData] = useState<{ images: { url: string; label: string }[]; currentIndex: number; bId: string } | null>(null);
-    const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-    const [previewError, setPreviewError] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (previewData) {
-            document.body.style.overflow = 'hidden';
-            setPreviewError(null);
-        } else {
-            document.body.style.overflow = 'unset';
-        }
-        return () => {
-            document.body.style.overflow = 'unset';
-        };
-    }, [previewData]);
-
-    const handlePreview = (beneficiary: Beneficiary, initialIndex: number) => {
-        const assetsWithPhotos = (beneficiary.assets || []).filter(a => a.photo);
-        const images = assetsWithPhotos.map(asset => {
-            let url = '';
-            if (asset.photo?.startsWith('http')) {
-                url = formatDriveUrl(asset.photo);
-            } else if (asset.parentKey && asset.photo) {
-                // Ensure instanceId is correctly extracted (though server handles it, we stay clean)
-                const submissionId = asset.parentKey;
-                url = `/api/odk/image?submissionId=${encodeURIComponent(submissionId)}&filename=${encodeURIComponent(asset.photo!)}&formId=Material_distribution`;
-            }
-            return { url, label: asset.label || 'Asset Photo' };
-        });
-
-        if (images.length > 0) {
-            setIsPreviewLoading(true);
-            setPreviewError(null);
-            setPreviewData({ 
-                images, 
-                currentIndex: initialIndex >= 0 ? initialIndex : 0, 
-                bId: beneficiary.beneficiaryId || 'Unknown'
-            });
-        }
-    };
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
 
     const toggleRow = (index: number) => {
         const newExpanded = new Set(expandedRows);
@@ -215,36 +175,27 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
         rows.slice(1).forEach(row => {
             if (row.length < 3) return;
 
-            // Identify the unique ID for the beneficiary to use as a bridge
-            let bId = '';
-            if (sourceName === 'Master List') {
-                bId = getVal(row, ['Beneficiary ID', 'bnf_details-bnf_id', 'beneficiary_details-bnf_id', 'bnf_id', 'BNF_ID', 'ID'], true);
-            } else if (sourceName === 'Distribution List') {
-                bId = getVal(row, ['Ben_Id', 'bnf_id', 'Beneficiary ID'], true);
-            }
+            const bId = (getVal(row, ['Beneficiary ID', 'Ben_Id', 'bnf_section_-adhaar_number_', 'bnf_section-adhaar_number', 'adhaar'])).trim();
+            const hhId = getVal(row, ['HH ID', 'Farmer ID', 'location-farmer_id', 'location-show_farmer_id', 'farmer_id']);
             
-            const bName = getVal(row, ['Name', 'Beneficiary name', 'bnf_section_-bnf_name_', 'bnf_name', 'bnf_details-bnf_name', 'beneficiary_name']);
-            const hhId = getVal(row, ['HH ID', 'Farmer ID', 'location-farmer_id', 'location-show_farmer_id', 'farmer_id', 'hh_id', 'farmer_id_number'], true);
+            if (!bId) return;
 
-            // Primary identifier for merging
-            const key = bId || bName;
-            if (!key) return;
-
-            // Extract the specific fields requested for the asset from Distribution List
+            const key = bId;
+            
             const asset: Asset = {
-                code: getVal(row, ['this_material_code', 'material_id', 'Material_ID'], true).toUpperCase(),
-                label: getVal(row, ['this_material_label', 'material_name', 'Material Name'], true) || 'Unknown Item',
-                count: parseFloat(getVal(row, ['materials_details-material_count', 'count'], true)) || 0,
-                unit: getVal(row, ['materials_details-material_unit', 'unit'], true),
-                date: getVal(row, ['materials_details-distributed_date', 'date', 'today', 'SubmissionDate'], true),
-                distributor: getVal(row, ['materials_details-destributor_name', 'distributor'], true),
-                photo: getVal(row, ['Photo', 'this_material_photo', 'image', 'material_photo'], true),
-                parentKey: getVal(row, ['KEY', 'instanceID', 'meta-instanceID', 'PARENT_KEY', '__id'], true),
+                code: getVal(row, ['this_material_code'], true),
+                label: getVal(row, ['this_material_label'], true),
+                count: parseFloat(getVal(row, ['materials_details-material_count'], true)) || 0,
+                unit: getVal(row, ['materials_details-material_unit'], true),
+                date: getVal(row, ['materials_details-distributed_date'], true),
+                distributor: getVal(row, ['materials_details-destributor_name'], true),
+                photo: getVal(row, ['Photo', 'this_material_photo', 'photo', 'image'], true),
+                parentKey: getVal(row, ['PARENT_KEY', 'instanceID', 'meta-instanceID', 'KEY'], true),
             };
 
             if (beneficiaryMap.has(key)) {
                 const existing = beneficiaryMap.get(key)!;
-                if (sourceName === 'Distribution List' && asset.label) {
+                if (asset.label) {
                     existing.assets.push(asset);
                 }
             } else {
@@ -252,14 +203,15 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                     hhId: hhId,
                     hhHeadName: getVal(row, ['location-farmer_name', 'location-show_farmer_name', 'HH Head Name', 'farmer_name']),
                     activity: getVal(row, ['activity', 'activity_registration-activity', 'Activity']).replace(/^(BYP-|BFE-|AFT-)/, ''),
-                    beneficiaryName: bName,
+                    beneficiaryName: getVal(row, ['Name', 'Beneficiary name', 'bnf_section_-bnf_name_', 'bnf_section-bnf_name', 'bnf_name']),
                     beneficiaryId: bId,
                     age: parseInt(getVal(row, ['age', 'Age', 'bnf_section_-age_', 'bnf_section-age'])) || 0,
-                    gender: getVal(row, ['gender', 'Gender', 'bnf_section_-gender_', 'bnf_section-gender', 'sex']),
-                    phoneNumber: getVal(row, ['phone number', 'Ben_phone', 'bnf_section_-phone_number_', 'bnf_section-phone_number', 'mobile']),
-                    cluster: getVal(row, ['cluster', 'location-block', 'Cluster', 'CLUSTER', 'location-cluster']),
-                    village: getVal(row, ['Village', 'location-village', 'village', 'location-show_village']),
-                    assets: (sourceName === 'Distribution List' && asset.label) ? [asset] : []
+                    gender: getVal(row, ['gender', 'Gender', 'bnf_section_-gender_', 'bnf_section-gender']),
+                    phoneNumber: getVal(row, ['phone number', 'Ben_phone', 'bnf_section_-phone_number_', 'bnf_section-phone_number']),
+                    cluster: getVal(row, ['cluster', 'location-block', 'Cluster', 'CLUSTER']),
+                    gp: getVal(row, ['GP', 'location-gp', 'gp']),
+                    village: getVal(row, ['Village', 'location-village', 'village']),
+                    assets: asset.label ? [asset] : [],
                 });
             }
         });
@@ -272,47 +224,28 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Fetch Asset Map first
-                const assetRes = await fetch(`${ASSETS_DATA_URL}&t=${Date.now()}`);
-                const assetCsvText = await assetRes.text();
-                const assetLines = assetCsvText.trim().split(/\r?\n/);
-                const assetMapObj: Record<string, string> = {};
-                if (assetLines.length > 1) {
-                    const headers = assetLines[0].split(',').map(h => h.toLowerCase().trim().replace(/[^a-z0-9]/g, ''));
-                    const idIdx = headers.findIndex(h => h === 'assetid' || h === 'assetcode' || h === 'id');
-                    const nameIdx = headers.findIndex(h => h === 'assetname' || h === 'name' || h === 'itemname');
-                    if (idIdx !== -1 && nameIdx !== -1) {
-                        assetLines.slice(1).forEach(line => {
-                            const cells = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-                            const id = (cells[idIdx] || '').toUpperCase();
-                            const name = cells[nameIdx] || '';
-                            if (id) assetMapObj[id] = name;
-                        });
-                    }
-                }
-
                 // Fetch Master List
                 const masterRes = await fetch(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`);
                 const masterText = await masterRes.text();
-                const masterData = parseCSV(masterText, 'Master List', assetMapObj);
+                const masterData = parseCSV(masterText, 'Master List');
 
                 // Fetch Distribution List
                 const distRes = await fetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`);
                 const distText = await distRes.text();
-                const distData = parseCSV(distText, 'Distribution List', assetMapObj);
+                const distData = parseCSV(distText, 'Distribution List');
 
                 // Merge Data
                 const mergedMap = new Map<string, Beneficiary>();
                 
                 // Add all from master first
                 masterData.forEach(b => {
-                    const key = (b.beneficiaryId || b.beneficiaryName || '').trim();
+                    const key = b.beneficiaryId;
                     if (key) mergedMap.set(key, b);
                 });
 
                 // Merge distribution data
                 distData.forEach(b => {
-                    const key = (b.beneficiaryId || b.beneficiaryName || '').trim();
+                    const key = b.beneficiaryId;
                     if (key) {
                         if (mergedMap.has(key)) {
                             const existing = mergedMap.get(key)!;
@@ -321,8 +254,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                 // Avoid duplicates if any
                                 b.assets.forEach(newAsset => {
                                     const isDuplicate = existing.assets.some(a => 
-                                        (a.label === newAsset.label && a.date === newAsset.date) ||
-                                        (newAsset.code && a.code === newAsset.code && a.date === newAsset.date)
+                                        a.label === newAsset.label && a.date === newAsset.date
                                     );
                                     if (!isDuplicate) existing.assets.push(newAsset);
                                 });
@@ -942,42 +874,33 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                                     {b.assets.length > 0 ? (
                                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                                             {b.assets.map((asset, idx) => (
-                                                                <div key={idx} className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-2 group hover:ring-1 hover:ring-indigo-500 transition-all">
+                                                                <div key={idx} className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-2">
                                                                     <div className="flex justify-between items-start">
-                                                                        <div className="flex flex-col">
-                                                                            <span className="text-[11px] font-black text-gray-900 dark:text-white uppercase leading-tight">{asset.label}</span>
-                                                                            {asset.code && asset.code !== asset.label && (
-                                                                                <span className="text-[8px] font-bold text-gray-400 uppercase">{asset.code}</span>
-                                                                            )}
-                                                                        </div>
-                                                                        <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded text-[9px] font-black uppercase shrink-0">
+                                                                        <span className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{asset.label}</span>
+                                                                        <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded text-[9px] font-black uppercase">
                                                                             {asset.count} {asset.unit}
                                                                         </span>
                                                                     </div>
-                                                                    <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100/50 dark:border-gray-800/50">
-                                                                        <div className="flex flex-col">
-                                                                            <span className="text-[7px] font-black text-gray-400 uppercase tracking-tighter">Issued Date</span>
-                                                                            <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase">{asset.date || 'N/A'}</span>
-                                                                        </div>
-                                                                        <div className="flex flex-col items-end">
-                                                                            <span className="text-[7px] font-black text-gray-400 uppercase tracking-tighter">Distributor</span>
-                                                                            <span className="text-[9px] font-black text-gray-600 dark:text-gray-300 uppercase">{asset.distributor || 'N/A'}</span>
-                                                                        </div>
+                                                                    <div className="flex justify-between items-center">
+                                                                        <span className="text-[8px] font-bold text-gray-400 uppercase">{asset.date}</span>
+                                                                        <span className="text-[8px] font-bold text-indigo-400 uppercase">{asset.distributor}</span>
                                                                     </div>
                                                                     {asset.photo && (
                                                                         <div 
-                                                                            className="mt-1 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 aspect-video relative cursor-pointer group"
+                                                                            className="mt-2 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 aspect-video relative group cursor-pointer"
                                                                             onClick={() => {
-                                                                                const photoAssets = b.assets.filter(a => a.photo);
-                                                                                const initialIndex = photoAssets.findIndex(a => a.photo === asset.photo && a.code === asset.code);
-                                                                                handlePreview(b, initialIndex);
+                                                                                if (asset.photo?.startsWith('http')) {
+                                                                                    setPreviewImage(formatDriveUrl(asset.photo));
+                                                                                } else if (asset.parentKey && asset.photo) {
+                                                                                    setPreviewImage(`/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey!)}&filename=${encodeURIComponent(asset.photo!)}`);
+                                                                                }
                                                                             }}
                                                                         >
                                                                             <img 
-                                                                                src={asset.photo && asset.photo.startsWith('http') 
+                                                                                src={asset.photo.startsWith('http') 
                                                                                     ? formatDriveUrl(asset.photo) 
-                                                                                    : asset.parentKey && asset.photo
-                                                                                        ? `/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey)}&filename=${encodeURIComponent(asset.photo)}&formId=Material_distribution`
+                                                                                    : asset.parentKey 
+                                                                                        ? `/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey)}&filename=${encodeURIComponent(asset.photo)}`
                                                                                         : ''
                                                                                 } 
                                                                                 alt={asset.label}
@@ -990,14 +913,14 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                                                                     }
                                                                                 }}
                                                                             />
-                                                                            <div className="hidden absolute inset-0 flex flex-col items-center justify-center p-4 text-center bg-gray-100 dark:bg-gray-800">
-                                                                                <Package className="w-6 h-6 text-gray-300 mb-2" />
-                                                                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Photo Loading...</span>
-                                                                                <span className="text-[8px] text-gray-400 mt-1 uppercase">Click to expand</span>
-                                                                            </div>
+                                                                            {!asset.photo.startsWith('http') && (
+                                                                                <div className="hidden absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                                                                                    <span className="text-[10px] font-bold text-gray-500">Image Protected</span>
+                                                                                    <span className="text-[8px] text-gray-400 mt-1">Requires ODK Central Login</span>
+                                                                                </div>
+                                                                            )}
                                                                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                                                <Search className="w-5 h-5 text-white" />
-                                                                                <span className="ml-2 text-[9px] font-black text-white uppercase tracking-widest">Full View</span>
+                                                                                <span className="text-[10px] font-black text-white uppercase tracking-widest">Preview Photo</span>
                                                                             </div>
                                                                         </div>
                                                                     )}
@@ -1093,40 +1016,31 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                                         {b.assets.map((asset, idx) => (
                                                             <div key={idx} className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 flex flex-col gap-2">
                                                                 <div className="flex justify-between items-start">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-[10px] font-black text-gray-900 dark:text-white uppercase">{asset.label}</span>
-                                                                        {asset.code && asset.code !== asset.label && (
-                                                                            <span className="text-[8px] font-bold text-gray-400 uppercase">{asset.code}</span>
-                                                                        )}
-                                                                    </div>
-                                                                    <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded text-[8px] font-black uppercase shrink-0">
+                                                                    <span className="text-[10px] font-black text-gray-900 dark:text-white uppercase">{asset.label}</span>
+                                                                    <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded text-[8px] font-black uppercase">
                                                                         {asset.count} {asset.unit}
                                                                     </span>
                                                                 </div>
-                                                                <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-100/50 dark:border-gray-700/50">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-[7px] font-black text-gray-400 uppercase tracking-tighter">Issued Date</span>
-                                                                        <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase">{asset.date || 'N/A'}</span>
-                                                                    </div>
-                                                                    <div className="flex flex-col items-end">
-                                                                        <span className="text-[7px] font-black text-gray-400 uppercase tracking-tighter">Distributor</span>
-                                                                        <span className="text-[9px] font-black text-gray-600 dark:text-gray-300 uppercase">{asset.distributor || 'N/A'}</span>
-                                                                    </div>
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-[7px] font-bold text-gray-400 uppercase">{asset.date}</span>
+                                                                    <span className="text-[7px] font-bold text-indigo-400 uppercase">{asset.distributor}</span>
                                                                 </div>
                                                                 {asset.photo && (
                                                                     <div 
-                                                                        className="mt-1 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 aspect-video relative cursor-pointer group"
+                                                                        className="mt-2 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 aspect-video relative group cursor-pointer"
                                                                         onClick={() => {
-                                                                            const photoAssets = b.assets.filter(a => a.photo);
-                                                                            const initialIndex = photoAssets.findIndex(a => a.photo === asset.photo && a.code === asset.code);
-                                                                            handlePreview(b, initialIndex);
+                                                                            if (asset.photo?.startsWith('http')) {
+                                                                                setPreviewImage(formatDriveUrl(asset.photo));
+                                                                            } else if (asset.parentKey && asset.photo) {
+                                                                                setPreviewImage(`/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey!)}&filename=${encodeURIComponent(asset.photo!)}`);
+                                                                            }
                                                                         }}
                                                                     >
                                                                         <img 
-                                                                            src={asset.photo && asset.photo.startsWith('http') 
+                                                                            src={asset.photo.startsWith('http') 
                                                                                 ? formatDriveUrl(asset.photo) 
-                                                                                : asset.parentKey && asset.photo
-                                                                                    ? `/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey)}&filename=${encodeURIComponent(asset.photo)}&formId=Material_distribution`
+                                                                                : asset.parentKey
+                                                                                    ? `/api/odk/image?submissionId=${encodeURIComponent(asset.parentKey)}&filename=${encodeURIComponent(asset.photo)}`
                                                                                     : ''
                                                                             } 
                                                                             alt={asset.label}
@@ -1139,10 +1053,12 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                                                                                 }
                                                                             }}
                                                                         />
-                                                                        <div className="hidden absolute inset-0 flex flex-col items-center justify-center p-4 text-center bg-gray-100 dark:bg-gray-800">
-                                                                            <Package className="w-5 h-5 text-gray-300" />
-                                                                            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mt-1">Photo Loading...</span>
-                                                                        </div>
+                                                                        {!asset.photo.startsWith('http') && (
+                                                                            <div className="hidden absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                                                                                <span className="text-[10px] font-bold text-gray-500">Image Protected</span>
+                                                                                <span className="text-[8px] text-gray-400 mt-1">Requires ODK Central Login</span>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -1176,174 +1092,30 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
             `}</style>
 
-            <AnimatePresence>
-                {previewData && (
-                    <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100000] flex flex-col items-center justify-center bg-black/95 backdrop-blur-md p-4 sm:p-8"
-                        onClick={() => setPreviewData(null)}
+            {previewImage && (
+                <div 
+                    className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300"
+                    onClick={() => setPreviewImage(null)}
+                >
+                    <div 
+                        className="relative max-w-4xl w-full"
+                        onClick={e => e.stopPropagation()}
                     >
-                        {/* High-Visibility Close Button - Locked to Top-Right */}
-                        <div className="absolute top-4 right-4 sm:top-8 sm:right-8 z-[100002] flex flex-col items-center">
-                            <button 
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPreviewData(null);
-                                }}
-                                className="w-12 h-12 sm:w-16 sm:h-16 flex items-center justify-center bg-white text-black rounded-full transition-all group active:scale-90 shadow-2xl hover:bg-gray-200"
-                                aria-label="Close Preview"
-                            >
-                                <X className="w-6 h-6 sm:w-8 h-8 group-hover:rotate-90 transition-transform duration-300" />
-                            </button>
-                            <span className="mt-2 text-[10px] font-black text-white/60 uppercase tracking-[0.4em] drop-shadow-lg hidden sm:block">Close</span>
-                        </div>
-
-                        {/* Navigation Controls - Desktop */}
-                        {previewData.images.length > 1 && (
-                            <>
-                                <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setIsPreviewLoading(true);
-                                        setPreviewData(prev => prev ? ({
-                                            ...prev,
-                                            currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length
-                                        }) : null);
-                                    }}
-                                    className="hidden md:flex absolute left-6 top-1/2 -translate-y-1/2 z-[100001] p-5 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-xl border border-white/20 transition-all hover:scale-110 active:scale-90"
-                                >
-                                    <ArrowLeft className="w-8 h-8" />
-                                </button>
-                                <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setIsPreviewLoading(true);
-                                        setPreviewData(prev => prev ? ({
-                                            ...prev,
-                                            currentIndex: (prev.currentIndex + 1) % prev.images.length
-                                        }) : null);
-                                    }}
-                                    className="hidden md:flex absolute right-6 top-1/2 -translate-y-1/2 z-[100001] p-5 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-xl border border-white/20 transition-all hover:scale-110 active:scale-90"
-                                >
-                                    <ArrowLeft className="w-8 h-8 rotate-180" />
-                                </button>
-                            </>
-                        )}
-
-                        <motion.div 
-                            key={`preview-${previewData.currentIndex}`}
-                            initial={{ scale: 0.98, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.98, opacity: 0 }}
-                            className="relative w-full max-w-5xl flex flex-col items-center justify-center gap-6"
-                            onClick={e => e.stopPropagation()}
+                        <button 
+                            onClick={() => setPreviewImage(null)}
+                            className="absolute -top-12 right-0 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"
                         >
-                            <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-gray-900/60 flex items-center justify-center w-full min-h-[200px] max-h-[65vh] md:max-h-[75vh]">
-                                {isPreviewLoading && (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-white z-[100005] bg-gray-900/80">
-                                        <Loader2 className="w-12 h-12 animate-spin text-indigo-500" />
-                                        <p className="text-[10px] font-black uppercase tracking-[0.5em] animate-pulse">Syncing Visual Evidence...</p>
-                                    </div>
-                                )}
-                                
-                                {previewError ? (
-                                    <div className="flex flex-col items-center justify-center p-8 sm:p-12 text-center text-white gap-6">
-                                        <div className="p-5 bg-red-500/20 rounded-full border border-red-500/40">
-                                            <Package className="w-12 h-12 text-red-400" />
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-black uppercase tracking-widest text-red-500">Asset Recognition Failed</p>
-                                            <p className="text-[10px] text-white/40 mt-2 uppercase max-w-[250px] leading-relaxed tracking-widest">
-                                                {previewError}
-                                            </p>
-                                        </div>
-                                        <button 
-                                            onClick={() => setPreviewData(null)}
-                                            className="px-6 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/10"
-                                        >
-                                            Close Viewer
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <img 
-                                        src={previewData.images[previewData.currentIndex].url} 
-                                        alt={previewData.images[previewData.currentIndex].label} 
-                                        className={cn(
-                                            "max-w-full max-h-[65vh] md:max-h-[75vh] w-auto h-auto object-contain transition-all duration-500",
-                                            isPreviewLoading ? "opacity-0 scale-98 blur-xl" : "opacity-100 scale-100 blur-0"
-                                        )}
-                                        referrerPolicy="no-referrer"
-                                        onLoad={() => setIsPreviewLoading(false)}
-                                        onError={() => {
-                                            setIsPreviewLoading(false);
-                                            setPreviewError("The digital asset is currently inaccessible. This may be due to restrictive ODK permissions or a broken file link.");
-                                        }}
-                                    />
-                                )}
-
-                                {/* Mobile Navigation Helper */}
-                                {previewData.images.length > 1 && !previewError && (
-                                    <div className="md:hidden absolute bottom-4 left-0 right-0 flex justify-center gap-6 z-[100006]">
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setIsPreviewLoading(true);
-                                                setPreviewData(prev => prev ? ({
-                                                    ...prev,
-                                                    currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length
-                                                }) : null);
-                                            }}
-                                            className="p-4 bg-black/70 text-white rounded-full border border-white/30 backdrop-blur-md"
-                                        >
-                                            <ArrowLeft className="w-6 h-6" />
-                                        </button>
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setIsPreviewLoading(true);
-                                                setPreviewData(prev => prev ? ({
-                                                    ...prev,
-                                                    currentIndex: (prev.currentIndex + 1) % prev.images.length
-                                                }) : null);
-                                            }}
-                                            className="p-4 bg-black/70 text-white rounded-full border border-white/30 backdrop-blur-md"
-                                        >
-                                            <ArrowLeft className="w-6 h-6 rotate-180" />
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                            
-                            <div className="flex flex-col items-center gap-3 pointer-events-none w-full px-4">
-                                <div className="flex items-center gap-4 w-full">
-                                    <div className="h-[1px] flex-1 bg-gradient-to-l from-indigo-500/50 to-transparent"></div>
-                                    <span className="text-[11px] font-black text-white uppercase tracking-[0.4em] text-center drop-shadow-lg max-w-[200px] truncate">
-                                        {previewData.images[previewData.currentIndex].label}
-                                    </span>
-                                    <div className="h-[1px] flex-1 bg-gradient-to-r from-indigo-500/50 to-transparent"></div>
-                                </div>
-                                
-                                <div className="flex items-center gap-3">
-                                    <div className="px-4 py-1.5 bg-white/5 border border-white/10 rounded-xl backdrop-blur-xl">
-                                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-none">
-                                            Beneficiary: <span className="text-white ml-2">{previewData.bId}</span>
-                                        </p>
-                                    </div>
-                                    {previewData.images.length > 1 && (
-                                        <div className="px-4 py-1.5 bg-indigo-600/80 border border-indigo-400/50 rounded-xl backdrop-blur-xl">
-                                            <p className="text-[10px] font-black text-white uppercase tracking-widest leading-none">
-                                                {previewData.currentIndex + 1} / {previewData.images.length}
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                            <X className="w-6 h-6" />
+                        </button>
+                        <img 
+                            src={previewImage} 
+                            alt="Preview Full" 
+                            className="w-full h-auto max-h-[85vh] rounded-3xl shadow-2xl object-contain border border-white/10" 
+                            referrerPolicy="no-referrer"
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
