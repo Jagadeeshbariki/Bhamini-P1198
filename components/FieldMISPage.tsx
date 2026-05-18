@@ -1,7 +1,13 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { MIS_TARGETS_URL, ASSETS_DATA_URL, ASSET_DISTRIBUTION_URL, BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, BUDGET_CSV_URL } from '../config';
+import { MIS_TARGETS_URL, ASSETS_DATA_URL, ASSET_DISTRIBUTION_URL, BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, BUDGET_CSV_URL, BENEFICIARY_REGISTRATION_TARGETS_URL } from '../config';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+
+interface RegistrationTarget {
+    cluster: string;
+    activity?: string;
+    target: number;
+}
 
 interface TargetData {
     year: string;
@@ -22,6 +28,7 @@ const FieldMISPage: React.FC = () => {
     const [beneficiaryData, setBeneficiaryData] = useState<any[]>([]);
     const [contributionData, setContributionData] = useState<any[]>([]);
     const [budgetData, setBudgetData] = useState<any[]>([]);
+    const [registrationTargets, setRegistrationTargets] = useState<RegistrationTarget[]>([]);
     const [selectedYear, setSelectedYear] = useState<string>('All');
     const [selectedQuarter, setSelectedQuarter] = useState<string>('All');
     const [selectedId, setSelectedId] = useState<string>('');
@@ -98,24 +105,26 @@ const FieldMISPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const [misRes, assetsRes, distRes, benRes, contRes, budgetRes] = await Promise.all([
+            const [misRes, assetsRes, distRes, benRes, contRes, budgetRes, regRes] = await Promise.all([
                 fetch(`${MIS_TARGETS_URL}&t=${Date.now()}`),
                 fetch(`${ASSETS_DATA_URL}&t=${Date.now()}`),
                 fetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`),
                 fetch(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`),
                 fetch(`${CONTRIBUTION_DATA_URL}&t=${Date.now()}`),
-                fetch(`${BUDGET_CSV_URL}&t=${Date.now()}`)
+                fetch(`${BUDGET_CSV_URL}&t=${Date.now()}`),
+                fetch(`${BENEFICIARY_REGISTRATION_TARGETS_URL}&t=${Date.now()}`)
             ]);
 
             if (!misRes.ok) throw new Error("Could not sync MIS data");
             
-            const [misCsv, assetsCsv, distCsv, benCsv, contCsv, budgetCsv] = await Promise.all([
+            const [misCsv, assetsCsv, distCsv, benCsv, contCsv, budgetCsv, regCsv] = await Promise.all([
                 misRes.text(),
                 assetsRes.text(),
                 distRes.text(),
                 benRes.text(),
                 contRes.text(),
-                budgetRes.text()
+                budgetRes.text(),
+                regRes.ok ? regRes.text() : ''
             ]);
 
             const parsed = parseCSV(misCsv);
@@ -125,6 +134,15 @@ const FieldMISPage: React.FC = () => {
             setBeneficiaryData(parseGenericCSV(benCsv));
             setContributionData(parseGenericCSV(contCsv));
             setBudgetData(parseGenericCSV(budgetCsv));
+            
+            if (regCsv) {
+                const parsedReg = parseGenericCSV(regCsv).map((r: any) => ({
+                    cluster: r['Cluster'] || r['cluster'] || '',
+                    activity: r['Activity'] || r['activity'] || '',
+                    target: parseFloat(r['Target'] || r['target'] || '0') || 0
+                })).filter((r: any) => r.cluster);
+                setRegistrationTargets(parsedReg);
+            }
             
             if (parsed.length > 0 && !selectedId) {
                 setSelectedId(parsed[0].headCode);
@@ -469,7 +487,7 @@ const FieldMISPage: React.FC = () => {
     };
 
     const beneficiaryChartsData = useMemo(() => {
-        if (!activeComp) return { clusters: [], genders: [], bypStatus: [] };
+        if (!activeComp) return { clusters: [], genders: [], bypStatus: [], regComparison: [] };
         
         const relatedBen = filteredBeneficiaryData.filter(b => {
             return getActivityMatch(activeComp.headCode, activeComp.budgetHead, b['activity']);
@@ -504,13 +522,45 @@ const FieldMISPage: React.FC = () => {
             });
         });
 
-        return { clusters, genders, bypStatus };
-    }, [activeComp, filteredBeneficiaryData, getActivityMatch]);
+        // Registration Target vs Achievement
+        const regComparison = clusters.map(c => {
+            const target = registrationTargets
+                .filter(t => t.cluster.toLowerCase() === c.name.toLowerCase())
+                .filter(t => !t.activity || getActivityMatch(activeComp.headCode, activeComp.budgetHead, t.activity))
+                .reduce((sum, t) => sum + t.target, 0);
+            
+            return {
+                cluster: c.name,
+                achieved: c.value,
+                target: target || 0,
+                progress: target > 0 ? (c.value / target) * 100 : 0
+            };
+        });
+
+        registrationTargets
+            .filter(t => !t.activity || getActivityMatch(activeComp.headCode, activeComp.budgetHead, t.activity))
+            .forEach(t => {
+                if (!clusterMap.has(t.cluster)) {
+                    const alreadyAdded = regComparison.find(rc => rc.cluster.toLowerCase() === t.cluster.toLowerCase());
+                    if (!alreadyAdded) {
+                        regComparison.push({
+                            cluster: t.cluster,
+                            achieved: 0,
+                            target: t.target,
+                            progress: 0
+                        });
+                    }
+                }
+            });
+
+        return { clusters, genders, bypStatus, regComparison };
+    }, [activeComp, filteredBeneficiaryData, getActivityMatch, registrationTargets]);
 
     const tabs = [
         { id: 0, label: 'Overview', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
         { id: 1, label: 'Asset Management', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
         { id: 2, label: 'Distribution', icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4' },
+        { id: 5, label: 'Registration Stats', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
         { id: 3, label: 'Beneficiaries', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
         { id: 4, label: 'Evidence', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' }
     ];
@@ -1116,13 +1166,68 @@ const FieldMISPage: React.FC = () => {
                         </div>
                     )}
 
-                    {(activeTab === 4) && (
-                        <div className="flex flex-col items-center justify-center py-24 text-center">
-                            <div className="w-16 h-16 bg-gray-50 dark:bg-gray-900/50 rounded-3xl flex items-center justify-center text-gray-300 mb-4">
-                                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    {(activeTab === 5) && activeComp && (
+                        <div className="space-y-8 animate-fade-in">
+                            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-[2rem] p-8 border border-gray-100 dark:border-gray-700">
+                                <h3 className="text-lg font-black uppercase tracking-tight text-gray-800 dark:text-white mb-6">Cluster-wise Registration: Target vs Achievement</h3>
+                                <div className="h-[400px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={beneficiaryChartsData.regComparison}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                            <XAxis 
+                                                dataKey="cluster" 
+                                                axisLine={false} 
+                                                tickLine={false} 
+                                                tick={{ fontSize: 10, fontWeight: 900, fill: '#9ca3af' }} 
+                                            />
+                                            <YAxis 
+                                                axisLine={false} 
+                                                tickLine={false} 
+                                                tick={{ fontSize: 10, fontWeight: 900, fill: '#9ca3af' }} 
+                                            />
+                                            <Tooltip 
+                                                cursor={{ fill: '#f3f4f6' }}
+                                                contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                            />
+                                            <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px' }} />
+                                            <Bar dataKey="achieved" name="Achieved Registration" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                                            <Bar dataKey="target" name="Target Registration" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={40} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
                             </div>
-                            <h4 className="text-sm font-black uppercase text-gray-400 tracking-widest">Section Updating</h4>
-                            <p className="text-xs text-gray-400 mt-1">Live data feed for {activeComp?.headCode} is being synchronized.</p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {beneficiaryChartsData.regComparison.map((item, idx) => (
+                                    <div key={idx} className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm space-y-4">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Cluster</p>
+                                                <p className="text-sm font-black text-gray-900 dark:text-white uppercase">{item.cluster}</p>
+                                            </div>
+                                            <div className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${item.progress >= 100 ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                                                {item.progress.toFixed(0)}%
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-2xl">
+                                                <p className="text-[8px] font-black text-gray-400 uppercase">Target</p>
+                                                <p className="text-lg font-black text-gray-900 dark:text-white">{item.target}</p>
+                                            </div>
+                                            <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-2xl">
+                                                <p className="text-[8px] font-black text-gray-400 uppercase">Achieved</p>
+                                                <p className="text-lg font-black text-emerald-600">{item.achieved}</p>
+                                            </div>
+                                        </div>
+                                        <div className="relative h-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                            <div 
+                                                className={`absolute h-full transition-all duration-1000 ${item.progress >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                                                style={{ width: `${Math.min(item.progress, 100)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>

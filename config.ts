@@ -50,6 +50,13 @@ export const ELEVATED_GOAT_SHED_URL = 'https://docs.google.com/spreadsheets/d/e/
 // 15. CROPS DATA
 export const CROPS_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR4QtZipnTgk2e8RU7NapbDg0b0re6_0YRrkd8fK34HEibBwpx6sa0g5gR9WK4UP3bEnuYSmO7fZpCN/pub?gid=1609179150&single=true&output=csv';
 
+// 16. REGISTRATION TARGETS
+export const BENEFICIARY_REGISTRATION_TARGETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS-qO_e8y_uE_w-5k-k-k-k-k-k-k-k-k-k-k-k-k-k-k/pub?gid=0&single=true&output=csv';
+
+// 17. STAFF ATTENDANCE
+export const STAFF_ATTENDANCE_LOG_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQgDjzuMMVuzxXeuCn6QmSMMAGuZJYXc6hdlhl42lD70miLVJgSpqQYRCllJBTuSmkriBOIbvExxfAC/pub?gid=0&single=true&output=csv';
+export const STAFF_ATTENDANCE_GAS_URL = 'https://script.google.com/macros/s/AKfycbyAkK7HWVr6JQ2ZcKwwOcrsiizir94bbrqCkYVBTmDKltxhkZDpkJ1ywgUJc7VY37myng/exec';
+
 // 9. SYSTEM ENDPOINT
 export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby4omIqQ9ANnowOT75v9b-7LJmrZ1_Fb1iZGfSNRVo8TbkmsuGv4Mf9h36MMwVPkjaiVw/exec';
 

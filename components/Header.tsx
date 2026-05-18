@@ -49,6 +49,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
     const isFieldRole = user?.role === 'field' || user?.role === 'admin' || user?.role === 'da';
     const isProjectRole = user?.role === 'project' || user?.role === 'admin' || user?.role === 'da';
     const canAccessAdmin = user?.role === 'admin';
+    const isStaffMarkingRole = user?.role === 'project' || user?.role === 'admin';
+    const isTLRole = user?.role === 'tl' || user?.role === 'admin';
 
     return (
         <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 sticky top-0 z-50">
@@ -81,7 +83,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 </>
                             )}
 
-                            {user && (
+                            {user && !isTLRole && (
                                 <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
                             )}
 
@@ -94,6 +96,14 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                     <NavLink {...navLinkProps} page="mark-attendance">Log Work</NavLink>
                                     <NavLink {...navLinkProps} page="attendance-report">My Reports</NavLink>
                                 </>
+                            )}
+
+                            {isStaffMarkingRole && (
+                                <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
+                            )}
+
+                            {isTLRole && (
+                                <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
                             )}
 
                             {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Panel</NavLink>}
@@ -154,6 +164,12 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 <NavLink {...navLinkProps} page="mark-attendance">Log Work</NavLink>
                                 <NavLink {...navLinkProps} page="attendance-report">Monthly Reports</NavLink>
                             </>
+                        )}
+                        {isStaffMarkingRole && (
+                            <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
+                        )}
+                        {isTLRole && (
+                            <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
                         )}
                         {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Console</NavLink>}
                         {user ? (

@@ -18,14 +18,16 @@ import ActivityDashboards from './components/ActivityDashboards';
 import ODKAssetDistribution from './components/ODKAssetDistribution';
 import DashboardsPortal from './components/DashboardsPortal';
 import AutoInstallBanner from './components/AutoInstallBanner';
+import MarkStaffAttendance from './components/MarkStaffAttendance';
+import AttendanceMonitoring from './components/AttendanceMonitoring';
 import { APP_VERSION } from './config';
 
-type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution';
+type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution' | 'staff-attendance' | 'attendance-monitoring';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>(() => {
         const hash = window.location.hash.replace('#', '') as Page;
-        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
+        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'staff-attendance', 'attendance-monitoring'];
         return validPages.includes(hash) ? hash : 'home';
     });
     const { user, logout } = useAuth();
@@ -35,7 +37,7 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         const handleHashChange = () => {
             const hash = window.location.hash.replace('#', '') as Page;
-            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
+            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'staff-attendance', 'attendance-monitoring'];
             if (validPages.includes(hash)) {
                 setPage(hash);
             }
@@ -63,7 +65,7 @@ const AppContent: React.FC = () => {
     }, [user, logout]);
 
     useEffect(() => {
-        const protectedPages: Page[] = ['attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution'];
+        const protectedPages: Page[] = ['attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'staff-attendance', 'attendance-monitoring'];
         
         // Handle unauthenticated access to protected pages
         if (!user && protectedPages.includes(page)) {
@@ -79,19 +81,23 @@ const AppContent: React.FC = () => {
             const isField = user.role === 'field';
             const isProject = user.role === 'project';
             const isDA = user.role === 'da';
+            const isTL = user.role === 'tl';
 
             if (isField) {
                 // Field staff: Allow Gallery, Attendance, Reports, MIS, Baseline, Contribution
-                const restrictedPages: Page[] = ['budget-tracker', 'admin', 'beneficiary-explorer', 'asset-tracking'];
+                const restrictedPages: Page[] = ['budget-tracker', 'admin', 'beneficiary-explorer', 'asset-tracking', 'staff-attendance', 'attendance-monitoring'];
                 if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
             } else if (isProject) {
-                // Project staff: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution
-                const restrictedPages: Page[] = ['mark-attendance', 'attendance-report', 'admin'];
+                // Project staff: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution, Staff Attendance
+                const restrictedPages: Page[] = ['mark-attendance', 'attendance-report', 'admin', 'attendance-monitoring'];
                 if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
             } else if (isDA) {
                 // DA: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution, Admin
-                // DA has full dashboard access
-                const restrictedPages: Page[] = [];
+                const restrictedPages: Page[] = ['staff-attendance', 'attendance-monitoring'];
+                if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
+            } else if (isTL) {
+                // TL: Monitoring and basic dashboards
+                const restrictedPages: Page[] = ['admin', 'staff-attendance'];
                 if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
             }
             // Admin has no restrictions
@@ -124,6 +130,10 @@ const AppContent: React.FC = () => {
                 return <ReportPage />;
             case 'mark-attendance':
                 return <MarkAttendancePage />;
+            case 'staff-attendance':
+                return <MarkStaffAttendance />;
+            case 'attendance-monitoring':
+                return <AttendanceMonitoring />;
             case 'admin':
                 return <AdminPage />;
             case 'budget-tracker':
