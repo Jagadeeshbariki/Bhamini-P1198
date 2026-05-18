@@ -95,6 +95,18 @@ const MarkStaffAttendance: React.FC = () => {
         init();
     }, [user, fetchHistory]);
 
+    useEffect(() => {
+        if (stream && videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+                videoRef.current?.play().catch(e => {
+                    console.error("Autoplay fail:", e);
+                    setError("Feed ready. Tap to start manually.");
+                });
+            };
+        }
+    }, [stream]);
+
     const startCamera = useCallback(async () => {
         setError(null);
         setIsCameraLoading(true);
@@ -136,18 +148,6 @@ const MarkStaffAttendance: React.FC = () => {
         }
     }, [facingMode]);
 
-    const onVideoMount = useCallback((el: HTMLVideoElement | null) => {
-        if (!el || !stream) return;
-        
-        el.srcObject = stream;
-        el.onloadedmetadata = () => {
-            el.play().catch(e => {
-                console.error("Autoplay failed:", e);
-                setError("Tap the video feed to start it manually.");
-            });
-        };
-    }, [stream]);
-
     useEffect(() => {
         const restart = async () => {
             if (stream) {
@@ -155,7 +155,7 @@ const MarkStaffAttendance: React.FC = () => {
             }
         };
         restart();
-    }, [facingMode]);
+    }, [facingMode, startCamera, stream]); 
 
     const toggleCamera = () => {
         setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
@@ -169,23 +169,34 @@ const MarkStaffAttendance: React.FC = () => {
     };
 
     const capturePhoto = () => {
-        if (!videoRef.current) return;
+        const video = videoRef.current;
+        if (!video || !stream) {
+            setError("Camera feed not available.");
+            return;
+        }
         
-        // Ensure video is playing and has dimensions
-        if (videoRef.current.readyState < 2 || videoRef.current.videoWidth === 0) {
-            setError("Camera not ready. Please wait a moment.");
+        // Ensure video is actually providing data
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+            setError("Camera initializing... please try again in a second.");
             return;
         }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-            ctx.drawImage(videoRef.current, 0, 0);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            setPhoto(dataUrl);
-            stopCamera();
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.drawImage(video, 0, 0);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                setPhoto(dataUrl);
+                stopCamera();
+            } else {
+                setError("Failed to initialize capture canvas.");
+            }
+        } catch (err: any) {
+            console.error("Capture error:", err);
+            setError("Capture failed: " + (err.message || "Unknown error"));
         }
     };
 
@@ -318,12 +329,12 @@ const MarkStaffAttendance: React.FC = () => {
                             <div className="relative aspect-video bg-gray-100 dark:bg-gray-900 rounded-3xl overflow-hidden border-4 border-gray-50 dark:border-gray-800 shadow-inner group">
                                 {stream ? (
                                     <video 
-                                        ref={onVideoMount} 
-                                        autoPlay 
-                                        playsInline 
-                                        muted 
-                                        className="w-full h-full object-cover" 
-                                    />
+                                    ref={videoRef} 
+                                    autoPlay 
+                                    playsInline 
+                                    muted 
+                                    className="w-full h-full object-cover" 
+                                />
                                 ) : (
                                     <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 p-6 text-center">
                                         <svg className="w-12 h-12 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
