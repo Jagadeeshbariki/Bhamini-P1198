@@ -14,6 +14,10 @@ export default defineConfig(({ mode }) => {
         react(),
         tailwindcss()
       ],
+      build: {
+        target: 'es2020',
+        outDir: 'dist',
+      },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)

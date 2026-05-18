@@ -56,11 +56,21 @@ const AppContent: React.FC = () => {
 
     useEffect(() => {
         const storedVersion = localStorage.getItem('app_version');
-        if (storedVersion !== APP_VERSION) {
-            localStorage.clear();
+        if (storedVersion && storedVersion !== APP_VERSION) {
+            console.log(`System updating from ${storedVersion} to ${APP_VERSION}`);
             localStorage.setItem('app_version', APP_VERSION);
-            if (user) logout();
-            window.location.reload();
+            
+            // Safer reload attempt - prevent loops
+            const reloadCount = parseInt(sessionStorage.getItem('app_reload_count') || '0');
+            if (reloadCount < 3) {
+                sessionStorage.setItem('app_reload_count', (reloadCount + 1).toString());
+                window.location.reload();
+            } else {
+                console.error("Too many reloads detected. Stale cache might be persistent.");
+                sessionStorage.removeItem('app_reload_count');
+            }
+        } else if (!storedVersion) {
+            localStorage.setItem('app_version', APP_VERSION);
         }
     }, [user, logout]);
 

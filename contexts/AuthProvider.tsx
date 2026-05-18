@@ -11,22 +11,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const sessionString = localStorage.getItem('bhamini_session');
-    if (sessionString) {
-      try {
-        const session: Session = JSON.parse(sessionString);
-        if (session.expiry > Date.now()) {
-          setUser(session.user);
-        } else {
+    try {
+      const sessionString = localStorage.getItem('bhamini_session');
+      if (sessionString) {
+        try {
+          const session: Session = JSON.parse(sessionString);
+          if (session.expiry > Date.now()) {
+            setUser(session.user);
+          } else {
+            localStorage.removeItem('bhamini_session');
+            setUser(null);
+          }
+        } catch {
           localStorage.removeItem('bhamini_session');
           setUser(null);
         }
-      } catch {
-        localStorage.removeItem('bhamini_session');
-        setUser(null);
       }
+    } catch (err) {
+      console.error("Auth init failed:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const parseCSV = (csv: string) => {
