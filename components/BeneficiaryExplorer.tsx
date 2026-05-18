@@ -459,6 +459,22 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
         </div>
     );
 
+    if (data.length === 0) return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
+            <div className="w-16 h-16 bg-gray-50 text-gray-400 rounded-full flex items-center justify-center mb-4">
+                <Users className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-black text-gray-900 uppercase tracking-tight mb-2">No Records Detected</h3>
+            <p className="text-xs font-black text-gray-400 uppercase tracking-widest max-w-sm mb-6">Local cache and sync streams are currently empty. Please verify data existence in the registry.</p>
+            <button 
+                onClick={() => window.location.reload()}
+                className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
+            >
+                Manual Sync Protocol
+            </button>
+        </div>
+    );
+
     return (
         <div className="flex flex-col gap-3 animate-fade-in pb-20">
             {onBack && (

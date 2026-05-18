@@ -18,7 +18,15 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Use a network-first strategy for everything to avoid stale index.html issues
+  const url = new URL(event.request.url);
+  
+  // API requests MUST bypass service worker cache completely
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // Use a network-first strategy for everything else to avoid stale index.html issues
   event.respondWith(
     fetch(event.request)
       .then(response => {

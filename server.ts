@@ -12,20 +12,6 @@ async function startServer() {
     next();
   });
 
-  // API routes FIRST
-  app.get("/api/health", (req, res) => {
-    res.json({ 
-      status: "ok", 
-      mode: process.env.NODE_ENV,
-      time: new Date().toISOString(),
-      diagnostics: {
-        cwd: process.cwd(),
-        dirname: __dirname,
-        nodeVersion: process.version
-      }
-    });
-  });
-
   // ODK Image Proxy
   let odkSessionToken: string | null = null;
   let tokenExpiresAt: number = 0;
@@ -58,130 +44,133 @@ async function startServer() {
     return odkSessionToken;
   }
 
-  app.get("/api/odk/image", async (req, res) => {
+  // API Router
+  const apiRouter = express.Router();
+
+  apiRouter.get("/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      mode: process.env.NODE_ENV,
+      time: new Date().toISOString(),
+      diagnostics: {
+        cwd: process.cwd(),
+        dirname: __dirname,
+        nodeVersion: process.version,
+        env: Object.keys(process.env).filter(k => !k.includes('KEY') && !k.includes('PASSWORD') && !k.includes('SECRET'))
+      }
+    });
+  });
+
+  apiRouter.get("/debug-proxy", async (req, res) => {
+    const testUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2T6skNnpDlaFl8n93i0eO7zlF0bK-sdndW1-AIRRpWf-YJkYzXjiC8B1e5hFdZ2KqMsNTKN9NCmPG/pub?gid=0&single=true&output=csv";
+    try {
+      const response = await fetch(testUrl, { redirect: 'follow' });
+      const text = await response.text();
+      res.json({
+        status: response.status,
+        ok: response.ok,
+        contentType: response.headers.get('content-type'),
+        preview: text.substring(0, 100)
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  apiRouter.get("/odk/image", async (req, res) => {
     const { submissionId, filename } = req.query;
-    
     if (!submissionId || !filename || typeof submissionId !== 'string' || typeof filename !== 'string') {
       return res.status(400).send('Missing or invalid params');
     }
-
-    // Clean submissionId if it has uuid: prefix
     const cleanSubmissionId = submissionId.startsWith('uuid:') ? submissionId.substring(5) : submissionId;
-
     try {
       const token = await getOdkToken();
       const url = `https://central.wassan.org/v1/projects/3/forms/Material_distribution/submissions/${cleanSubmissionId}/attachments/${filename}`;
-
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        console.error(`ODK Fetch Failed: ${response.status} for ${url}`);
-        return res.status(response.status).send('Failed to fetch image from ODK');
-      }
-
+      const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!response.ok) return res.status(response.status).send('Failed to fetch image from ODK');
       const contentType = response.headers.get('content-type');
       if (contentType) res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
-
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      res.send(buffer);
-    } catch (error: any) {
-      console.error('ODK Proxy Error:', error);
-      res.status(500).send(error.message || 'Internal Server Error');
-    }
-  });
-
-  // Generic Proxy Route (for Sheets CSVs, etc.)
-  app.get("/api/sheet-proxy", async (req, res) => {
-    const { url } = req.query;
-    if (!url || typeof url !== 'string') {
-      console.error('Proxy Error: Missing or invalid url parameter');
-      return res.status(400).json({ error: 'Missing url parameter' });
-    }
-
-    console.log(`[Proxy] Fetching: ${url}`);
-
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Proxy] Upstream error (${response.status}) for ${url}: ${errorText.substring(0, 100)}`);
-        return res.status(response.status).json({ 
-          error: `Upstream error ${response.status}`,
-          details: errorText.substring(0, 500)
-        });
-      }
-      
-      const contentType = response.headers.get('content-type');
-      if (contentType) {
-        res.setHeader('Content-Type', contentType);
-      } else {
-        res.setHeader('Content-Type', 'text/plain');
-      }
-      
-      // Handle different response types
-      if (contentType?.includes('application/json')) {
-        const data = await response.json();
-        res.json(data);
-      } else {
-        const text = await response.text();
-        res.send(text);
-      }
-    } catch (error: any) {
-      console.error(`[Proxy] Exception for ${url}:`, error.message);
-      res.status(500).json({ error: 'Proxy Exception', message: error.message });
-    }
-  });
-
-  // Google Drive Image Proxy
-  app.get("/api/drive-proxy", async (req, res) => {
-    const { id } = req.query;
-    if (!id || typeof id !== 'string') {
-      return res.status(400).send('Missing file id');
-    }
-
-    // Try thumbnail endpoint first as it is generally more reliable and faster
-    const url = `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
-    
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-      });
-
-      if (!response.ok) {
-        // Fallback to uc endpoint if thumbnail fails
-        const ucUrl = `https://docs.google.com/uc?export=view&id=${id}`;
-        const ucResponse = await fetch(ucUrl);
-        if (!ucResponse.ok) {
-          return res.status(ucResponse.status).send('Failed to fetch from Drive');
-        }
-        const contentType = ucResponse.headers.get('content-type');
-        if (contentType) res.setHeader('Content-Type', contentType);
-        const arrayBuffer = await ucResponse.arrayBuffer();
-        return res.send(Buffer.from(arrayBuffer));
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (contentType) res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24h
-
       const arrayBuffer = await response.arrayBuffer();
       res.send(Buffer.from(arrayBuffer));
     } catch (error: any) {
-      console.error('Drive Proxy Error:', error);
       res.status(500).send(error.message);
     }
   });
+
+  apiRouter.get("/sheet-proxy", async (req, res) => {
+    const { url } = req.query;
+    if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url' });
+    
+    try {
+      console.log(`[SheetProxy] Fetching: ${url.substring(0, 100)}...`);
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'text/csv,text/plain,application/json,*/*',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        },
+        redirect: 'follow',
+        // Set a reasonable timeout
+        signal: AbortSignal.timeout(15000)
+      });
+      
+      if (!response.ok) {
+        console.error(`[SheetProxy] Upstream error: ${response.status} for ${url.substring(0, 50)}`);
+        return res.status(response.status).json({ error: `Upstream error ${response.status}`, url: url.substring(0, 50) });
+      }
+      
+      const contentType = (response.headers.get('content-type') || 'text/plain').toLowerCase();
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      console.log(`[SheetProxy] Received ${buffer.length} bytes, type: ${contentType}`);
+
+      // Basic sanity check: tiny responses or HTML responses for CSV requests are suspicious
+      if (buffer.length < 10 && !url.includes('scripts')) {
+        console.warn(`[SheetProxy] Very small response received (${buffer.length} bytes)`);
+      }
+
+      if (contentType.includes('text/html')) {
+        const text = buffer.toString().toLowerCase();
+        if (text.includes('google') && (text.includes('sign in') || text.includes('login') || text.includes('account'))) {
+          console.error(`[SheetProxy] Access Denied: Google requested login for ${url.substring(0, 50)}`);
+          return res.status(401).json({ error: 'Spreadsheet is not public. Please "Publish to Web" and set as "Anyone with link can view".' });
+        }
+      }
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(buffer);
+    } catch (error: any) {
+      console.error(`[SheetProxy] Exception for ${url.substring(0, 50)}:`, error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  apiRouter.get("/drive-proxy", async (req, res) => {
+    const { id } = req.query;
+    if (!id || typeof id !== 'string') return res.status(400).send('Missing id');
+    const url = `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+    try {
+      const response = await fetch(url, { redirect: 'follow' });
+      if (!response.ok) {
+        const fallback = `https://docs.google.com/uc?export=view&id=${id}`;
+        const fbRes = await fetch(fallback);
+        if (!fbRes.ok) return res.status(fbRes.status).send('Drive fetch failed');
+        const contentType = fbRes.headers.get('content-type');
+        if (contentType) res.setHeader('Content-Type', contentType);
+        const arrayBuffer = await fbRes.arrayBuffer();
+        return res.send(Buffer.from(arrayBuffer));
+      }
+      const contentType = response.headers.get('content-type');
+      if (contentType) res.setHeader('Content-Type', contentType);
+      const arrayBuffer = await response.arrayBuffer();
+      res.send(Buffer.from(arrayBuffer));
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.use("/api", apiRouter);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
@@ -203,7 +192,7 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
 
-    app.get('*', (req, res) => {
+    app.get('*all', (req, res) => {
       if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API route not found' });
       }
