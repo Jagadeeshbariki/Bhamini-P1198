@@ -94,17 +94,12 @@ const ElevatedGoatShedPage: React.FC = () => {
     };
 
     const getGoogleDriveThumbnail = (url: string) => {
-        if (!url || !url.includes('drive.google.com')) return url;
-        
-        let id = '';
-        if (url.includes('id=')) {
-            id = url.split('id=')[1].split('&')[0];
-        } else if (url.includes('file/d/')) {
-            id = url.split('file/d/')[1].split('/')[0].split('?')[0];
-        }
-        
-        if (id) {
-            return `https://drive.google.com/thumbnail?id=${id}&sz=w400`;
+        if (!url) return '';
+        if (url.includes('drive.google.com') || url.includes('google.com/open') || url.includes('docs.google.com') || url.includes('drive.usercontent.google.com')) {
+            const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
+            if (idMatch) {
+                return `/api/drive-proxy?id=${idMatch[1]}`;
+            }
         }
         return url;
     };

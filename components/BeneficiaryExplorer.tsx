@@ -48,10 +48,10 @@ const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6'
 
 const formatDriveUrl = (url: string) => {
     if (!url) return '';
-    if (url.includes('drive.google.com')) {
-        const idMatch = url.match(/[-\w]{25,}/);
+    if (url.includes('drive.google.com') || url.includes('google.com/open') || url.includes('docs.google.com') || url.includes('drive.usercontent.google.com')) {
+        const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
         if (idMatch) {
-            return `https://docs.google.com/uc?export=view&id=${idMatch[0]}`;
+            return `/api/drive-proxy?id=${idMatch[1]}`;
         }
     }
     return url;
@@ -85,6 +85,7 @@ interface BeneficiaryExplorerProps {
 const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => {
     const [data, setData] = useState<Beneficiary[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     
     // Filters
     const [filterCluster, setFilterCluster] = useState('All');
@@ -223,14 +224,17 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
+            setError(null);
             try {
                 // Fetch Master List
                 const masterRes = await fetch(getProxyUrl(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`));
+                if (!masterRes.ok) throw new Error(`Master list fetch failed: ${masterRes.status}`);
                 const masterText = await masterRes.text();
                 const masterData = parseCSV(masterText, 'Master List');
 
                 // Fetch Distribution List
                 const distRes = await fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`));
+                if (!distRes.ok) throw new Error(`Distribution list fetch failed: ${distRes.status}`);
                 const distText = await distRes.text();
                 const distData = parseCSV(distText, 'Distribution List');
 
@@ -269,6 +273,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 setData(Array.from(mergedMap.values()));
             } catch (err) {
                 console.error("Beneficiary fetch failed", err);
+                setError(err instanceof Error ? err.message : "Sync failed. Please check network.");
             } finally {
                 setLoading(false);
             }
@@ -435,6 +440,22 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 <div className="absolute inset-0 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
             <p className="mt-6 text-xs font-black uppercase text-gray-400 tracking-[0.3em]">Syncing MIS Core...</p>
+        </div>
+    );
+
+    if (error) return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+                <X className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-black text-gray-900 uppercase tracking-tight mb-2">Sync Connection Severed</h3>
+            <p className="text-xs font-black text-gray-400 uppercase tracking-widest max-w-sm mb-6">{error}</p>
+            <button 
+                onClick={() => window.location.reload()}
+                className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
+            >
+                Protocol Manual Override
+            </button>
         </div>
     );
 

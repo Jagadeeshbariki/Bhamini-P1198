@@ -318,7 +318,7 @@ const AttendanceMonitoring: React.FC = () => {
         if (url.includes('drive.google.com') || url.includes('google.com/open') || url.includes('docs.google.com') || url.includes('drive.usercontent.google.com')) {
             const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
             if (idMatch) {
-                return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w800`;
+                return `/api/drive-proxy?id=${idMatch[1]}`;
             }
         }
         return url;
@@ -548,8 +548,8 @@ const AttendanceMonitoring: React.FC = () => {
                                                 onError={(e) => {
                                                     const target = e.target as HTMLImageElement;
                                                     const idMatch = selectedStaff.morningLog?.photoUrl.match(/(?:id=|\/d\/|file\/d\/|open\?id=)([-\w]{25,})/);
-                                                    if (idMatch && !target.src.includes('thumbnail')) {
-                                                        target.src = `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w600`;
+                                                    if (idMatch && !target.src.includes('drive-proxy')) {
+                                                        target.src = `/api/drive-proxy?id=${idMatch[1]}`;
                                                     } else {
                                                         target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedStaff.staffName)}+Morning&background=10b981&color=fff`;
                                                     }
@@ -599,8 +599,8 @@ const AttendanceMonitoring: React.FC = () => {
                                                 onError={(e) => {
                                                     const target = e.target as HTMLImageElement;
                                                     const idMatch = selectedStaff.eveningLog?.photoUrl.match(/(?:id=|\/d\/|file\/d\/|open\?id=)([-\w]{25,})/);
-                                                    if (idMatch && !target.src.includes('thumbnail')) {
-                                                        target.src = `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w600`;
+                                                    if (idMatch && !target.src.includes('drive-proxy')) {
+                                                        target.src = `/api/drive-proxy?id=${idMatch[1]}`;
                                                     } else {
                                                         target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedStaff.staffName)}+Evening&background=e11d48&color=fff`;
                                                     }

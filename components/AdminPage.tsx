@@ -74,10 +74,11 @@ const AdminPage: React.FC = () => {
     const getDirectDriveUrl = (url: string) => {
         if (!url) return '';
         const trimmed = url.trim();
-        if (trimmed.includes('drive.google.com') || trimmed.includes('google.com/open')) {
+        if (trimmed.includes('drive.google.com') || trimmed.includes('google.com/open') || trimmed.includes('docs.google.com') || trimmed.includes('drive.usercontent.google.com')) {
             const idMatch = trimmed.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
-            const id = idMatch ? idMatch[1] : '';
-            return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1600` : trimmed;
+            if (idMatch) {
+                return `/api/drive-proxy?id=${idMatch[1]}`;
+            }
         }
         return trimmed;
     };
