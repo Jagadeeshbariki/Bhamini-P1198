@@ -304,10 +304,11 @@ const MarkStaffAttendance: React.FC = () => {
     const formatDriveUrl = (url: string) => {
         if (!url) return '';
         if (url.startsWith('data:image')) return url; // Handle local previews
-        if (url.includes('drive.google.com') || url.includes('google.com/open') || url.includes('docs.google.com') || url.includes('drive.usercontent.google.com')) {
+        if (url.includes('drive.google.com') || url.includes('google.com/open') || url.includes('docs.google.com')) {
             const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
             if (idMatch) {
-                return `/api/drive-proxy?id=${idMatch[1]}`;
+                // Using lh3.googleusercontent.com is often more robust for direct image embedding than drive.google.com/thumbnail
+                return `https://lh3.googleusercontent.com/d/${idMatch[1]}`;
             }
         }
         return url;
@@ -497,8 +498,10 @@ const MarkStaffAttendance: React.FC = () => {
                                                         onError={(e) => {
                                                             const target = e.target as HTMLImageElement;
                                                             const idMatch = h.photoUrl.match(/(?:id=|\/d\/|file\/d\/|open\?id=)([-\w]{25,})/);
-                                                            if (idMatch && !target.src.includes('drive-proxy')) {
-                                                                target.src = `/api/drive-proxy?id=${idMatch[1]}`;
+                                                            if (idMatch && !target.src.includes('thumbnail')) {
+                                                                target.src = `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w400`;
+                                                            } else if (idMatch && target.src.includes('thumbnail') && !target.src.includes('uc?id')) {
+                                                                target.src = `https://drive.google.com/uc?id=${idMatch[1]}`;
                                                             } else {
                                                                 target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(h.staffName)}&background=4f46e5&color=fff`;
                                                             }

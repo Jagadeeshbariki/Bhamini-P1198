@@ -85,10 +85,10 @@ const normalizeId = (id: any): string => {
 
 const formatDriveUrl = (url: string) => {
     if (!url) return '';
-    if (url.includes('drive.google.com') || url.includes('google.com/open') || url.includes('docs.google.com') || url.includes('drive.usercontent.google.com')) {
+    if (url.includes('drive.google.com') || url.includes('google.com/open')) {
         const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
         if (idMatch) {
-            return `/api/drive-proxy?id=${idMatch[1]}`;
+            return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`;
         }
     }
     return url;
