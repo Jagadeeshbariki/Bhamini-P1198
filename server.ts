@@ -6,9 +6,24 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Logging middleware
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+  });
+
   // API routes FIRST
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+    res.json({ 
+      status: "ok", 
+      mode: process.env.NODE_ENV,
+      time: new Date().toISOString(),
+      diagnostics: {
+        cwd: process.cwd(),
+        dirname: __dirname,
+        nodeVersion: process.version
+      }
+    });
   });
 
   // ODK Image Proxy
@@ -170,15 +185,28 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    console.log("[Server] Starting in DEVELOPMENT mode with Vite middleware");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
+    console.log("[Server] Starting in PRODUCTION mode");
+    // Since this file is bundled to dist/server.cjs, __dirname is the dist folder itself
+    const distPath = __dirname;
+    console.log(`[Server] Serving static assets from: ${distPath}`);
+    
+    app.use(express.static(distPath, { index: false }));
+
+    app.get('/', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+
+    app.get('*', (req, res) => {
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API route not found' });
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

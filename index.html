@@ -17,8 +17,27 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   </head>
   <body class="bg-gray-50 dark:bg-gray-950 text-gray-800 dark:text-gray-200">
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-loading" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; color: #4f46e5;">
+        <div style="width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #4f46e5; border-radius: 50%; animate-spin: spin 1s linear infinite;"></div>
+        <p style="margin-top: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px;">Initializing Core System...</p>
+        <noscript><p style="color: red; margin-top: 20px;">JavaScript is required to run this application.</p></noscript>
+      </div>
+    </div>
+    <script type="module">
+      window.onerror = function(msg, url, line) {
+        console.error('Boot Error:', msg, 'at', url, ':', line);
+        var loading = document.getElementById('app-loading');
+        if (loading) {
+          loading.innerHTML = '<p style="color: red; font-size: 14px; font-weight: bold;">CRITICAL BOOT FAILURE</p><p style="font-size: 11px; color: #666; margin-top: 8px;">' + msg + '</p><button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 8px; cursor: pointer;">PROTOCOL RETRY</button>';
+        }
+      };
+    </script>
     <script type="module" src="/index.tsx"></script>
+    <style>
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      #app-loading div { animation: spin 1s linear infinite; }
+    </style>
     
     <!-- PWA Service Worker Registration -->
     <script>
