@@ -30,9 +30,33 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         }
     };
 
-    const handleClearSession = () => {
+    const handleClearSession = async () => {
+        setIsLoading(true);
         logout();
         localStorage.clear();
+        sessionStorage.clear();
+        
+        try {
+            // Unregister all service workers
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const registration of registrations) {
+                    await registration.unregister();
+                }
+            }
+            
+            // Clear all caches
+            if ('caches' in window) {
+                const keys = await caches.keys();
+                for (const key of keys) {
+                    await caches.delete(key);
+                }
+            }
+        } catch (e) {
+            console.error('Reset error:', e);
+        }
+        
+        setIsLoading(false);
         window.location.reload();
     };
 

@@ -188,7 +188,11 @@ async function startServer() {
     
     app.use(express.static(distPath, { index: false }));
 
+    // Specific route for index.html at root - with NO CACHE headers
     app.get('/', (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.sendFile(path.join(distPath, 'index.html'));
     });
 
@@ -196,6 +200,7 @@ async function startServer() {
       if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API route not found' });
       }
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
