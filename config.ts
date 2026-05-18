@@ -61,3 +61,5 @@ export const STAFF_ATTENDANCE_GAS_URL = 'https://script.google.com/macros/s/AKfy
 export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby4omIqQ9ANnowOT75v9b-7LJmrZ1_Fb1iZGfSNRVo8TbkmsuGv4Mf9h36MMwVPkjaiVw/exec';
 
 export const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200';
+
+export const getProxyUrl = (url: string) => `/api/sheet-proxy?url=${encodeURIComponent(url)}`;

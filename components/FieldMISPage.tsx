@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { MIS_TARGETS_URL, ASSETS_DATA_URL, ASSET_DISTRIBUTION_URL, BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, BUDGET_CSV_URL, BENEFICIARY_REGISTRATION_TARGETS_URL } from '../config';
+import { MIS_TARGETS_URL, ASSETS_DATA_URL, ASSET_DISTRIBUTION_URL, BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, BUDGET_CSV_URL, BENEFICIARY_REGISTRATION_TARGETS_URL, getProxyUrl } from '../config';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 interface RegistrationTarget {
@@ -106,13 +106,13 @@ const FieldMISPage: React.FC = () => {
         setError(null);
         try {
             const [misRes, assetsRes, distRes, benRes, contRes, budgetRes, regRes] = await Promise.all([
-                fetch(`${MIS_TARGETS_URL}&t=${Date.now()}`),
-                fetch(`${ASSETS_DATA_URL}&t=${Date.now()}`),
-                fetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`),
-                fetch(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`),
-                fetch(`${CONTRIBUTION_DATA_URL}&t=${Date.now()}`),
-                fetch(`${BUDGET_CSV_URL}&t=${Date.now()}`),
-                fetch(`${BENEFICIARY_REGISTRATION_TARGETS_URL}&t=${Date.now()}`)
+                fetch(getProxyUrl(`${MIS_TARGETS_URL}&t=${Date.now()}`)),
+                fetch(getProxyUrl(`${ASSETS_DATA_URL}&t=${Date.now()}`)),
+                fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`)),
+                fetch(getProxyUrl(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`)),
+                fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&t=${Date.now()}`)),
+                fetch(getProxyUrl(`${BUDGET_CSV_URL}&t=${Date.now()}`)),
+                fetch(getProxyUrl(`${BENEFICIARY_REGISTRATION_TARGETS_URL}&t=${Date.now()}`))
             ]);
 
             if (!misRes.ok) throw new Error("Could not sync MIS data");

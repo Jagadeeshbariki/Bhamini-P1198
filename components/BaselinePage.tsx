@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { BASELINE_DATA_URL } from '../config';
+import { BASELINE_DATA_URL, getProxyUrl } from '../config';
 
 interface HouseholdData {
     farmerId: string;
@@ -217,7 +217,7 @@ const BaselinePage: React.FC = () => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const response = await fetch(`${BASELINE_DATA_URL}&cb=${Date.now()}`);
+                const response = await fetch(getProxyUrl(`${BASELINE_DATA_URL}&cb=${Date.now()}`));
                 if (!response.ok) throw new Error("Failed to fetch baseline spreadsheet.");
                 const csvText = await response.text();
                 const parsed = parseCSV(csvText);

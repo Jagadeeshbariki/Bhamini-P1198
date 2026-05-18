@@ -79,6 +79,42 @@ async function startServer() {
     }
   });
 
+  // Generic Proxy Route (for Sheets CSVs, etc.)
+  app.get("/api/sheet-proxy", async (req, res) => {
+    const { url } = req.query;
+    if (!url || typeof url !== 'string') {
+      console.error('Proxy Error: Missing or invalid url parameter');
+      return res.status(400).send('Missing url');
+    }
+
+    console.log(`Proxying request to: ${url}`);
+
+    try {
+      // Ensure we have a fetch function (Node 18+ has it globally)
+      if (typeof fetch === 'undefined') {
+        throw new Error('Global fetch is not available in this Node version');
+      }
+
+      const response = await fetch(url);
+      console.log(`Upstream response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Upstream error (${response.status}): ${errorText.substring(0, 200)}`);
+        return res.status(response.status).send(`Upstream returned ${response.status}: ${errorText}`);
+      }
+      
+      const contentType = response.headers.get('content-type');
+      if (contentType) res.setHeader('Content-Type', contentType);
+      
+      const text = await response.text();
+      res.send(text);
+    } catch (error: any) {
+      console.error(`Proxy Exception for ${url}:`, error.message);
+      res.status(500).send(`Proxy Error: ${error.message}`);
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

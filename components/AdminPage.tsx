@@ -4,7 +4,8 @@ import { useAuth } from '../hooks/useAuth';
 import { 
     GOOGLE_SHEET_CSV_URL, 
     GOOGLE_APPS_SCRIPT_URL, 
-    GOOGLE_SHEET_PHOTOS_URL
+    GOOGLE_SHEET_PHOTOS_URL,
+    getProxyUrl
 } from '../config';
 import { generateCalendarDays } from '../utils/calendar';
 
@@ -118,8 +119,8 @@ const AdminPage: React.FC = () => {
         if (!silent) setLoading(true);
         try {
             const [attRes, mediaRes, userRes] = await Promise.all([
-                fetch(`${GOOGLE_SHEET_CSV_URL}&_=${Date.now()}`),
-                fetch(`${GOOGLE_SHEET_PHOTOS_URL}&_=${Date.now()}`),
+                fetch(getProxyUrl(`${GOOGLE_SHEET_CSV_URL}&_=${Date.now()}`)),
+                fetch(getProxyUrl(`${GOOGLE_SHEET_PHOTOS_URL}&_=${Date.now()}`)),
                 getAllUsers()
             ]);
 

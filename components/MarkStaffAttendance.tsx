@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { STAFF_ATTENDANCE_GAS_URL, STAFF_ATTENDANCE_LOG_URL } from '../config';
+import { STAFF_ATTENDANCE_GAS_URL, STAFF_ATTENDANCE_LOG_URL, getProxyUrl } from '../config';
 
 interface StaffAttendanceLog {
     timestamp: string;
@@ -37,8 +37,11 @@ const MarkStaffAttendance: React.FC = () => {
     const fetchHistory = useCallback(async () => {
         if (!user) return;
         try {
-            const res = await fetch(`${STAFF_ATTENDANCE_LOG_URL}&cb=${Date.now()}`);
-            if (!res.ok) return;
+            const res = await fetch(getProxyUrl(`${STAFF_ATTENDANCE_LOG_URL}&cb=${Date.now()}`));
+            if (!res.ok) {
+                console.warn(`History fetch status: ${res.status}`);
+                return;
+            }
             const text = await res.text();
             const lines = text.split(/\r?\n/).filter(l => l.trim());
             if (lines.length < 1) return;
@@ -301,9 +304,12 @@ const MarkStaffAttendance: React.FC = () => {
     const formatDriveUrl = (url: string) => {
         if (!url) return '';
         if (url.startsWith('data:image')) return url; // Handle local previews
-        if (url.includes('drive.google.com')) {
+        if (url.includes('drive.google.com') || url.includes('google.com/open') || url.includes('docs.google.com')) {
             const idMatch = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
-            if (idMatch) return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w400`;
+            if (idMatch) {
+                // Using lh3.googleusercontent.com is often more robust for direct image embedding than drive.google.com/thumbnail
+                return `https://lh3.googleusercontent.com/d/${idMatch[1]}`;
+            }
         }
         return url;
     };
@@ -484,7 +490,24 @@ const MarkStaffAttendance: React.FC = () => {
                                         <div key={idx} className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 flex items-center gap-4 group">
                                             <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100 border border-gray-100">
                                                 {h.photoUrl ? (
-                                                    <img src={formatDriveUrl(h.photoUrl)} alt="Staff" className="w-full h-full object-cover scale-150 group-hover:scale-100 transition-transform duration-500" />
+                                                    <img 
+                                                        src={formatDriveUrl(h.photoUrl)} 
+                                                        alt="Staff" 
+                                                        className="w-full h-full object-cover scale-150 group-hover:scale-100 transition-transform duration-500" 
+                                                        referrerPolicy="no-referrer"
+                                                        onError={(e) => {
+                                                            const target = e.target as HTMLImageElement;
+                                                            const idMatch = h.photoUrl.match(/(?:id=|\/d\/|file\/d\/|open\?id=)([-\w]{25,})/);
+                                                            if (idMatch && !target.src.includes('thumbnail')) {
+                                                                target.src = `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w400`;
+                                                            } else if (idMatch && target.src.includes('thumbnail') && !target.src.includes('uc?id')) {
+                                                                target.src = `https://drive.google.com/uc?id=${idMatch[1]}`;
+                                                            } else {
+                                                                target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(h.staffName)}&background=4f46e5&color=fff`;
+                                                            }
+                                                            target.onerror = null;
+                                                        }}
+                                                    />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-gray-300">
                                                         <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>

@@ -10,7 +10,7 @@ import {
     Legend
 } from 'recharts';
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { ECO_FARMPOND_URL, CONTRIBUTION_DATA_URL } from '../config';
+import { ECO_FARMPOND_URL, CONTRIBUTION_DATA_URL, getProxyUrl } from '../config';
 import AddFarmpondPhotoModal from './AddFarmpondPhotoModal';
 
 declare global {
@@ -115,8 +115,8 @@ const EcoFarmpondPage: React.FC = () => {
         setLoading(true);
         try {
             const [pondRes, contribRes] = await Promise.all([
-                fetch(`${ECO_FARMPOND_URL}&cb=${Date.now()}`),
-                fetch(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)
+                fetch(getProxyUrl(`${ECO_FARMPOND_URL}&cb=${Date.now()}`)),
+                fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`))
             ]);
 
             if (!pondRes.ok || !contribRes.ok) throw new Error("Failed to fetch data.");

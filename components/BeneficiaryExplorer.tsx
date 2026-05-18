@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL } from '../config';
+import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, getProxyUrl } from '../config';
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
@@ -225,12 +225,12 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
             setLoading(true);
             try {
                 // Fetch Master List
-                const masterRes = await fetch(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`);
+                const masterRes = await fetch(getProxyUrl(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`));
                 const masterText = await masterRes.text();
                 const masterData = parseCSV(masterText, 'Master List');
 
                 // Fetch Distribution List
-                const distRes = await fetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`);
+                const distRes = await fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`));
                 const distText = await distRes.text();
                 const distData = parseCSV(distText, 'Distribution List');
 

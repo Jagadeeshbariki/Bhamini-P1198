@@ -12,7 +12,7 @@ import {
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AuthContext } from '../contexts/AuthContext';
-import { GOOGLE_APPS_SCRIPT_URL, BUDGET_CSV_URL } from '../config';
+import { GOOGLE_APPS_SCRIPT_URL, BUDGET_CSV_URL, getProxyUrl } from '../config';
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
@@ -110,7 +110,7 @@ const BudgetTrackerPage: React.FC = () => {
 
         try {
             console.log("Fetching budget data from:", BUDGET_CSV_URL);
-            const response = await fetch(`${BUDGET_CSV_URL}${BUDGET_CSV_URL.includes('?') ? '&' : '?'}t=${Date.now()}`, { 
+            const response = await fetch(getProxyUrl(`${BUDGET_CSV_URL}${BUDGET_CSV_URL.includes('?') ? '&' : '?'}t=${Date.now()}`), { 
                 signal: controller.signal 
             });
             clearTimeout(timeoutId);

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, ReactNode } from 'react';
 import { AuthContext } from './AuthContext';
 import type { AuthUser, Session } from '../types';
-import { GOOGLE_SHEET_USERS_URL } from '../config';
+import { GOOGLE_SHEET_USERS_URL, getProxyUrl } from '../config';
 
 const SESSION_DURATION = 12 * 60 * 60 * 1000;
 
@@ -72,7 +72,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = useCallback(async (usernameInput: string, passwordInput: string): Promise<boolean> => {
     try {
-      const response = await fetch(`${GOOGLE_SHEET_USERS_URL}&t=${Date.now()}`, {
+      const response = await fetch(getProxyUrl(`${GOOGLE_SHEET_USERS_URL}&t=${Date.now()}`), {
         method: 'GET',
         cache: 'no-cache'
       });
@@ -134,7 +134,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const getAllUsers = useCallback(async () => {
     try {
-      const response = await fetch(`${GOOGLE_SHEET_USERS_URL}&t=${Date.now()}`, {
+      const response = await fetch(getProxyUrl(`${GOOGLE_SHEET_USERS_URL}&t=${Date.now()}`), {
         cache: 'no-cache'
       });
       if (!response.ok) return [];

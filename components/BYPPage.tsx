@@ -9,7 +9,7 @@ import {
     Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { BYP_POULTRY_URL, CONTRIBUTION_DATA_URL } from '../config';
+import { BYP_POULTRY_URL, CONTRIBUTION_DATA_URL, getProxyUrl } from '../config';
 
 declare global {
   interface Window {
@@ -113,8 +113,8 @@ const BYPPage: React.FC = () => {
         setLoading(true);
         try {
             const [bypRes, contribRes] = await Promise.all([
-                fetch(`${BYP_POULTRY_URL}&cb=${Date.now()}`),
-                fetch(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)
+                fetch(getProxyUrl(`${BYP_POULTRY_URL}&cb=${Date.now()}`)),
+                fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`))
             ]);
 
             if (!bypRes.ok || !contribRes.ok) throw new Error("Failed to fetch data.");

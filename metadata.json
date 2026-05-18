@@ -1,6 +1,6 @@
 {
   "name": "Bhamini-P1198",
-  "description": "A comprehensive CSR MIS framework for Bhamini-P1198. Features include a Beneficiary Explorer with advanced analytics, interactive Asset Tracking, and field data management.",
+  "description": "A comprehensive CSR MIS framework for Bhamini-P1198. Features include advanced staff attendance monitoring with photo verification, interactive Beneficiary Explorer, and Asset Tracking dashboards.",
   "requestFramePermissions": ["camera", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

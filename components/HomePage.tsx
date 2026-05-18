@@ -6,7 +6,8 @@ import MediaUploadModal from './MediaUploadModal';
 import { useAuth } from '../hooks/useAuth';
 import { 
     GOOGLE_SHEET_PHOTOS_URL,
-    GOOGLE_APPS_SCRIPT_URL
+    GOOGLE_APPS_SCRIPT_URL,
+    getProxyUrl
 } from '../config';
 
 interface ImageData {
@@ -83,7 +84,7 @@ const HomePage: React.FC = () => {
     const fetchPhotos = useCallback(async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const response = await fetch(`${GOOGLE_SHEET_PHOTOS_URL}&t=${Date.now()}`);
+            const response = await fetch(getProxyUrl(`${GOOGLE_SHEET_PHOTOS_URL}&t=${Date.now()}`));
             const csvText = await response.text();
             const rows = parseCSVToObjects(csvText);
             const slider: ImageData[] = [];

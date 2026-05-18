@@ -11,7 +11,7 @@ import {
     Legend
 } from 'recharts';
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL } from '../config';
+import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL, getProxyUrl } from '../config';
 import ActivityPhotoUploadModal from './ActivityPhotoUploadModal';
 
 declare global {
@@ -617,9 +617,9 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
         setLoading(true);
         try {
             const [benRes, contribRes, cropsRes] = await Promise.all([
-                fetch(`${BENEFICIARY_DATA_URL}&cb=${Date.now()}`),
-                fetch(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`),
-                fetch(`${CROPS_DATA_URL}&cb=${Date.now()}`)
+                fetch(getProxyUrl(`${BENEFICIARY_DATA_URL}&cb=${Date.now()}`)),
+                fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)),
+                fetch(getProxyUrl(`${CROPS_DATA_URL}&cb=${Date.now()}`))
             ]);
 
             if (!benRes.ok || !contribRes.ok || !cropsRes.ok) throw new Error("Failed to fetch data.");

@@ -9,7 +9,7 @@ import {
     Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { ELEVATED_GOAT_SHED_URL, CONTRIBUTION_DATA_URL } from '../config';
+import { ELEVATED_GOAT_SHED_URL, CONTRIBUTION_DATA_URL, getProxyUrl } from '../config';
 
 declare global {
   interface Window {
@@ -113,8 +113,8 @@ const ElevatedGoatShedPage: React.FC = () => {
         setLoading(true);
         try {
             const [bypRes, contribRes] = await Promise.all([
-                fetch(`${ELEVATED_GOAT_SHED_URL}&cb=${Date.now()}`),
-                fetch(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)
+                fetch(getProxyUrl(`${ELEVATED_GOAT_SHED_URL}&cb=${Date.now()}`)),
+                fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`))
             ]);
 
             if (!bypRes.ok || !contribRes.ok) throw new Error("Failed to fetch data.");

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, Download, Filter, Search, ChevronDown, Package, Truck, Clock, CheckCircle, PieChart as PieIcon, X } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { ASSETS_DATA_URL, ASSET_DISTRIBUTION_URL } from '../config';
+import { ASSETS_DATA_URL, ASSET_DISTRIBUTION_URL, getProxyUrl } from '../config';
 
 interface DistributionRecord {
     materialId: string;
@@ -134,8 +134,8 @@ const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack 
             setLoading(true);
             try {
                 const [assetRes, distRes] = await Promise.all([
-                    fetch(`${ASSETS_DATA_URL}&t=${Date.now()}`),
-                    fetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`)
+                    fetch(getProxyUrl(`${ASSETS_DATA_URL}&t=${Date.now()}`)),
+                    fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`))
                 ]);
                 
                 const assetText = await assetRes.text();

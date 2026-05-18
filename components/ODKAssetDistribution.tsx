@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ASSET_DISTRIBUTION_URL } from '../config';
+import { ASSET_DISTRIBUTION_URL, getProxyUrl } from '../config';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line
@@ -83,7 +83,7 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
         const fetchData = async () => {
             setLoading(true);
             try {
-                const response = await fetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`);
+                const response = await fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`));
                 if (!response.ok) throw new Error('Failed to fetch distribution data');
                 const csvText = await response.text();
                 const parsed = parseCSV(csvText);

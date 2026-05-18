@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { generateCalendarDays } from '../utils/calendar';
 import AttendanceFormModal from './AttendanceFormModal';
-import { GOOGLE_SHEET_CSV_URL } from '../config';
+import { GOOGLE_SHEET_CSV_URL, getProxyUrl } from '../config';
 
 interface AttendanceRecord {
     timestamp: string;
@@ -67,7 +67,7 @@ const MarkAttendancePage: React.FC = () => {
     const fetchMarkedDates = useCallback(async () => {
         if (!user) return;
         try {
-            const response = await fetch(`${GOOGLE_SHEET_CSV_URL}&cb=${Date.now()}`);
+            const response = await fetch(getProxyUrl(`${GOOGLE_SHEET_CSV_URL}&cb=${Date.now()}`));
             const csvText = await response.text();
             const parsedData = parseCSV(csvText);
             const recordMap = new Map<string, AttendanceRecord>();

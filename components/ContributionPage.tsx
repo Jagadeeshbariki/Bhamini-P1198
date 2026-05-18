@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { BASELINE_DATA_URL, CONTRIBUTION_DATA_URL } from '../config';
+import { BASELINE_DATA_URL, CONTRIBUTION_DATA_URL, getProxyUrl } from '../config';
 
 interface BaselineRecord {
     farmerId: string;
@@ -129,8 +129,8 @@ const ContributionPage: React.FC = () => {
             setLoading(true);
             try {
                 const [baselineRes, contribRes] = await Promise.all([
-                    fetch(`${BASELINE_DATA_URL}&cb=${Date.now()}`),
-                    fetch(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)
+                    fetch(getProxyUrl(`${BASELINE_DATA_URL}&cb=${Date.now()}`)),
+                    fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`))
                 ]);
 
                 if (!baselineRes.ok || !contribRes.ok) throw new Error("Synchronization failure.");
