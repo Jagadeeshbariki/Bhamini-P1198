@@ -95,25 +95,14 @@ const MarkStaffAttendance: React.FC = () => {
         init();
     }, [user, fetchHistory]);
 
-    useEffect(() => {
-        if (stream && videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.onloadedmetadata = () => {
-                videoRef.current?.play().catch(e => {
-                    console.error("Autoplay fail:", e);
-                    setError("Feed ready. Tap to start manually.");
-                });
-            };
-        }
-    }, [stream]);
-
-    const startCamera = useCallback(async () => {
+    const startCamera = useCallback(async (modeOverride?: 'user' | 'environment') => {
+        const mode = modeOverride || facingMode;
         setError(null);
         setIsCameraLoading(true);
         try {
             const constraints = {
                 video: { 
-                    facingMode: { ideal: facingMode },
+                    facingMode: { ideal: mode },
                     width: { ideal: 1280 },
                     height: { ideal: 720 }
                 },
@@ -123,42 +112,42 @@ const MarkStaffAttendance: React.FC = () => {
             const s = await navigator.mediaDevices.getUserMedia(constraints);
             
             setStream(prev => {
-                if (prev) prev.getTracks().forEach(t => t.stop());
+                if (prev) {
+                    prev.getTracks().forEach(t => t.stop());
+                }
                 return s;
             });
             setIsCameraLoading(false);
         } catch (err: any) {
             console.error("Camera error:", err);
             setIsCameraLoading(false);
-            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                setError("Camera permission denied. Please allow camera access.");
+            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.message?.toLowerCase().includes('permission')) {
+                setError("Camera permission denied. Please click the camera icon in your browser address bar to allow access, or check your device settings.");
             } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
                 setError("No camera found on this device.");
             } else {
                 try {
-                    const simpleStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    // Try the most basic constraints possible as a final fallback
+                    const simpleStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: 'user' } 
+                    });
                     setStream(prev => {
                         if (prev) prev.getTracks().forEach(t => t.stop());
                         return simpleStream;
                     });
                 } catch {
-                    setError(`Camera Error: ${err.message || 'Access denied'}`);
+                    setError(`Camera Error: ${err.message || 'Access denied'}. Please ensure camera is not in use by another app.`);
                 }
             }
         }
     }, [facingMode]);
 
-    useEffect(() => {
-        const restart = async () => {
-            if (stream) {
-                await startCamera();
-            }
-        };
-        restart();
-    }, [facingMode, startCamera, stream]); 
-
     const toggleCamera = () => {
-        setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
+        const nextMode = facingMode === 'user' ? 'environment' : 'user';
+        setFacingMode(nextMode);
+        if (stream) {
+            startCamera(nextMode);
+        }
     };
 
     const stopCamera = () => {
@@ -168,35 +157,53 @@ const MarkStaffAttendance: React.FC = () => {
         }
     };
 
+    const onVideoRef = useCallback((el: HTMLVideoElement | null) => {
+        if (!el || !stream) return;
+        el.srcObject = stream;
+        el.onloadedmetadata = () => {
+            el.play().catch(e => {
+                console.error("Autoplay failed:", e);
+                setError("Tap the feed to start manually.");
+            });
+        };
+    }, [stream]);
+
     const capturePhoto = () => {
         const video = videoRef.current;
-        if (!video || !stream) {
-            setError("Camera feed not available.");
+        const currentStream = stream;
+        
+        if (!currentStream) {
+            setError("Camera not ready.");
             return;
         }
         
-        // Ensure video is actually providing data
-        if (video.videoWidth === 0 || video.videoHeight === 0) {
-            setError("Camera initializing... please try again in a second.");
+        // Use a temporary video element if the ref is lost or not ready
+        const captureVideo = video || document.createElement('video');
+        if (!video) {
+            captureVideo.srcObject = currentStream;
+            captureVideo.muted = true;
+            captureVideo.play();
+        }
+
+        if (captureVideo.videoWidth === 0 || captureVideo.videoHeight === 0) {
+            setError("Initializing feed... try again.");
             return;
         }
 
         try {
             const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+            canvas.width = captureVideo.videoWidth;
+            canvas.height = captureVideo.videoHeight;
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                ctx.drawImage(video, 0, 0);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                ctx.drawImage(captureVideo, 0, 0);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
                 setPhoto(dataUrl);
                 stopCamera();
-            } else {
-                setError("Failed to initialize capture canvas.");
             }
-        } catch (err: any) {
-            console.error("Capture error:", err);
-            setError("Capture failed: " + (err.message || "Unknown error"));
+        } catch (err) {
+            console.error("Capture failure:", err);
+            setError("Failed to capture image.");
         }
     };
 
@@ -329,7 +336,10 @@ const MarkStaffAttendance: React.FC = () => {
                             <div className="relative aspect-video bg-gray-100 dark:bg-gray-900 rounded-3xl overflow-hidden border-4 border-gray-50 dark:border-gray-800 shadow-inner group">
                                 {stream ? (
                                     <video 
-                                    ref={videoRef} 
+                                    ref={(el) => {
+                                        (videoRef as any).current = el;
+                                        onVideoRef(el);
+                                    }}
                                     autoPlay 
                                     playsInline 
                                     muted 
@@ -352,6 +362,13 @@ const MarkStaffAttendance: React.FC = () => {
                                                 {isCameraLoading ? 'Initializing...' : 'Open Live Camera'}
                                             </button>
                                             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tight mt-2">Gallery uploads are not permitted for attendance</p>
+                                            {error && error.includes('permission') && (
+                                                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/20 max-w-[280px]">
+                                                    <p className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase leading-relaxed">
+                                                        Tip: Look for the camera icon in your address bar to reset permissions. On iPhone, ensure you are using Safari.
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}
