@@ -50,12 +50,14 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
     const isProjectRole = user?.role === 'project' || user?.role === 'admin' || user?.role === 'da';
     const canAccessAdmin = user?.role === 'admin';
     const isStaffMarkingRole = user?.role === 'project' || user?.role === 'admin';
-    const isTLRole = user?.role === 'tl' || user?.role === 'admin';
+    const isTLOnlyRole = user?.role === 'tl';
+    const isTLOrAdmin = user?.role === 'tl' || user?.role === 'admin';
+    const hasAnyDashboardAccess = user && (user.role === 'admin' || user.role === 'da' || user.role === 'project' || user.role === 'field');
 
     return (
         <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 sticky top-0 z-50">
             <div className="container mx-auto px-4 lg:px-8">
-                <div className="flex items-center justify-between h-20">
+                <div className="flex flex-wrap items-center justify-between min-h-[5rem] py-2 gap-4">
                     <div className="flex items-center gap-4">
                         <button
                             onClick={() => onNavigate('home')}
@@ -71,8 +73,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                         </button>
                     </div>
 
-                    <div className="hidden xl:block">
-                        <div className="flex items-center gap-2">
+                    <div className="hidden lg:block flex-1">
+                        <div className="flex items-center justify-center gap-1 flex-wrap py-2">
                             <NavLink {...navLinkProps} page="home">Gallery</NavLink>
                             
                             {user && (
@@ -83,7 +85,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 </>
                             )}
 
-                            {user && !isTLRole && (
+                            {hasAnyDashboardAccess && !isTLOnlyRole && (
                                 <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
                             )}
 
@@ -102,7 +104,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
                             )}
 
-                            {isTLRole && (
+                            {isTLOrAdmin && (
                                 <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
                             )}
 
@@ -127,7 +129,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                     <div className="flex items-center gap-4">
                         <button
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
-                            className="xl:hidden p-2 rounded-2xl bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors hover:bg-gray-100"
+                            className="lg:hidden p-2 rounded-2xl bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors hover:bg-gray-100"
                         >
                             <svg className="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
                                 {isMenuOpen ? (
@@ -143,7 +145,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
 
             {/* Mobile Menu */}
             {isMenuOpen && (
-                <div className="xl:hidden bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 animate-fade-in overflow-hidden">
+                <div className="lg:hidden bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 animate-fade-in overflow-hidden">
                     <div className="px-4 py-6 flex flex-col gap-2">
                         <NavLink {...navLinkProps} page="home">Gallery</NavLink>
                         {user && (
@@ -151,13 +153,13 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 <NavLink {...navLinkProps} page="baseline">Baseline Explorer</NavLink>
                                 <NavLink {...navLinkProps} page="contribution">Contributions</NavLink>
                                 <NavLink {...navLinkProps} page="field-mis" primary>Target vs Achievements</NavLink>
-                                <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
                             </>
                         )}
-                        {user && (
-                            <>
-                                {isProjectRole && <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>}
-                            </>
+                        {hasAnyDashboardAccess && !isTLOnlyRole && (
+                            <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
+                        )}
+                        {isProjectRole && (
+                            <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>
                         )}
                         {isFieldRole && (
                             <>
@@ -168,7 +170,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                         {isStaffMarkingRole && (
                             <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
                         )}
-                        {isTLRole && (
+                        {isTLOrAdmin && (
                             <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
                         )}
                         {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Console</NavLink>}
