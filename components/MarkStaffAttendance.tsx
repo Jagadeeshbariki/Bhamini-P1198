@@ -102,6 +102,13 @@ const MarkStaffAttendance: React.FC = () => {
         const mode = modeOverride || facingMode;
         setError(null);
         setIsCameraLoading(true);
+
+        // Stop existing stream fully before requesting new one - critical for mobile
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            setStream(null);
+        }
+
         try {
             const constraints = {
                 video: { 
@@ -113,37 +120,26 @@ const MarkStaffAttendance: React.FC = () => {
             };
 
             const s = await navigator.mediaDevices.getUserMedia(constraints);
-            
-            setStream(prev => {
-                if (prev) {
-                    prev.getTracks().forEach(t => t.stop());
-                }
-                return s;
-            });
+            setStream(s);
             setIsCameraLoading(false);
         } catch (err: any) {
             console.error("Camera error:", err);
             setIsCameraLoading(false);
             if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.message?.toLowerCase().includes('permission')) {
-                setError("Camera permission denied. Please click the camera icon in your browser address bar to allow access, or check your device settings.");
-            } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-                setError("No camera found on this device.");
+                setError("Camera permission denied. Please allow access in browser settings.");
             } else {
                 try {
-                    // Try the most basic constraints possible as a final fallback
+                    // Fallback to simpler constraints
                     const simpleStream = await navigator.mediaDevices.getUserMedia({ 
-                        video: { facingMode: 'user' } 
+                        video: true 
                     });
-                    setStream(prev => {
-                        if (prev) prev.getTracks().forEach(t => t.stop());
-                        return simpleStream;
-                    });
-                } catch {
-                    setError(`Camera Error: ${err.message || 'Access denied'}. Please ensure camera is not in use by another app.`);
+                    setStream(simpleStream);
+                } catch (fallbackErr) {
+                    setError(`Camera Error: ${err.message || 'Access denied'}`);
                 }
             }
         }
-    }, [facingMode]);
+    }, [facingMode, stream]);
 
     const toggleCamera = () => {
         const nextMode = facingMode === 'user' ? 'environment' : 'user';

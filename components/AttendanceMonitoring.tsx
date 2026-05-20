@@ -24,9 +24,18 @@ interface StaffDaySummary {
     eveningLog?: StaffAttendanceLog;
 }
 
+const formatLocalDate = (date: Date | string) => {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const AttendanceMonitoring: React.FC = () => {
     const [logs, setLogs] = useState<StaffAttendanceLog[]>([]);
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()));
     const [selectedStaff, setSelectedStaff] = useState<StaffDaySummary | null>(null);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [viewMode, setViewMode] = useState<'calendar' | 'map'>('calendar');
@@ -122,8 +131,8 @@ const AttendanceMonitoring: React.FC = () => {
         return logs.filter(l => {
             if (!l.timestamp) return false;
             try {
-                const date = new Date(l.timestamp).toISOString().split('T')[0];
-                return date === selectedDate;
+                const dateStr = formatLocalDate(l.timestamp);
+                return dateStr === selectedDate;
             } catch {
                 return false;
             }
@@ -133,11 +142,11 @@ const AttendanceMonitoring: React.FC = () => {
     const calendarDays = useMemo(() => generateCalendarDays(currentMonth), [currentMonth]);
 
     const getAttendanceCountForDate = useCallback((date: Date) => {
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = formatLocalDate(date);
         const dayLogs = logs.filter(l => {
             if (!l.timestamp) return false;
             try {
-                return new Date(l.timestamp).toISOString().split('T')[0] === dateStr;
+                return formatLocalDate(l.timestamp) === dateStr;
             } catch {
                 return false;
             }
@@ -420,14 +429,15 @@ const AttendanceMonitoring: React.FC = () => {
                                 ))}
                                 {calendarDays.map((day, i) => {
                                     const isCurrentMonth = day.getMonth() === currentMonth.getMonth();
-                                    const isToday = day.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
-                                    const isSelected = day.toISOString().split('T')[0] === selectedDate;
+                                    const dateStr = formatLocalDate(day);
+                                    const isToday = dateStr === formatLocalDate(new Date());
+                                    const isSelected = dateStr === selectedDate;
                                     const count = getAttendanceCountForDate(day);
                                     
                                     return (
                                         <button 
                                             key={i}
-                                            onClick={() => setSelectedDate(day.toISOString().split('T')[0])}
+                                            onClick={() => setSelectedDate(dateStr)}
                                             className={`
                                                 relative h-24 p-3 flex flex-col items-start transition-all
                                                 ${!isCurrentMonth ? 'bg-gray-50/50 dark:bg-gray-900/50 text-gray-300 dark:text-gray-600' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10'}

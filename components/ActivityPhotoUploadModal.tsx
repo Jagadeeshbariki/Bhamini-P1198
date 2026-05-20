@@ -153,7 +153,7 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                                     <Camera className="w-8 h-8 text-indigo-600" />
                                 </div>
                                 <span className="mt-4 text-xs font-black text-gray-400 uppercase tracking-widest text-center px-4">Click to Capture or Choose from Gallery</span>
-                                <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                                <input type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
                             </label>
                         )}
                     </div>

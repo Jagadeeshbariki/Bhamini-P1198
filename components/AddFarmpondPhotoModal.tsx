@@ -216,6 +216,7 @@ const AddFarmpondPhotoModal: React.FC<AddFarmpondPhotoModalProps> = ({ data, onC
                                 <input 
                                     type="file" 
                                     accept="image/*"
+                                    capture="environment"
                                     onChange={handleImageChange}
                                     className="hidden"
                                     id="farm-image-upload"
