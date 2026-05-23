@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { STAFF_ATTENDANCE_LOG_URL, getProxyUrl } from '../config';
 import { MapPin, Calendar, Clock, ChevronRight, User, Shield, Info, AlertCircle, X, ChevronLeft, Map as MapIcon } from 'lucide-react';
-import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { generateCalendarDays } from '../utils/calendar';
 
 interface StaffAttendanceLog {
@@ -41,11 +40,12 @@ const AttendanceMonitoring: React.FC = () => {
     const [viewMode, setViewMode] = useState<'calendar' | 'map'>('calendar');
     const [mapLoaded, setMapLoaded] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [mapZoom, setMapZoom] = useState(12);
 
     const mapRef = useRef<HTMLDivElement>(null);
     const googleMap = useRef<any>(null);
     const markers = useRef<any[]>([]);
-    const clusterer = useRef<any>(null);
+    const lines = useRef<any[]>([]);
 
     // Load Google Maps Script
     useEffect(() => {
@@ -123,7 +123,7 @@ const AttendanceMonitoring: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         fetchLogs();
     }, [fetchLogs]);
 
@@ -187,6 +187,8 @@ const AttendanceMonitoring: React.FC = () => {
         return { morningCount, eveningCount, uniqueStaff };
     }, [filteredLogs]);
 
+    const prevLogsRef = useRef<string>('');
+    
     const initMap = useCallback(() => {
         if (!mapLoaded || !mapRef.current || !window.google) return;
 
@@ -199,63 +201,186 @@ const AttendanceMonitoring: React.FC = () => {
                 streetViewControl: false,
                 fullscreenControl: true,
             });
+
+            googleMap.current.addListener('zoom_changed', () => {
+                const newZoom = googleMap.current.getZoom();
+                setMapZoom((prev: number) => (newZoom !== prev ? newZoom : prev));
+            });
         }
 
         markers.current.forEach(m => m.setMap(null));
         markers.current = [];
-        if (clusterer.current) clusterer.current.clearMarkers();
+        lines.current.forEach(l => l.setMap(null));
+        lines.current = [];
 
         const bounds = new window.google.maps.LatLngBounds();
         let hasValidPoints = false;
 
+        const project = (lat: number, lng: number) => {
+            let siny = Math.sin((lat * Math.PI) / 180);
+            siny = Math.min(Math.max(siny, -0.9999), 0.9999);
+            return {
+                x: 128 + lng * (256 / 360),
+                y: 128 - 0.5 * Math.log((1 + siny) / (1 - siny)) * (256 / (2 * Math.PI))
+            };
+        };
+
+        const zoomLevel = mapZoom || 12;
+        const scale = Math.pow(2, zoomLevel);
+        const PIXEL_THRESHOLD = 80; // Distance in pixels to group markers
+        
+        type Cluster = {
+            centerLat: number;
+            centerLng: number;
+            pixelX: number;
+            pixelY: number;
+            logs: StaffAttendanceLog[];
+        };
+
+        const clusters: Cluster[] = [];
+
         filteredLogs.forEach(log => {
             if (isNaN(log.lat) || isNaN(log.lng) || log.lat === 0 || log.lng === 0) return;
-            hasValidPoints = true;
-
-            const position = { lat: log.lat, lng: log.lng };
-            const isMorning = log.slot === 'Morning';
             
-            const marker = new window.google.maps.Marker({
-                position,
-                map: googleMap.current,
-                title: `${log.staffName} (${log.slot})`,
-                icon: {
-                    path: window.google.maps.SymbolPath.CIRCLE,
-                    fillColor: isMorning ? '#10b981' : '#e11d48',
-                    fillOpacity: 1,
-                    strokeColor: '#FFFFFF',
-                    strokeWeight: 2,
-                    scale: 8,
+            const worldCoord = project(log.lat, log.lng);
+            const pixelX = worldCoord.x * scale;
+            const pixelY = worldCoord.y * scale;
+
+            let foundCluster = null;
+            for (const cluster of clusters) {
+                const dx = cluster.pixelX - pixelX;
+                const dy = cluster.pixelY - pixelY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < PIXEL_THRESHOLD) {
+                    foundCluster = cluster;
+                    break;
                 }
-            });
+            }
 
-            const infoWindowContent = `
-                <div style="padding: 12px; min-width: 180px; font-family: sans-serif;">
-                    <div style="font-size: 10px; font-weight: 800; color: ${isMorning ? '#10b981' : '#e11d48'}; text-transform: uppercase;">${log.slot} Log</div>
-                    <div style="font-size: 14px; font-weight: 900; margin: 4px 0;">${log.staffName}</div>
-                    <div style="font-size: 11px; color: #666; margin-bottom: 8px;">${new Date(log.timestamp).toLocaleTimeString()}</div>
-                    <button onclick="window.dispatchEvent(new CustomEvent('map-select-staff', {detail: '${log.username}'}))" style="width: 100%; padding: 6px; background: #4f46e5; color: white; border: none; border-radius: 4px; font-size: 10px; font-weight: 800; cursor: pointer;">VIEW FULL DETAILS</button>
-                </div>
-            `;
-
-            const infoWindow = new window.google.maps.InfoWindow({
-                content: infoWindowContent
-            });
-
-            marker.addListener('click', () => {
-                infoWindow.open(googleMap.current, marker);
-            });
-
-            markers.current.push(marker);
-            bounds.extend(position);
+            if (foundCluster) {
+                foundCluster.logs.push(log);
+                const total = foundCluster.logs.length;
+                foundCluster.centerLat = ((foundCluster.centerLat * (total - 1)) + log.lat) / total;
+                foundCluster.centerLng = ((foundCluster.centerLng * (total - 1)) + log.lng) / total;
+                
+                const newCenterCoord = project(foundCluster.centerLat, foundCluster.centerLng);
+                foundCluster.pixelX = newCenterCoord.x * scale;
+                foundCluster.pixelY = newCenterCoord.y * scale;
+            } else {
+                clusters.push({
+                    centerLat: log.lat,
+                    centerLng: log.lng,
+                    pixelX,
+                    pixelY,
+                    logs: [log]
+                });
+            }
         });
 
-        if (hasValidPoints) {
-            googleMap.current.fitBounds(bounds);
-        }
+        clusters.forEach(cluster => {
+            const groupLogs = cluster.logs;
+            const hasMultiple = groupLogs.length > 1;
+            const centerPosition = { lat: cluster.centerLat, lng: cluster.centerLng };
 
-        clusterer.current = new MarkerClusterer({ map: googleMap.current, markers: markers.current });
-    }, [filteredLogs, mapLoaded]);
+            if (hasMultiple) {
+                // To display an indicator at the exact center (optional, but good for context)
+                const centerMarker = new window.google.maps.Marker({
+                    position: centerPosition,
+                    map: googleMap.current,
+                    icon: {
+                        path: window.google.maps.SymbolPath.CIRCLE,
+                        fillColor: '#4f46e5',
+                        fillOpacity: 1,
+                        strokeColor: '#FFFFFF',
+                        strokeWeight: 2,
+                        scale: 4,
+                    }
+                });
+                markers.current.push(centerMarker);
+            }
+
+            groupLogs.forEach((log, index) => {
+                hasValidPoints = true;
+                const isMorning = log.slot === 'Morning';
+                let markerPosition = { lat: log.lat, lng: log.lng };
+
+                if (hasMultiple) {
+                    const angle = (index * 2 * Math.PI) / groupLogs.length;
+                    
+                    const zoomLevel = mapZoom || 12;
+                    // Always spread to prevent label overlap regardless of zoom
+                    const pixelDistance = 85 + (groupLogs.length * 10); 
+                    
+                    const latDegreesPerPixel = (360 / (256 * Math.pow(2, zoomLevel))) * Math.cos((cluster.centerLat * Math.PI) / 180);
+                    const lngDegreesPerPixel = 360 / (256 * Math.pow(2, zoomLevel));
+                    
+                    markerPosition = {
+                        lat: cluster.centerLat + (pixelDistance * latDegreesPerPixel) * Math.sin(angle),
+                        lng: cluster.centerLng + (pixelDistance * lngDegreesPerPixel) * Math.cos(angle)
+                    };
+
+                    const line = new window.google.maps.Polyline({
+                        path: [centerPosition, markerPosition],
+                        geodesic: true,
+                        strokeColor: '#FFFFFF',
+                        strokeOpacity: 0.8,
+                        strokeWeight: 4,
+                        map: googleMap.current
+                    });
+                    lines.current.push(line);
+                }
+
+                const marker = new window.google.maps.Marker({
+                    position: markerPosition,
+                    map: googleMap.current,
+                    title: `${log.staffName} (${log.slot})`,
+                    label: {
+                        text: log.staffName,
+                        color: '#111827',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        className: 'bg-white/90 backdrop-blur-md px-2 py-0.5 rounded-lg shadow-sm border border-gray-200 translate-y-5 whitespace-nowrap'
+                    },
+                    icon: {
+                        path: window.google.maps.SymbolPath.CIRCLE,
+                        fillColor: isMorning ? '#10b981' : '#e11d48',
+                        fillOpacity: 1,
+                        strokeColor: '#FFFFFF',
+                        strokeWeight: 2,
+                        scale: 8,
+                    }
+                });
+
+                const infoWindowContent = `
+                    <div style="padding: 12px; min-width: 180px; font-family: sans-serif;">
+                        <div style="font-size: 10px; font-weight: 800; color: ${isMorning ? '#10b981' : '#e11d48'}; text-transform: uppercase;">${log.slot} Log</div>
+                        <div style="font-size: 14px; font-weight: 900; margin: 4px 0;">${log.staffName}</div>
+                        <div style="font-size: 11px; color: #666; margin-bottom: 8px;">${new Date(log.timestamp).toLocaleTimeString()}</div>
+                        <button onclick="window.dispatchEvent(new CustomEvent('map-select-staff', {detail: '${log.username}'}))" style="width: 100%; padding: 6px; background: #4f46e5; color: white; border: none; border-radius: 4px; font-size: 10px; font-weight: 800; cursor: pointer;">VIEW FULL DETAILS</button>
+                    </div>
+                `;
+
+                const infoWindow = new window.google.maps.InfoWindow({
+                    content: infoWindowContent
+                });
+
+                marker.addListener('click', () => {
+                    infoWindow.open(googleMap.current, marker);
+                });
+
+                markers.current.push(marker);
+                bounds.extend(markerPosition);
+                // Also extend to center if multiple, to ensure view encompasses it
+                if (hasMultiple) bounds.extend(centerPosition);
+            });
+        });
+
+        const currentLogsHash = filteredLogs.map(l => `${l.username}-${l.timestamp}`).join(',');
+        if (hasValidPoints && prevLogsRef.current !== currentLogsHash) {
+            googleMap.current.fitBounds(bounds);
+            prevLogsRef.current = currentLogsHash;
+        }
+    }, [filteredLogs, mapLoaded, mapZoom]);
 
     useEffect(() => {
         if (viewMode === 'map') {
