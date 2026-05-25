@@ -282,22 +282,7 @@ const AttendanceMonitoring: React.FC = () => {
             const hasMultiple = groupLogs.length > 1;
             const centerPosition = { lat: cluster.centerLat, lng: cluster.centerLng };
 
-            if (hasMultiple) {
-                // To display an indicator at the exact center (optional, but good for context)
-                const centerMarker = new window.google.maps.Marker({
-                    position: centerPosition,
-                    map: googleMap.current,
-                    icon: {
-                        path: window.google.maps.SymbolPath.CIRCLE,
-                        fillColor: '#4f46e5',
-                        fillOpacity: 1,
-                        strokeColor: '#FFFFFF',
-                        strokeWeight: 2,
-                        scale: 4,
-                    }
-                });
-                markers.current.push(centerMarker);
-            }
+            // Removed center indicator to prefer exact location markers for lines
 
             groupLogs.forEach((log, index) => {
                 hasValidPoints = true;
@@ -319,8 +304,9 @@ const AttendanceMonitoring: React.FC = () => {
                         lng: cluster.centerLng + (pixelDistance * lngDegreesPerPixel) * Math.cos(angle)
                     };
 
+                    const originalLogPosition = { lat: log.lat, lng: log.lng };
                     const line = new window.google.maps.Polyline({
-                        path: [centerPosition, markerPosition],
+                        path: [originalLogPosition, markerPosition],
                         geodesic: true,
                         strokeColor: '#FFFFFF',
                         strokeOpacity: 0.8,
@@ -328,6 +314,20 @@ const AttendanceMonitoring: React.FC = () => {
                         map: googleMap.current
                     });
                     lines.current.push(line);
+
+                    const baseMarker = new window.google.maps.Marker({
+                        position: originalLogPosition,
+                        map: googleMap.current,
+                        icon: {
+                            path: window.google.maps.SymbolPath.CIRCLE,
+                            fillColor: '#4f46e5',
+                            fillOpacity: 1,
+                            strokeColor: '#FFFFFF',
+                            strokeWeight: 2,
+                            scale: 4,
+                        }
+                    });
+                    markers.current.push(baseMarker);
                 }
 
                 const marker = new window.google.maps.Marker({

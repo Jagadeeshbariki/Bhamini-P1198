@@ -11,7 +11,7 @@ import {
     Legend
 } from 'recharts';
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL, getProxyUrl } from '../config';
+import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL, ASSET_DISTRIBUTION_URL, getProxyUrl } from '../config';
 import ActivityPhotoUploadModal from './ActivityPhotoUploadModal';
 
 declare global {
@@ -48,6 +48,7 @@ interface BeneficiaryRecord {
     photo: string;
     contribution?: number;
     cropDetails?: CropRecord[];
+    materialsReceived?: Record<string, number>;
 }
 
 interface ActivityDashboardsProps {
@@ -230,15 +231,53 @@ const ActivityDashboardContent: React.FC<{
     const clusters = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.cluster))).sort()], [data]);
 
     const downloadCSV = () => {
-        const headers = ['HH ID', 'Name', 'Activity', 'GP', 'Village', 'Age', 'Ben ID', 'Cluster', 'Contribution', 'Lat', 'Lng', 'Photo'];
-        const csvContent = [
-            headers.join(','),
-            ...filteredData.map(d => [
-                `"${d.hhId}"`, `"${d.name}"`, `"${d.activity}"`, `"${d.gp}"`, `"${d.village}"`, 
-                `"${d.age}"`, `"${d.benId}"`, `"${d.cluster}"`, d.contribution || 0,
-                d.lat, d.lng, `"${d.photo}"`
-            ].join(','))
-        ].join('\n');
+        let csvContent = '';
+        const isCrops = data[0]?.activity === 'crops';
+        
+        if (isCrops) {
+            // Find all unique material names to create dynamic columns
+            const materialSet = new Set<string>();
+            filteredData.forEach(d => {
+                if (d.materialsReceived) {
+                    Object.keys(d.materialsReceived).forEach(k => materialSet.add(k));
+                }
+            });
+            const materialHeaders = Array.from(materialSet);
+            
+            const headers = [
+                'Cluster', 'GP', 'Village', 'Beneficiary Name', 'HH ID', 'Ben ID', 
+                'Main Crop', 'Extent', ...materialHeaders
+            ];
+            
+            const rows: any[][] = [];
+            filteredData.forEach(d => {
+                const crops = d.cropDetails && d.cropDetails.length > 0 
+                    ? d.cropDetails 
+                    : [{ mainCrop: 'N/A', extent: 0 }];
+                
+                crops.forEach(c => {
+                    const baseRow = [
+                        `"${d.cluster}"`, `"${d.gp}"`, `"${d.village}"`, `"${d.name}"`, 
+                        `"${d.hhId}"`, `"${d.benId}"`, `"${c.mainCrop || 'N/A'}"`, c.extent || 0
+                    ];
+                    
+                    const materialRow = materialHeaders.map(m => d.materialsReceived?.[m] || 0);
+                    rows.push([...baseRow, ...materialRow]);
+                });
+            });
+            
+            csvContent = [headers.map(h => `"${h}"`).join(','), ...rows.map(r => r.join(','))].join('\n');
+        } else {
+            const headers = ['HH ID', 'Name', 'Activity', 'GP', 'Village', 'Age', 'Ben ID', 'Cluster', 'Contribution', 'Lat', 'Lng', 'Photo'];
+            csvContent = [
+                headers.join(','),
+                ...filteredData.map(d => [
+                    `"${d.hhId}"`, `"${d.name}"`, `"${d.activity}"`, `"${d.gp}"`, `"${d.village}"`, 
+                    `"${d.age}"`, `"${d.benId}"`, `"${d.cluster}"`, d.contribution || 0,
+                    d.lat, d.lng, `"${d.photo}"`
+                ].join(','))
+            ].join('\n');
+        }
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
@@ -616,17 +655,19 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [benRes, contribRes, cropsRes] = await Promise.all([
+            const [benRes, contribRes, cropsRes, assetRes] = await Promise.all([
                 fetch(getProxyUrl(`${BENEFICIARY_DATA_URL}&cb=${Date.now()}`)),
                 fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)),
-                fetch(getProxyUrl(`${CROPS_DATA_URL}&cb=${Date.now()}`))
+                fetch(getProxyUrl(`${CROPS_DATA_URL}&cb=${Date.now()}`)),
+                fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&cb=${Date.now()}`))
             ]);
 
-            if (!benRes.ok || !contribRes.ok || !cropsRes.ok) throw new Error("Failed to fetch data.");
+            if (!benRes.ok || !contribRes.ok || !cropsRes.ok || !assetRes.ok) throw new Error("Failed to fetch data.");
 
             const benText = await benRes.text();
             const contribText = await contribRes.text();
             const cropsText = await cropsRes.text();
+            const assetText = await assetRes.text();
 
             const parsedBens = parseCSV(benText);
             
@@ -652,6 +693,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             };
             const parsedContribs = rawCsv(contribText);
             const parsedCropsRaw = rawCsv(cropsText);
+            const parsedAssets = rawCsv(assetText);
 
             const cropsMap = new Map<string, CropRecord[]>();
             const cropsInfoMap = new Map<string, any>(); // To store name, gp, village for synthetic records
@@ -715,10 +757,30 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 }
             });
 
+            // Parse Assets for materialsReceived
+            const assetMap = new Map<string, Record<string, number>>();
+            parsedAssets.forEach(row => {
+                const activityStr = String(row['ACTIVITY'] || '').toUpperCase();
+                if (activityStr.includes('CROP')) {
+                    const hhId = row['FARMER ID'] || row['BEN_ID'] || row['BENID'] || row['HH ID'] || row['HHID'];
+                    if (hhId) {
+                        const normId = normalizeId(hhId);
+                        const current = assetMap.get(normId) || {};
+                        const materialName = row['THIS_MATERIAL_LABEL'];
+                        const count = parseFloat(row['MATERIALS_DETAILS-MATERIAL_COUNT'] || '0') || 0;
+                        if (materialName && count > 0) {
+                            current[materialName] = (current[materialName] || 0) + count;
+                        }
+                        assetMap.set(normId, current);
+                    }
+                }
+            });
+
             const processedBens = parsedBens.map(b => {
                 const normId = normalizeId(b.hhId);
                 const userContribs = contribMap.get(normId) || {};
                 const cropDetails = cropsMap.get(normId);
+                const userAssets = assetMap.get(normId) || {};
                 
                 // Find contribution matching activity
                 const activityUpper = b.activity.toUpperCase();
@@ -736,7 +798,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 
                 const contribution = activityKey ? userContribs[activityKey] : 0;
 
-                return { ...b, contribution, cropDetails, normId };
+                return { ...b, contribution, cropDetails, normId, materialsReceived: userAssets };
             });
 
             // Augment with missing crops records
@@ -766,7 +828,8 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                         lng: info?.lng || 0,
                         photo: '',
                         contribution: 0,
-                        cropDetails: plots
+                        cropDetails: plots,
+                        materialsReceived: assetMap.get(normId) || {}
                     });
                 }
             });
