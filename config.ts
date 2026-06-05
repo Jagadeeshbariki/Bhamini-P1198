@@ -27,6 +27,8 @@ export const MAINTENANCE_BILLS_URL = 'https://docs.google.com/spreadsheets/d/e/2
 
 // 7. ASSET TRACKING
 export const ASSETS_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRFh_YS7XbVtnjgN7RNYgyNDZtWrobCdLqrAuvXLFBREwGnBHrQA6M0oJMmGPE6tnGhcZR1I-8Uv7cs/pub?gid=0&single=true&output=csv';
+export const MATERIAL_CONTRIBUTION_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRFh_YS7XbVtnjgN7RNYgyNDZtWrobCdLqrAuvXLFBREwGnBHrQA6M0oJMmGPE6tnGhcZR1I-8Uv7cs/pub?gid=2092417444&single=true&output=csv';
+
 
 // 8. CONTRIBUTION DATA (New)
 export const CONTRIBUTION_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRDbPYgtli_sy1l6FFZPG1-FHxb1Xc0GXrK2Sc6RnQQ3SjtXZmQpUl3q2wQjMWDgP8VyORvNmBo_CPi/pub?gid=978234209&single=true&output=csv';
@@ -49,9 +51,11 @@ export const ELEVATED_GOAT_SHED_URL = 'https://docs.google.com/spreadsheets/d/e/
 
 // 15. CROPS DATA
 export const CROPS_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR4QtZipnTgk2e8RU7NapbDg0b0re6_0YRrkd8fK34HEibBwpx6sa0g5gR9WK4UP3bEnuYSmO7fZpCN/pub?gid=1609179150&single=true&output=csv';
+export const BIO_INPUTS_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR4QtZipnTgk2e8RU7NapbDg0b0re6_0YRrkd8fK34HEibBwpx6sa0g5gR9WK4UP3bEnuYSmO7fZpCN/pub?gid=1233605541&single=true&output=csv'; // Add Bio Inputs CSV URL here
+export const HARVEST_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR4QtZipnTgk2e8RU7NapbDg0b0re6_0YRrkd8fK34HEibBwpx6sa0g5gR9WK4UP3bEnuYSmO7fZpCN/pub?gid=282552033&single=true&output=csv'; // Add Harvest CSV URL here
 
-// 16. REGISTRATION TARGETS
-export const BENEFICIARY_REGISTRATION_TARGETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS-qO_e8y_uE_w-5k-k-k-k-k-k-k-k-k-k-k-k-k-k-k/pub?gid=0&single=true&output=csv';
+// 16. MASTER TARGETS (Registration & Contributions)
+export const MASTER_TARGETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQsKt9qZZldhzxePq4bcrvOP8HN-xHBkhUa3eqowfWLIlBZwtLWCdh-2KvrolnkY0Y5_eNs6f00wKy2/pub?gid=0&single=true&output=csv';
 
 // 17. STAFF ATTENDANCE
 export const STAFF_ATTENDANCE_LOG_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQgDjzuMMVuzxXeuCn6QmSMMAGuZJYXc6hdlhl42lD70miLVJgSpqQYRCllJBTuSmkriBOIbvExxfAC/pub?gid=0&single=true&output=csv';
@@ -62,4 +66,7 @@ export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycb
 
 export const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200';
 
-export const getProxyUrl = (url: string) => url;
+export const getProxyUrl = (url: string) => {
+  if (url.startsWith('/api/') || url.startsWith('http://localhost') || url.startsWith('https://script.google.com')) return url;
+  return `/api/sheet-proxy?url=${encodeURIComponent(url)}`;
+};

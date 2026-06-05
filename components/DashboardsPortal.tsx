@@ -63,7 +63,7 @@ const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
     ];
 
     return (
-        <div className="max-w-7xl mx-auto space-y-12 pb-20">
+        <div className="w-full space-y-12 pb-20">
 
             {/* Header */}
             <div className="relative">

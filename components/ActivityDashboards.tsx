@@ -8,10 +8,10 @@ import {
 } from 'lucide-react';
 import { 
     ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
-    Legend
+    Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL, ASSET_DISTRIBUTION_URL, getProxyUrl } from '../config';
+import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL, ASSET_DISTRIBUTION_URL, BIO_INPUTS_DATA_URL, HARVEST_DATA_URL, getProxyUrl } from '../config';
 import ActivityPhotoUploadModal from './ActivityPhotoUploadModal';
 
 declare global {
@@ -34,6 +34,22 @@ interface CropRecord {
     season: string;
 }
 
+interface BioInputRecord {
+    date: string;
+    type: string;
+    photo: string;
+    parentKey?: string;
+}
+
+interface HarvestRecord {
+    date: string;
+    yieldQty: string;
+    photo: string;
+    parentKey?: string;
+    cropName?: string;
+    yieldKgs?: number;
+}
+
 interface BeneficiaryRecord {
     hhId: string;
     name: string;
@@ -49,6 +65,8 @@ interface BeneficiaryRecord {
     contribution?: number;
     cropDetails?: CropRecord[];
     materialsReceived?: Record<string, number>;
+    bioInputs?: BioInputRecord[];
+    harvests?: HarvestRecord[];
 }
 
 interface ActivityDashboardsProps {
@@ -107,6 +125,7 @@ const ActivityDashboardContent: React.FC<{
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const [showCropDetails, setShowCropDetails] = useState<BeneficiaryRecord | null>(null);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [chartFilter, setChartFilter] = useState<{ chart: string, category: string } | null>(null);
 
     // Load Google Maps Script
     useEffect(() => {
@@ -126,7 +145,7 @@ const ActivityDashboardContent: React.FC<{
         }
     }, []);
 
-    const filteredData = useMemo(() => {
+    const baseFilteredData = useMemo(() => {
         return data.filter(d => {
             const matchesCluster = selectedCluster === 'All' || d.cluster === selectedCluster;
             const matchesSearch = d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -135,21 +154,76 @@ const ActivityDashboardContent: React.FC<{
         });
     }, [data, selectedCluster, searchQuery]);
 
+    const filteredData = useMemo(() => {
+        return baseFilteredData.filter(d => {
+            if (!chartFilter) return true;
+            
+            if (chartFilter.chart === 'cluster') {
+                return d.cluster === chartFilter.category;
+            } else if (chartFilter.chart === 'bio') {
+                const hasBio = d.bioInputs && d.bioInputs.length > 0;
+                return chartFilter.category === 'Data Received' ? !!hasBio : !hasBio;
+            } else if (chartFilter.chart === 'harvest') {
+                const hasHarvest = d.harvests && d.harvests.length > 0;
+                return chartFilter.category === 'Data Received' ? !!hasHarvest : !hasHarvest;
+            } else if (chartFilter.chart === 'expectedCrop') {
+                return d.cropDetails && d.cropDetails.some(c => (c.mainCrop || 'UNKNOWN').toUpperCase() === chartFilter.category);
+            } else if (chartFilter.chart === 'harvestedCrop') {
+                return d.harvests && d.harvests.some(h => (h.cropName || 'UNKNOWN').toUpperCase() === chartFilter.category);
+            }
+            return true;
+        });
+    }, [baseFilteredData, chartFilter]);
+
     const stats = useMemo(() => {
-        const achieved = filteredData.length;
-        const totalContribution = filteredData.reduce((sum, d) => sum + (d.contribution || 0), 0);
+        const achieved = baseFilteredData.length;
+        const totalContribution = baseFilteredData.reduce((sum, d) => sum + (d.contribution || 0), 0);
         
+        let bioInputsCount = 0;
+        let harvestsCount = 0;
+        baseFilteredData.forEach(d => {
+            if (d.bioInputs && d.bioInputs.length > 0) bioInputsCount++;
+            if (d.harvests && d.harvests.length > 0) harvestsCount++;
+        });
+
         // Calculate total acres if this is the Crops dashboard
-        const totalAcres = filteredData.reduce((sum, d) => {
+        const totalAcres = baseFilteredData.reduce((sum, d) => {
             const cropSum = d.cropDetails?.reduce((s, c) => s + (c.extent || 0), 0) || 0;
             return sum + cropSum;
         }, 0);
 
         const clusterMap: Record<string, number> = {};
-        filteredData.forEach(d => {
+        const cropYields: Record<string, number> = {};
+        const cropAcres: Record<string, number> = {};
+
+        baseFilteredData.forEach(d => {
             clusterMap[d.cluster] = (clusterMap[d.cluster] || 0) + 1;
+            
+            if (d.harvests) {
+                d.harvests.forEach(h => {
+                    const cname = h.cropName || 'UNKNOWN';
+                    cropYields[cname.toUpperCase()] = (cropYields[cname.toUpperCase()] || 0) + (h.yieldKgs || 0);
+                });
+            }
+            if (d.cropDetails) {
+                d.cropDetails.forEach(c => {
+                    const mname = c.mainCrop || 'UNKNOWN';
+                    cropAcres[mname.toUpperCase()] = (cropAcres[mname.toUpperCase()] || 0) + (c.extent || 0);
+                });
+            }
         });
+        
         const clusterDist = Object.entries(clusterMap).map(([name, value]) => ({ name, value }));
+        
+        const topExpectedCrops = Object.entries(cropAcres)
+            .map(([name, value]) => ({ name, value: Number(value.toFixed(2)) }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 8); // top 8 to fit in chart
+            
+        const topHarvestedCrops = Object.entries(cropYields)
+            .map(([name, value]) => ({ name, value: Number(value.toFixed(2)) }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 8); // top 8
 
         const mapPoints = filteredData
             .filter(d => d.lat !== 0 && d.lng !== 0)
@@ -164,8 +238,8 @@ const ActivityDashboardContent: React.FC<{
                 benId: d.benId
             }));
 
-        return { achieved, totalContribution, clusterDist, mapPoints, totalAcres };
-    }, [filteredData]);
+        return { achieved, totalContribution, clusterDist, mapPoints, totalAcres, bioInputsCount, harvestsCount, topExpectedCrops, topHarvestedCrops };
+    }, [baseFilteredData, filteredData]);
 
     // Initialize Map
     const mapInstance = useRef<any>(null);
@@ -293,101 +367,311 @@ const ActivityDashboardContent: React.FC<{
     return (
         <div className="space-y-4 md:space-y-6 p-2 md:p-4">
             {/* KPI Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
-                    <div className="p-3 md:p-4 bg-indigo-50 dark:bg-indigo-900/40 rounded-xl md:rounded-2xl text-indigo-600">
-                        <Users className="w-5 h-5 md:w-6 md:h-6" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+                <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700 flex items-center gap-2">
+                    <div className="p-2 bg-indigo-50 dark:bg-indigo-900/40 rounded-lg text-indigo-600">
+                        <Users className="w-4 h-4 md:w-5 md:h-5" />
                     </div>
                     <div>
-                        <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Beneficiaries</p>
-                        <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{stats.achieved}</p>
+                        <p className="text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest">Total Beneficiaries</p>
+                        <p className="text-lg md:text-xl font-black text-gray-900 dark:text-white">{stats.achieved}</p>
                     </div>
                 </div>
 
                 {stats.totalAcres > 0 ? (
-                    <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
-                        <div className="p-3 md:p-4 bg-amber-50 dark:bg-amber-900/40 rounded-xl md:rounded-2xl text-amber-600">
-                            <TrendingUp className="w-5 h-5 md:w-6 md:h-6" />
+                    <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700 flex items-center gap-2">
+                        <div className="p-2 bg-amber-50 dark:bg-amber-900/40 rounded-lg text-amber-600">
+                            <TrendingUp className="w-4 h-4 md:w-5 md:h-5" />
                         </div>
                         <div>
-                            <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Acres Covered</p>
-                            <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{stats.totalAcres.toFixed(2)} Ac</p>
+                            <p className="text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest">Total Acres Covered</p>
+                            <p className="text-lg md:text-xl font-black text-gray-900 dark:text-white">{stats.totalAcres.toFixed(2)} Ac</p>
                         </div>
                     </div>
                 ) : (
-                    <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
-                        <div className="p-3 md:p-4 bg-emerald-50 dark:bg-emerald-900/40 rounded-xl md:rounded-2xl text-emerald-600">
-                            <IndianRupee className="w-5 h-5 md:w-6 md:h-6" />
+                    <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700 flex items-center gap-2">
+                        <div className="p-2 bg-emerald-50 dark:bg-emerald-900/40 rounded-lg text-emerald-600">
+                            <IndianRupee className="w-4 h-4 md:w-5 md:h-5" />
                         </div>
                         <div>
-                            <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Contribution</p>
-                            <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">₹{stats.totalContribution.toLocaleString()}</p>
+                            <p className="text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest">Total Contribution</p>
+                            <p className="text-lg md:text-xl font-black text-gray-900 dark:text-white">₹{stats.totalContribution.toLocaleString()}</p>
                         </div>
                     </div>
                 )}
 
-                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 flex items-center gap-3 md:gap-4">
-                    <div className="p-3 md:p-4 bg-amber-50 dark:bg-amber-900/40 rounded-xl md:rounded-2xl text-amber-600">
-                        <Globe className="w-5 h-5 md:w-6 md:h-6" />
+                <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700 flex items-center gap-2">
+                    <div className="p-2 bg-amber-50 dark:bg-amber-900/40 rounded-lg text-amber-600">
+                        <Globe className="w-4 h-4 md:w-5 md:h-5" />
                     </div>
                     <div>
-                        <p className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Mapped Locations</p>
-                        <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{stats.mapPoints.length}</p>
+                        <p className="text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest">Mapped Locations</p>
+                        <p className="text-lg md:text-xl font-black text-gray-900 dark:text-white">{stats.mapPoints.length}</p>
                     </div>
                 </div>
             </div>
 
-            {/* Charts & Map */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
-                            <PieChartIcon className="w-4 h-4 text-indigo-600" />
+            {/* Charts */}
+            <div className={`grid grid-cols-1 ${data[0]?.activity?.toLowerCase() === 'crops' ? 'lg:grid-cols-3' : 'lg:grid-cols-1'} gap-2 md:gap-3`}>
+                <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-1.5">
+                            <PieChartIcon className="w-3 h-3 text-indigo-600" />
                             Cluster Distribution
                         </h3>
                     </div>
-                    <div className="h-64">
+                    <div className="h-40">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
                                     data={stats.clusterDist}
                                     cx="50%"
                                     cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
+                                    innerRadius={40}
+                                    outerRadius={55}
                                     paddingAngle={5}
                                     dataKey="value"
+                                    onClick={(data) => setChartFilter({ chart: 'cluster', category: data.name })}
+                                    style={{ cursor: 'pointer' }}
+                                    label={({ cx, cy, midAngle, innerRadius, outerRadius, value, index }) => {
+                                        const RADIAN = Math.PI / 180;
+                                        const radius = outerRadius + 10;
+                                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                        return value > 0 ? (
+                                            <text x={x} y={y} fill="currentColor" className="text-gray-600 dark:text-gray-300" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10} fontWeight="bold">
+                                                {value}
+                                            </text>
+                                        ) : null;
+                                    }}
+                                    labelLine={false}
                                 >
                                     {stats.clusterDist.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                        <Cell 
+                                            key={`cell-${index}`} 
+                                            fill={CHART_COLORS[index % CHART_COLORS.length]} 
+                                            opacity={chartFilter && (chartFilter.chart !== 'cluster' || chartFilter.category !== entry.name) ? 0.3 : 1}
+                                        />
                                     ))}
                                 </Pie>
                                 <Tooltip 
-                                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}
+                                    itemStyle={{ fontSize: '10px' }}
                                 />
-                                <Legend verticalAlign="bottom" height={36}/>
+                                <Legend verticalAlign="bottom" height={20} iconSize={8} wrapperStyle={{ fontSize: '9px' }}/>
                             </PieChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 p-2 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden min-h-[300px]">
-                    <div ref={mapRef} className="w-full h-full min-h-[300px] rounded-2xl" />
+                {data[0]?.activity?.toLowerCase() === 'crops' && (
+                    <>
+                        <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-1.5">
+                                    <PieChartIcon className="w-3 h-3 text-emerald-600" />
+                                    Bio Inputs Apply Data Status
+                                </h3>
+                            </div>
+                            <div className="h-40">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={[
+                                                { name: 'Data Received', value: stats.bioInputsCount },
+                                                { name: 'Pending', value: stats.achieved > stats.bioInputsCount ? stats.achieved - stats.bioInputsCount : 0 }
+                                            ]}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={40}
+                                            outerRadius={55}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                            onClick={(data) => setChartFilter({ chart: 'bio', category: data.name })}
+                                            style={{ cursor: 'pointer' }}
+                                            label={({ cx, cy, midAngle, innerRadius, outerRadius, value, index }) => {
+                                                const RADIAN = Math.PI / 180;
+                                                const radius = outerRadius + 10;
+                                                const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                                                const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                                return value > 0 ? (
+                                                    <text x={x} y={y} fill="currentColor" className="text-gray-600 dark:text-gray-300" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10} fontWeight="bold">
+                                                        {value}
+                                                    </text>
+                                                ) : null;
+                                            }}
+                                            labelLine={false}
+                                        >
+                                            <Cell fill="#10b981" opacity={chartFilter && (chartFilter.chart !== 'bio' || chartFilter.category !== 'Data Received') ? 0.3 : 1} />
+                                            <Cell fill="#f3f4f6" opacity={chartFilter && (chartFilter.chart !== 'bio' || chartFilter.category !== 'Pending') ? 0.3 : 1} />
+                                        </Pie>
+                                        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }} itemStyle={{ fontSize: '10px' }} />
+                                        <Legend verticalAlign="bottom" height={20} iconSize={8} wrapperStyle={{ fontSize: '9px' }}/>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                        
+                        <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-1.5">
+                                    <PieChartIcon className="w-3 h-3 text-amber-600" />
+                                    Harvest Data Status
+                                </h3>
+                            </div>
+                            <div className="h-40">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={[
+                                                { name: 'Data Received', value: stats.harvestsCount },
+                                                { name: 'Pending', value: stats.achieved > stats.harvestsCount ? stats.achieved - stats.harvestsCount : 0 }
+                                            ]}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={40}
+                                            outerRadius={55}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                            onClick={(data) => setChartFilter({ chart: 'harvest', category: data.name })}
+                                            style={{ cursor: 'pointer' }}
+                                            label={({ cx, cy, midAngle, innerRadius, outerRadius, value, index }) => {
+                                                const RADIAN = Math.PI / 180;
+                                                const radius = outerRadius + 10;
+                                                const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                                                const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                                return value > 0 ? (
+                                                    <text x={x} y={y} fill="currentColor" className="text-gray-600 dark:text-gray-300" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10} fontWeight="bold">
+                                                        {value}
+                                                    </text>
+                                                ) : null;
+                                            }}
+                                            labelLine={false}
+                                        >
+                                            <Cell fill="#f59e0b" opacity={chartFilter && (chartFilter.chart !== 'harvest' || chartFilter.category !== 'Data Received') ? 0.3 : 1} />
+                                            <Cell fill="#f3f4f6" opacity={chartFilter && (chartFilter.chart !== 'harvest' || chartFilter.category !== 'Pending') ? 0.3 : 1} />
+                                        </Pie>
+                                        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }} itemStyle={{ fontSize: '10px' }} />
+                                        <Legend verticalAlign="bottom" height={20} iconSize={8} wrapperStyle={{ fontSize: '9px' }}/>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
+
+            {/* Added Crops Insights Bar Charts */}
+            {data[0]?.activity?.toLowerCase() === 'crops' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 md:gap-3 mb-2 md:gap-3 mb-2 md:mb-3">
+                    {stats.topExpectedCrops.length > 0 && (
+                        <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                                    Top Crops by Area (Acres)
+                                </h3>
+                            </div>
+                            <div className="h-56">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={stats.topExpectedCrops} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" className="dark:stroke-gray-700" />
+                                        <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
+                                        <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 10, fill: '#374151', fontWeight: 600 }} />
+                                        <Tooltip 
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', fontSize: '12px', fontWeight: 700 }}
+                                            cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }} 
+                                        />
+                                        <Bar 
+                                            dataKey="value" 
+                                            fill="#3b82f6" 
+                                            radius={[0, 4, 4, 0]} 
+                                            barSize={20} 
+                                            onClick={(data) => setChartFilter({ chart: 'expectedCrop', category: data.name })}
+                                            style={{ cursor: 'pointer' }}
+                                            label={{ position: 'right', fill: '#3b82f6', fontSize: 10, fontWeight: 'bold' }} 
+                                        >
+                                            {stats.topExpectedCrops.map((entry, index) => (
+                                                <Cell 
+                                                    key={`cell-${index}`} 
+                                                    opacity={chartFilter && (chartFilter.chart !== 'expectedCrop' || chartFilter.category !== entry.name) ? 0.3 : 1}
+                                                />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {stats.topHarvestedCrops.length > 0 && (
+                        <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                                    Top Harvested Crops (KG)
+                                </h3>
+                            </div>
+                            <div className="h-56">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={stats.topHarvestedCrops} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" className="dark:stroke-gray-700" />
+                                        <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
+                                        <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 10, fill: '#374151', fontWeight: 600 }} />
+                                        <Tooltip 
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', fontSize: '12px', fontWeight: 700 }}
+                                            cursor={{ fill: 'rgba(16, 185, 129, 0.05)' }} 
+                                        />
+                                        <Bar 
+                                            dataKey="value" 
+                                            fill="#10b981" 
+                                            radius={[0, 4, 4, 0]} 
+                                            barSize={20} 
+                                            onClick={(data) => setChartFilter({ chart: 'harvestedCrop', category: data.name })}
+                                            style={{ cursor: 'pointer' }}
+                                            label={{ position: 'right', fill: '#10b981', fontSize: 10, fontWeight: 'bold' }} 
+                                        >
+                                            {stats.topHarvestedCrops.map((entry, index) => (
+                                                <Cell 
+                                                    key={`cell-${index}`} 
+                                                    opacity={chartFilter && (chartFilter.chart !== 'harvestedCrop' || chartFilter.category !== entry.name) ? 0.3 : 1}
+                                                />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
                 </div>
+            )}
+
+            {/* Map */}
+            <div className={`bg-white dark:bg-gray-800 p-2 rounded-xl shadow-md border border-gray-100 dark:border-gray-700 mb-2 md:mb-3 overflow-hidden ${data[0]?.activity?.toLowerCase() === 'crops' ? 'h-[200px] lg:w-1/2 mx-auto' : 'h-[300px] min-h-[300px]'}`}>
+                <div ref={mapRef} className="w-full h-full rounded-lg" />
             </div>
 
             {/* Table & Filters */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div className="p-4 md:p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row gap-4 items-center justify-between">
-                    <div className="relative w-full md:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Search by ID or Name..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500"
-                        />
+                    <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-center">
+                        <div className="relative w-full md:w-64 flex-shrink-0">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search by ID or Name..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500"
+                            />
+                        </div>
+                        {chartFilter && (
+                            <button
+                                onClick={() => setChartFilter(null)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-xl transition-colors text-[10px] font-black uppercase tracking-wider whitespace-nowrap"
+                            >
+                                <X className="w-3 h-3" />
+                                Clear Filter ({chartFilter.category})
+                            </button>
+                        )}
                     </div>
                     <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
                         <button 
@@ -433,7 +717,7 @@ const ActivityDashboardContent: React.FC<{
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                             {filteredData.map((row, idx) => (
                                 <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30 transition-colors">
-                                    <td className="px-6 py-4 cursor-pointer" onClick={() => row.cropDetails && setShowCropDetails(row)}>
+                                    <td className="px-6 py-4 cursor-pointer" onClick={() => (row.cropDetails || row.bioInputs || row.harvests) && setShowCropDetails(row)}>
                                         <div className="flex items-center gap-2">
                                             <div>
                                                 <p className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">{row.name}</p>
@@ -444,6 +728,19 @@ const ActivityDashboardContent: React.FC<{
                                                     {row.cropDetails.length} Plots
                                                 </span>
                                             )}
+                                            {row.bioInputs && row.bioInputs.length > 0 && (
+                                                <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 text-[8px] font-black rounded uppercase">
+                                                    Bio Applied
+                                                </span>
+                                            )}
+                                            {row.harvests && row.harvests.length > 0 && (() => {
+                                                const totalYield = row.harvests.reduce((acc, h) => acc + (h.yieldKgs || 0), 0);
+                                                return (
+                                                    <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-600 text-[8px] font-black rounded uppercase">
+                                                        Harvested {totalYield > 0 ? `(${Number(totalYield).toFixed(1)} KG)` : ''}
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -558,6 +855,74 @@ const ActivityDashboardContent: React.FC<{
                                     )}
                                 </div>
                             ))}
+                            
+                            {showCropDetails.bioInputs && showCropDetails.bioInputs.length > 0 && (
+                                <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                                    <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Bio Inputs Applied</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {showCropDetails.bioInputs.map((bio, i) => (
+                                            <div key={i} className="bg-emerald-50/50 dark:bg-emerald-900/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 flex gap-4">
+                                                {bio.photo && (
+                                                    <div 
+                                                        className="w-16 h-16 rounded-xl overflow-hidden cursor-pointer flex-shrink-0"
+                                                        onClick={(e) => { e.stopPropagation(); setPreviewImage(bio.photo); }}
+                                                    >
+                                                        <img src={bio.photo} alt="Bio Input" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                    </div>
+                                                )}
+                                                <div className="flex flex-col justify-center">
+                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{bio.date || 'Unknown Date'}</p>
+                                                    <p className="text-sm font-black text-emerald-600 uppercase">{bio.type}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {showCropDetails.harvests && showCropDetails.harvests.length > 0 && (() => {
+                                const consolidated = showCropDetails.harvests.reduce((acc: Record<string, number>, h) => {
+                                    const crop = h.cropName || 'Unknown Crop';
+                                    acc[crop] = (acc[crop] || 0) + (h.yieldKgs || 0);
+                                    return acc;
+                                }, {});
+
+                                return (
+                                    <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                                        <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Harvest Data</h3>
+                                        
+                                        {Object.keys(consolidated).length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mb-4">
+                                                {Object.entries(consolidated).map(([crop, totalKgs], i) => (
+                                                    <div key={i} className="bg-amber-100 dark:bg-amber-900/40 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 flex items-center gap-2">
+                                                        <span className="font-bold text-amber-900 dark:text-amber-100 text-[11px] uppercase tracking-wider">{crop}</span>
+                                                        <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{Number(totalKgs).toFixed(1)} KG</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            {showCropDetails.harvests!.map((harvest, i) => (
+                                                <div key={i} className="bg-amber-50/50 dark:bg-amber-900/10 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex gap-4">
+                                                    {harvest.photo && (
+                                                        <div 
+                                                            className="w-16 h-16 rounded-xl overflow-hidden cursor-pointer flex-shrink-0"
+                                                            onClick={(e) => { e.stopPropagation(); setPreviewImage(harvest.photo); }}
+                                                        >
+                                                            <img src={harvest.photo} alt="Harvest" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                        </div>
+                                                    )}
+                                                    <div className="flex flex-col justify-center">
+                                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{harvest.date || 'Unknown Date'}</p>
+                                                        <p className="text-sm font-black text-amber-600 uppercase">{harvest.yieldQty}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 </div>
@@ -655,19 +1020,32 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [benRes, contribRes, cropsRes, assetRes] = await Promise.all([
+            const fetchSafe = async (url: string) => {
+                if (!url) return { ok: true, text: async () => '' };
+                try {
+                    return await fetch(getProxyUrl(`${url}&cb=${Date.now()}`));
+                } catch {
+                    return { ok: false, text: async () => '' };
+                }
+            };
+
+            const [benRes, contribRes, cropsRes, assetRes, bioRes, harvRes] = await Promise.all([
                 fetch(getProxyUrl(`${BENEFICIARY_DATA_URL}&cb=${Date.now()}`)),
                 fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)),
-                fetch(getProxyUrl(`${CROPS_DATA_URL}&cb=${Date.now()}`)),
-                fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&cb=${Date.now()}`))
+                fetchSafe(CROPS_DATA_URL),
+                fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&cb=${Date.now()}`)),
+                fetchSafe(BIO_INPUTS_DATA_URL),
+                fetchSafe(HARVEST_DATA_URL)
             ]);
 
-            if (!benRes.ok || !contribRes.ok || !cropsRes.ok || !assetRes.ok) throw new Error("Failed to fetch data.");
+            if (!benRes.ok || !contribRes.ok || !cropsRes.ok) throw new Error("Failed to fetch primary data.");
 
             const benText = await benRes.text();
             const contribText = await contribRes.text();
             const cropsText = await cropsRes.text();
-            const assetText = await assetRes.text();
+            const assetText = (assetRes.ok && assetRes.text) ? await assetRes.text() : '';
+            const bioText = await bioRes.text();
+            const harvestText = await harvRes.text();
 
             const parsedBens = parseCSV(benText);
             
@@ -694,6 +1072,74 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             const parsedContribs = rawCsv(contribText);
             const parsedCropsRaw = rawCsv(cropsText);
             const parsedAssets = rawCsv(assetText);
+            const parsedBio = rawCsv(bioText);
+            const parsedHarvest = rawCsv(harvestText);
+
+        const bioMap = new Map<string, BioInputRecord[]>();
+        parsedBio.forEach(row => {
+            const hhId = row['HH_ID'] || row['FARMER_ID'] || row['HH ID'] || row['HHID'] || row['FARMER ID'] || row['FID'] || Object.values(row).find((v:any) => normalizeId(v).startsWith('F'));
+            if (hhId) {
+                const normId = normalizeId(hhId);
+                const current = bioMap.get(normId) || [];
+                
+                // Construct type including quantity if available
+                let typeStr = row['INPUTS_APPLIED'] || row['TYPE'] || row['BIO_INPUT_TYPE'] || row['BIO INPUT TYPE'] || row['BIOINPUT'] || 'Unknown';
+                const qtyKeys = Object.keys(row).filter(k => k.includes('QUANTITY') || k.includes('KGS'));
+                const qtyStrs = qtyKeys.map(k => row[k]).filter(v => v);
+                if (qtyStrs.length > 0) {
+                    typeStr += ` (${qtyStrs.join(', ')})`;
+                }
+                if (row['BIOINPUTS_SOURCE']) {
+                    typeStr += ` - Source: ${row['BIOINPUTS_SOURCE']}`;
+                }
+
+                let finalPhoto = formatDriveUrl(row['PHOTOS'] || row['PHOTO'] || row['IMAGE'] || row['PICTURE'] || row['PHOTO_LINK'] || '');
+                if (finalPhoto && !finalPhoto.startsWith('http') && row['PARENT_KEY']) {
+                    finalPhoto = `/api/odk/image?form=${encodeURIComponent('NF- Activities')}&submissionId=${encodeURIComponent(row['PARENT_KEY'])}&filename=${encodeURIComponent(finalPhoto)}`;
+                }
+
+                current.push({
+                    date: row['APPLICATION_DATE_BIO_INPUT'] || row['DATE'] || row['SUBMISSIONDATE'] || row['SUBMISSION DATE'] || '',
+                    type: typeStr,
+                    photo: finalPhoto,
+                    parentKey: row['PARENT_KEY']
+                });
+                bioMap.set(normId, current);
+            }
+        });
+
+        const harvestMap = new Map<string, HarvestRecord[]>();
+        parsedHarvest.forEach(row => {
+            const hhId = row['HH_ID'] || row['FARMER_ID'] || row['HH ID'] || row['HHID'] || row['FARMER ID'] || row['FID'] || Object.values(row).find((v:any) => normalizeId(v).startsWith('F'));
+            if (hhId) {
+                const normId = normalizeId(hhId);
+                const current = harvestMap.get(normId) || [];
+                
+                // Fetch quantity
+                const yieldRaw = row['YIELD_QNTL'] || row['YIELD'] || row['QTY'] || row['QUANTITY'] || row['HARVEST_AMT'] || '0';
+                const yieldKgs = parseFloat(yieldRaw) || 0;
+                
+                const cropName = row['CROP_HARVESTED'] || row['CROP_TYPE'] || row['CROP'] || 'Unknown Crop';
+                const yieldStr = yieldKgs > 0 ? `${cropName} - ${yieldKgs} KG` : cropName;
+
+                let finalPhoto = formatDriveUrl(row['PHOTO'] || row['PHOTOS'] || row['IMAGE'] || row['PICTURE'] || row['PHOTO_LINK'] || '');
+                if (finalPhoto && !finalPhoto.startsWith('http') && row['PARENT_KEY']) {
+                    finalPhoto = `/api/odk/image?form=${encodeURIComponent('NF- Activities')}&submissionId=${encodeURIComponent(row['PARENT_KEY'])}&filename=${encodeURIComponent(finalPhoto)}`;
+                }
+
+                current.push({
+                    date: row['DATE_HARVEST'] || row['DATE'] || row['SUBMISSIONDATE'] || row['SUBMISSION DATE'] || '',
+                    yieldQty: yieldStr,
+                    photo: finalPhoto,
+                    parentKey: row['PARENT_KEY'],
+                    cropName: cropName,
+                    yieldKgs: yieldKgs
+                });
+                harvestMap.set(normId, current);
+            }
+        });
+
+
 
             const cropsMap = new Map<string, CropRecord[]>();
             const cropsInfoMap = new Map<string, any>(); // To store name, gp, village for synthetic records
@@ -779,8 +1225,11 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             const processedBens = parsedBens.map(b => {
                 const normId = normalizeId(b.hhId);
                 const userContribs = contribMap.get(normId) || {};
-                const cropDetails = cropsMap.get(normId);
+                const isCropsActivity = b.activity.toLowerCase() === 'crops';
+                const cropDetails = isCropsActivity ? cropsMap.get(normId) : undefined;
                 const userAssets = assetMap.get(normId) || {};
+                const bioInputs = isCropsActivity ? bioMap.get(normId) : undefined;
+                const harvests = isCropsActivity ? harvestMap.get(normId) : undefined;
                 
                 // Find contribution matching activity
                 const activityUpper = b.activity.toUpperCase();
@@ -798,7 +1247,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 
                 const contribution = activityKey ? userContribs[activityKey] : 0;
 
-                return { ...b, contribution, cropDetails, normId, materialsReceived: userAssets };
+                return { ...b, contribution, cropDetails, normId, materialsReceived: userAssets, bioInputs, harvests };
             });
 
             // Augment with missing crops records
@@ -829,7 +1278,9 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                         photo: '',
                         contribution: 0,
                         cropDetails: plots,
-                        materialsReceived: assetMap.get(normId) || {}
+                        materialsReceived: assetMap.get(normId) || {},
+                        bioInputs: bioMap.get(normId),
+                        harvests: harvestMap.get(normId)
                     });
                 }
             });
@@ -873,7 +1324,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
     }
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 pb-20">
+        <div className="w-full space-y-8 pb-20">
             {onBack && (
                 <button 
                     onClick={onBack}

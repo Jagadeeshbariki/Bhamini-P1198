@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { MIS_TARGETS_URL, ASSETS_DATA_URL, ASSET_DISTRIBUTION_URL, BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, BUDGET_CSV_URL, BENEFICIARY_REGISTRATION_TARGETS_URL, getProxyUrl } from '../config';
+import { MIS_TARGETS_URL, ASSETS_DATA_URL, ASSET_DISTRIBUTION_URL, BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, BUDGET_CSV_URL, MASTER_TARGETS_URL, getProxyUrl } from '../config';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 interface RegistrationTarget {
@@ -112,7 +112,7 @@ const FieldMISPage: React.FC = () => {
                 fetch(getProxyUrl(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`)),
                 fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&t=${Date.now()}`)),
                 fetch(getProxyUrl(`${BUDGET_CSV_URL}&t=${Date.now()}`)),
-                fetch(getProxyUrl(`${BENEFICIARY_REGISTRATION_TARGETS_URL}&t=${Date.now()}`))
+                fetch(getProxyUrl(`${MASTER_TARGETS_URL}&t=${Date.now()}`))
             ]);
 
             if (!misRes.ok) throw new Error("Could not sync MIS data");
@@ -691,7 +691,7 @@ const FieldMISPage: React.FC = () => {
     );
 
     return (
-        <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
+        <div className="space-y-6 w-full pb-12 animate-fade-in">
             {/* Header with Selection */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 bg-white dark:bg-gray-800 p-6 rounded-[2rem] shadow-xl border border-gray-100 dark:border-gray-700">
                 <div className="space-y-1">

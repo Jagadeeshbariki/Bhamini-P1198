@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 
 async function startServer() {
@@ -34,7 +33,7 @@ async function startServer() {
     });
 
     if (!res.ok) {
-      throw new Error(`Authentication failed: ${res.status}`);
+      throw new Error(`401`);
     }
 
     const data: any = await res.json();
@@ -44,18 +43,21 @@ async function startServer() {
   }
 
   app.get("/api/odk/image", async (req, res) => {
-    const { submissionId, filename } = req.query;
+    const { submissionId, filename, form } = req.query;
     
     if (!submissionId || !filename || typeof submissionId !== 'string' || typeof filename !== 'string') {
       return res.status(400).send('Missing or invalid params');
     }
 
-    // Clean submissionId if it has uuid: prefix
-    const cleanSubmissionId = submissionId.startsWith('uuid:') ? submissionId.substring(5) : submissionId;
+    // Ensure submissionId has uuid: prefix
+    const fullSubmissionId = submissionId.startsWith('uuid:') ? submissionId : `uuid:${submissionId}`;
+    const formId = form && typeof form === 'string' ? form : 'Material_distribution';
 
     try {
       const token = await getOdkToken();
-      const url = `https://central.wassan.org/v1/projects/3/forms/Material_distribution/submissions/${cleanSubmissionId}/attachments/${filename}`;
+      // ODK central API correctly handles URL encoded forms if the path segment is suitably encoded.
+      // E.g., encodeURIComponent('NF- Activities') -> 'NF-%20Activities'
+      const url = `https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(fullSubmissionId)}/attachments/${encodeURIComponent(filename)}`;
 
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -74,6 +76,9 @@ async function startServer() {
       const buffer = Buffer.from(arrayBuffer);
       res.send(buffer);
     } catch (error: any) {
+      if (error.message === '401') {
+         return res.status(401).send('ODK Authentication Failed');
+      }
       console.error('ODK Proxy Error:', error);
       res.status(500).send(error.message || 'Internal Server Error');
     }
@@ -117,6 +122,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

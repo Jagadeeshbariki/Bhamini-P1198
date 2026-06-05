@@ -23,9 +23,7 @@ async function getOdkToken() {
     });
 
     if (!res.ok) {
-        const errText = await res.text();
-        console.error('Failed to get ODK session:', errText);
-        throw new Error(`Authentication failed: ${res.status}`);
+        throw new Error(`401`);
     }
 
     const data = await res.json();
@@ -41,9 +39,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).send('Missing or invalid params');
     }
 
+    const fullSubmissionId = submissionId.startsWith('uuid:') ? submissionId : `uuid:${submissionId}`;
     try {
         const token = await getOdkToken();
-        const url = `https://central.wassan.org/v1/projects/3/forms/Material_distribution/submissions/${submissionId}/attachments/${filename}`;
+        const url = `https://central.wassan.org/v1/projects/3/forms/Material_distribution/submissions/${fullSubmissionId}/attachments/${filename}`;
 
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -63,7 +62,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const buffer = Buffer.from(arrayBuffer);
         return res.send(buffer);
     } catch (error: any) {
-        console.error('ODK Proxy Error:', error);
+        if (error.message === '401') {
+             return res.status(401).send('ODK Authentication Failed');
+        }
         return res.status(500).send(error.message || 'Internal Server Error');
     }
 }

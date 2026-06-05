@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
 interface HeaderProps {
@@ -42,6 +42,24 @@ const NavLink: React.FC<NavLinkProps> = ({ page: targetPage, currentPage, onNavi
 const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) => {
     const { user } = useAuth();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isVisible, setIsVisible] = useState(true);
+    const [lastScrollY, setLastScrollY] = useState(0);
+
+    useEffect(() => {
+        const controlNavbar = () => {
+            if (typeof window !== 'undefined') {
+                if (window.scrollY > lastScrollY && window.scrollY > 100) {
+                    setIsVisible(false); // scroll down -> hide
+                } else {
+                    setIsVisible(true); // scroll up -> show
+                }
+                setLastScrollY(window.scrollY);
+            }
+        };
+
+        window.addEventListener('scroll', controlNavbar);
+        return () => window.removeEventListener('scroll', controlNavbar);
+    }, [lastScrollY]);
 
     const navLinkProps = { currentPage, onNavigate, setIsMenuOpen };
 
@@ -55,8 +73,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
     const hasAnyDashboardAccess = user && (user.role === 'admin' || user.role === 'da' || user.role === 'project' || user.role === 'field');
 
     return (
-        <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 sticky top-0 z-50">
-            <div className="container mx-auto px-4 lg:px-8">
+        <header className={`bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 fixed w-full top-0 z-50 transition-transform duration-300 ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+            <div className="w-full px-4 md:px-6 lg:px-8">
                 <div className="flex flex-wrap items-center justify-between min-h-[5rem] py-2 gap-4">
                     <div className="flex items-center gap-4">
                         <button

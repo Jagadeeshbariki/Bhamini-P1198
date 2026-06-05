@@ -10,7 +10,7 @@ const parseGenericCSV = (csvText: string) => {
         const line = lineText.trim();
         if (!line) return null;
         
-        let values: string[] = [];
+        const values: string[] = [];
         let inQuotes = false;
         let cur = '';
         for (let i = 0; i < line.length; i++) {
