@@ -16,7 +16,6 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   Legend,
-  LabelList,
 } from "recharts";
 
 interface BaselineRecord {
@@ -215,9 +214,8 @@ const ContributionPage: React.FC = () => {
           fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&cb=${Date.now()}`)),
         ]);
 
-        if (!baselineRes.ok || !contribRes.ok) {
-          throw new Error(`Synchronization failure. baseline: ${baselineRes.status}, contrib: ${contribRes.status}`);
-        }
+        if (!baselineRes.ok || !contribRes.ok)
+          throw new Error("Synchronization failure.");
 
         const baselineText = await baselineRes.text();
         const contribText = await contribRes.text();
@@ -411,10 +409,10 @@ const ContributionPage: React.FC = () => {
             const code = getFuzzyValue(row, ['THIS_MATERIAL_CODE']);
             const materialId = getFuzzyValue(row, ['MATERIAL_ID']);
             const label = getFuzzyValue(row, ['THIS_MATERIAL_LABEL']);
-            const count = parseFloat(getFuzzyValue(row, ['MATERIALS_DETAILS-MATERIAL_COUNT'])) || 1;
+            let count = parseFloat(getFuzzyValue(row, ['MATERIALS_DETAILS-MATERIAL_COUNT'])) || 1;
             const distDate = getFuzzyValue(row, ['MATERIALS_DETAILS-DISTRIBUTED_DATE', 'DATE']);
             
-            const unitContrib = activityTargetMap.get(materialId.trim().toLowerCase()) 
+            let unitContrib = activityTargetMap.get(materialId.trim().toLowerCase()) 
                  || activityTargetMap.get(code.trim().toLowerCase()) 
                  || activityTargetMap.get(label.trim().toLowerCase()) 
                  || 0;
@@ -469,8 +467,8 @@ const ContributionPage: React.FC = () => {
                   ) || 0;
 
                 if (amount > 0) {
-                  const products: { name: string; count: number; unitContrib: number; date: string }[] = farmerProductsMap.get(`${normId}-${normalizedActivity}`) || [];
-                  const indTarget = farmerTargetMap.get(`${normId}-${normalizedActivity}`) || 0;
+                  let products: { name: string; count: number; unitContrib: number; date: string }[] = farmerProductsMap.get(`${normId}-${normalizedActivity}`) || [];
+                  let indTarget = farmerTargetMap.get(`${normId}-${normalizedActivity}`) || 0;
                   merged.push({
                     id: `${normId}-${colName}-${rowIndex}`,
                     farmerId: baseline.farmerId,
@@ -753,19 +751,15 @@ const ContributionPage: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={stats.clusterShare}
-                    margin={{ top: 25, right: 0, left: -25, bottom: 45 }}
+                    margin={{ top: 10, right: 0, left: -25, bottom: 65 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                     <XAxis dataKey="label" angle={-45} textAnchor="end" height={60} axisLine={false} tickLine={false} tick={{ fontSize: 8, fill: "#9CA3AF", fontWeight: "bold" }} interval={0} />
                     <YAxis domain={[0, 'auto']} tickCount={8} axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#9CA3AF" }} tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} />
                     <RechartsTooltip cursor={{ fill: "transparent" }} contentStyle={{ borderRadius: "1rem", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)", fontSize: "12px" }} formatter={(value: number) => `₹${value.toLocaleString()}`} />
-                    <Legend iconSize={8} wrapperStyle={{ fontSize: '9px', paddingBottom: '20px', top: -5 }} verticalAlign="top" align="right" />
-                    <Bar dataKey="target" name="Target" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={24}>
-                      <LabelList dataKey="target" position="top" formatter={(val: number) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} style={{ fontSize: '9px', fill: '#6B7280', fontWeight: 'bold' }} offset={5} />
-                    </Bar>
-                    <Bar dataKey="val" name="Collected" fill="#10B981" radius={[4, 4, 0, 0]} barSize={24}>
-                      <LabelList dataKey="val" position="top" formatter={(val: number) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} style={{ fontSize: '9px', fill: '#6B7280', fontWeight: 'bold' }} offset={5} />
-                    </Bar>
+                    <Legend iconSize={8} wrapperStyle={{ fontSize: '10px', paddingTop: '20px' }} verticalAlign="bottom" align="center" />
+                    <Bar dataKey="target" name="Target" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={16} />
+                    <Bar dataKey="val" name="Collected" fill="#10B981" radius={[4, 4, 0, 0]} barSize={16} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -787,19 +781,15 @@ const ContributionPage: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={stats.activityShare}
-                    margin={{ top: 25, right: 0, left: -25, bottom: 45 }}
+                    margin={{ top: 10, right: 0, left: -25, bottom: 65 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                     <XAxis dataKey="label" angle={-45} textAnchor="end" height={60} axisLine={false} tickLine={false} tick={{ fontSize: 8, fill: "#9CA3AF", fontWeight: "bold" }} interval={0} />
                     <YAxis domain={[0, 'auto']} tickCount={8} axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#9CA3AF" }} tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} />
                     <RechartsTooltip cursor={{ fill: "transparent" }} contentStyle={{ borderRadius: "1rem", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)", fontSize: "12px" }} formatter={(value: number) => `₹${value.toLocaleString()}`} />
-                    <Legend iconSize={8} wrapperStyle={{ fontSize: '9px', paddingBottom: '20px', top: -5 }} verticalAlign="top" align="right" />
-                    <Bar dataKey="target" name="Target" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={24}>
-                      <LabelList dataKey="target" position="top" formatter={(val: number) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} style={{ fontSize: '9px', fill: '#6B7280', fontWeight: 'bold' }} offset={5} />
-                    </Bar>
-                    <Bar dataKey="val" name="Collected" fill="#10B981" radius={[4, 4, 0, 0]} barSize={24}>
-                      <LabelList dataKey="val" position="top" formatter={(val: number) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} style={{ fontSize: '9px', fill: '#6B7280', fontWeight: 'bold' }} offset={5} />
-                    </Bar>
+                    <Legend iconSize={8} wrapperStyle={{ fontSize: '10px', paddingTop: '20px' }} verticalAlign="bottom" align="center" />
+                    <Bar dataKey="target" name="Target" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={16} />
+                    <Bar dataKey="val" name="Collected" fill="#10B981" radius={[4, 4, 0, 0]} barSize={16} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

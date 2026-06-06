@@ -174,7 +174,7 @@ const AppContent: React.FC = () => {
     return (
         <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors">
             <Header currentPage={page} onNavigate={handleNavigate} onLogout={handleLogout} />
-            <main className="flex-grow w-full px-4 md:px-6 lg:px-8 pt-24 lg:pt-32">
+            <main className="flex-grow w-full p-4 md:p-6 lg:p-8 pt-24 lg:pt-32">
                 {renderPage()}
             </main>
             <footer className="bg-white dark:bg-gray-900 border-t dark:border-gray-800 p-6 text-center text-sm text-gray-500 dark:text-gray-400">

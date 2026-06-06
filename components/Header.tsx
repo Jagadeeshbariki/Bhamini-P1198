@@ -74,7 +74,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
 
     return (
         <header className={`bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 fixed w-full top-0 z-50 transition-transform duration-300 ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
-            <div className="w-full px-4 md:px-6 lg:px-8">
+            <div className="container mx-auto px-4 lg:px-8">
                 <div className="flex flex-wrap items-center justify-between min-h-[5rem] py-2 gap-4">
                     <div className="flex items-center gap-4">
                         <button

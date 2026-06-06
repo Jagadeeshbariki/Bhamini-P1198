@@ -691,7 +691,7 @@ const FieldMISPage: React.FC = () => {
     );
 
     return (
-        <div className="space-y-6 w-full pb-12 animate-fade-in">
+        <div className="space-y-6 w-full mx-auto pb-12 animate-fade-in">
             {/* Header with Selection */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 bg-white dark:bg-gray-800 p-6 rounded-[2rem] shadow-xl border border-gray-100 dark:border-gray-700">
                 <div className="space-y-1">
@@ -984,7 +984,7 @@ const FieldMISPage: React.FC = () => {
                                                 cursor={{ fill: '#f3f4f6' }}
                                                 contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                             />
-                                            <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px' }} />
+                                            <Legend verticalAlign="bottom" align="center" wrapperStyle={{ paddingTop: '20px' }} />
                                             <Bar dataKey="received" name="Received Qty" fill="#4f46e5" radius={[0, 4, 4, 0]} barSize={20} />
                                             <Bar dataKey="distributed" name="Distributed Qty" fill="#10b981" radius={[0, 4, 4, 0]} barSize={20} />
                                         </BarChart>
@@ -1122,7 +1122,7 @@ const FieldMISPage: React.FC = () => {
                                             <Tooltip 
                                                 contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                             />
-                                            <Legend verticalAlign="top" align="right" />
+                                            <Legend verticalAlign="bottom" align="center" wrapperStyle={{ paddingTop: '20px' }} />
                                             <Bar dataKey="count" name="Count" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={40} />
                                         </BarChart>
                                     </ResponsiveContainer>
@@ -1189,7 +1189,7 @@ const FieldMISPage: React.FC = () => {
                                                 cursor={{ fill: '#f3f4f6' }}
                                                 contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                             />
-                                            <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px' }} />
+                                            <Legend verticalAlign="bottom" align="center" wrapperStyle={{ paddingTop: '20px' }} />
                                             <Bar dataKey="achieved" name="Achieved Registration" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
                                             <Bar dataKey="target" name="Target Registration" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={40} />
                                         </BarChart>

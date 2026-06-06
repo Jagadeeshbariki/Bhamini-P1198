@@ -29,7 +29,6 @@ const BaselinePage: React.FC = () => {
     const [allData, setAllData] = useState<HouseholdData[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedBeneficiary, setSelectedBeneficiary] = useState<HouseholdData | null>(null);
-    const [error, setError] = useState<string | null>(null);
 
     // Filters
     const [selectedCluster, setSelectedCluster] = useState('All');
@@ -214,16 +213,14 @@ const BaselinePage: React.FC = () => {
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
-            setError(null);
             try {
                 const response = await fetch(getProxyUrl(`${BASELINE_DATA_URL}&cb=${Date.now()}`));
-                if (!response.ok) throw new Error(`Google Sheets responded with status ${response.status}: Failed to fetch baseline spreadsheet.`);
+                if (!response.ok) throw new Error("Failed to fetch baseline spreadsheet.");
                 const csvText = await response.text();
                 const parsed = parseCSV(csvText);
                 setAllData(parsed);
             } catch (err) {
                 console.error(err);
-                setError(err instanceof Error ? err.message : "An unknown error occurred.");
             } finally {
                 setLoading(false);
             }
@@ -261,14 +258,6 @@ const BaselinePage: React.FC = () => {
             return matchesCluster && matchesGP && matchesVillage && matchesSearch;
         });
     }, [allData, selectedCluster, selectedGP, selectedVillage, searchQuery]);
-
-    if (error) return (
-        <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-            <h3 className="text-xl font-black text-red-900 dark:text-red-400 uppercase">Data Fetch Error</h3>
-            <p className="text-sm text-red-600 dark:text-red-300/70 max-w-md text-center">{error}</p>
-            <button onClick={() => window.location.reload()} className="px-6 py-2 bg-red-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-700 transition-colors">Retry Fetch</button>
-        </div>
-    );
 
     if (loading && allData.length === 0) return (
         <div className="flex flex-col items-center justify-center min-h-[50vh]">

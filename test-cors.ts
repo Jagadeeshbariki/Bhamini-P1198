@@ -1,1 +1,0 @@
-fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQgIQP5-BbSLrJRyN-E___LfrW-uQlNa3iZ4AbFfKM3Ne_FHlFeRXbHG2Xk5JYQhh9o_HLekVTmwsh6/pub?gid=1547578809&single=true&output=csv', {method: 'OPTIONS'}).then(r => console.log([...r.headers.entries()]))

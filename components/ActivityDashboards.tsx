@@ -1116,8 +1116,8 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 const current = harvestMap.get(normId) || [];
                 
                 // Fetch quantity
-                const yieldRaw = row['YIELD_QNTL'] || row['YIELD'] || row['QTY'] || row['QUANTITY'] || row['HARVEST_AMT'] || '0';
-                const yieldKgs = parseFloat(yieldRaw) || 0;
+                let yieldRaw = row['YIELD_QNTL'] || row['YIELD'] || row['QTY'] || row['QUANTITY'] || row['HARVEST_AMT'] || '0';
+                let yieldKgs = parseFloat(yieldRaw) || 0;
                 
                 const cropName = row['CROP_HARVESTED'] || row['CROP_TYPE'] || row['CROP'] || 'Unknown Crop';
                 const yieldStr = yieldKgs > 0 ? `${cropName} - ${yieldKgs} KG` : cropName;
@@ -1324,7 +1324,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
     }
 
     return (
-        <div className="w-full space-y-8 pb-20">
+        <div className="max-w-7xl mx-auto space-y-8 pb-20">
             {onBack && (
                 <button 
                     onClick={onBack}

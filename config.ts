@@ -66,7 +66,4 @@ export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycb
 
 export const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200';
 
-export const getProxyUrl = (url: string) => {
-  if (url.startsWith('/api/') || url.startsWith('http://localhost') || url.startsWith('https://script.google.com')) return url;
-  return `/api/sheet-proxy?url=${encodeURIComponent(url)}`;
-};
+export const getProxyUrl = (url: string) => url;
