@@ -1115,7 +1115,7 @@ const FieldMISPage: React.FC = () => {
                                 <h4 className="text-xs font-black uppercase text-gray-400 mb-6 tracking-widest">Cluster-wise BYP Contribution Status</h4>
                                 <div className="h-80">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={beneficiaryChartsData.bypStatus}>
+                                        <BarChart data={beneficiaryChartsData.bypStatus} margin={{ bottom: 20 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                                             <XAxis dataKey="cluster" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900, fill: '#9ca3af' }} />
                                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900, fill: '#9ca3af' }} />
@@ -1172,7 +1172,7 @@ const FieldMISPage: React.FC = () => {
                                 <h3 className="text-lg font-black uppercase tracking-tight text-gray-800 dark:text-white mb-6">Cluster-wise Registration: Target vs Achievement</h3>
                                 <div className="h-[400px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={beneficiaryChartsData.regComparison}>
+                                        <BarChart data={beneficiaryChartsData.regComparison} margin={{ bottom: 20 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                                             <XAxis 
                                                 dataKey="cluster" 

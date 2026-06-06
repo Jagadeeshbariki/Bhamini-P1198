@@ -1324,7 +1324,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
     }
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 pb-20">
+        <div className="w-full mx-auto space-y-8 pb-20">
             {onBack && (
                 <button 
                     onClick={onBack}

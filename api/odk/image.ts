@@ -33,16 +33,18 @@ async function getOdkToken() {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    const { submissionId, filename } = req.query;
+    const { submissionId, filename, form } = req.query;
     
     if (!submissionId || !filename || typeof submissionId !== 'string' || typeof filename !== 'string') {
         return res.status(400).send('Missing or invalid params');
     }
 
     const fullSubmissionId = submissionId.startsWith('uuid:') ? submissionId : `uuid:${submissionId}`;
+    const formId = form && typeof form === 'string' ? form : 'Material_distribution';
+
     try {
         const token = await getOdkToken();
-        const url = `https://central.wassan.org/v1/projects/3/forms/Material_distribution/submissions/${fullSubmissionId}/attachments/${filename}`;
+        const url = `https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(fullSubmissionId)}/attachments/${encodeURIComponent(filename)}`;
 
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }

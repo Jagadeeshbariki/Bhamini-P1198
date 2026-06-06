@@ -295,7 +295,7 @@ const AdminPage: React.FC = () => {
     if (loading) return <div className="p-20 text-center font-black text-indigo-400 uppercase animate-pulse">Syncing...</div>;
 
     return (
-        <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">
+        <div className="space-y-8 w-full mx-auto px-4 md:px-0">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
                     <h1 className="text-3xl font-black text-gray-900 dark:text-white uppercase">Admin Console</h1>

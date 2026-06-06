@@ -262,7 +262,7 @@ const BudgetTrackerPage: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-slate-50/50 p-4 md:p-8 pb-20">
-            <div className="max-w-7xl mx-auto">
+            <div className="w-full mx-auto">
                 {/* Update Form Modal */}
                 {showUpdateForm && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
