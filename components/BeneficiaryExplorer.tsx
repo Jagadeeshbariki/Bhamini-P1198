@@ -352,7 +352,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
             if (row.length < 3) return;
 
             const bId = (getVal(row, ['Beneficiary ID', 'Ben_Id', 'bnf_section_-adhaar_number_', 'bnf_section-adhaar_number', 'adhaar'])).trim();
-            const hhId = getVal(row, ['HH ID', 'Farmer ID', 'location-farmer_id', 'location-show_farmer_id', 'farmer_id']);
+            const hhId = getVal(row, ['HH_Id', 'HH_ID', 'HHID', 'HH ID', 'Farmer ID', 'location-farmer_id', 'location-show_farmer_id', 'farmer_id']);
             
             if (!bId) return;
 
