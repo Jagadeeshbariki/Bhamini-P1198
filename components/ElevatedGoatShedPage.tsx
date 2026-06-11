@@ -127,7 +127,7 @@ const ElevatedGoatShedPage: React.FC = () => {
 
             const contribMap = new Map<string, any[]>();
             rawContribs.forEach(row => {
-                const rawId = getFuzzyValue(row, ['FARMERID', 'FID', 'ID', 'FARMER ID', 'HH_id', 'HH ID', 'HHID']);
+                const rawId = getFuzzyValue(row, ['HH_Id', 'HH_ID', 'FARMERID', 'FID', 'ID', 'FARMER ID', 'HH_id', 'HH ID', 'HHID']);
                 const normId = normalizeId(rawId);
                 if (normId) {
                     if (!contribMap.has(normId)) contribMap.set(normId, []);
@@ -136,7 +136,7 @@ const ElevatedGoatShedPage: React.FC = () => {
             });
 
             const parsedData: GoatShedRecord[] = rawData.map(row => {
-                const hhId = getFuzzyValue(row, ['HH_id', 'HH ID', 'HHID', 'Farmer ID', 'FARMERID']) || '';
+                const hhId = getFuzzyValue(row, ['HH_Id', 'HH_ID', 'HH_id', 'HH ID', 'HHID', 'Farmer ID', 'FARMERID']) || '';
                 const normHhId = normalizeId(hhId);
                 const activity = getFuzzyValue(row, ['Activity']) || 'Goatery';
                 

@@ -11,7 +11,7 @@ import {
     Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL, ASSET_DISTRIBUTION_URL, BIO_INPUTS_DATA_URL, HARVEST_DATA_URL, getProxyUrl } from '../config';
+import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL, CROPS_MATERIAL_TARGETS_URL, ASSET_DISTRIBUTION_URL, BIO_INPUTS_DATA_URL, HARVEST_DATA_URL, getProxyUrl } from '../config';
 import ActivityPhotoUploadModal from './ActivityPhotoUploadModal';
 
 declare global {
@@ -65,6 +65,7 @@ interface BeneficiaryRecord {
     contribution?: number;
     cropDetails?: CropRecord[];
     materialsReceived?: Record<string, number>;
+    materialTargets?: Record<string, number>;
     bioInputs?: BioInputRecord[];
     harvests?: HarvestRecord[];
 }
@@ -315,12 +316,15 @@ const ActivityDashboardContent: React.FC<{
                 if (d.materialsReceived) {
                     Object.keys(d.materialsReceived).forEach(k => materialSet.add(k));
                 }
+                if (d.materialTargets) {
+                    Object.keys(d.materialTargets).forEach(k => materialSet.add(k));
+                }
             });
-            const materialHeaders = Array.from(materialSet);
+            const materialHeaders = Array.from(materialSet).sort();
             
             const headers = [
                 'Cluster', 'GP', 'Village', 'Beneficiary Name', 'HH ID', 'Ben ID', 
-                'Main Crop', 'Extent', ...materialHeaders
+                'Main Crop', 'Extent', ...materialHeaders.flatMap(m => [`${m} (Target)`, `${m} (Issued)`])
             ];
             
             const rows: any[][] = [];
@@ -335,7 +339,7 @@ const ActivityDashboardContent: React.FC<{
                         `"${d.hhId}"`, `"${d.benId}"`, `"${c.mainCrop || 'N/A'}"`, c.extent || 0
                     ];
                     
-                    const materialRow = materialHeaders.map(m => d.materialsReceived?.[m] || 0);
+                    const materialRow = materialHeaders.flatMap(m => [d.materialTargets?.[m] || 0, d.materialsReceived?.[m] || 0]);
                     rows.push([...baseRow, ...materialRow]);
                 });
             });
@@ -856,6 +860,47 @@ const ActivityDashboardContent: React.FC<{
                                 </div>
                             ))}
                             
+                            {(() => {
+                                const allMaterials = {...(showCropDetails.materialTargets || {}), ...(showCropDetails.materialsReceived || {})};
+                                if (Object.keys(allMaterials).length === 0) return null;
+                                
+                                return (
+                                    <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                                        <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Material Distribution</h3>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            {Object.keys(allMaterials).map(materialName => {
+                                                const target = (showCropDetails.materialTargets && showCropDetails.materialTargets[materialName]) || 0;
+                                                const issued = (showCropDetails.materialsReceived && showCropDetails.materialsReceived[materialName]) || 0;
+                                                const progress = target > 0 ? Math.min(100, Math.round((issued / target) * 100)) : 100;
+                                                return (
+                                                    <div key={materialName} className="bg-indigo-50/50 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
+                                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{materialName}</p>
+                                                        <div className="flex justify-between items-end mt-2">
+                                                            <div>
+                                                                <p className="text-[9px] font-bold text-gray-400 uppercase">Target (Total)</p>
+                                                                <p className="text-sm font-black text-indigo-600">{target > 0 ? target.toFixed(1) : '—'}</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-[9px] font-bold text-gray-400 uppercase">Issued</p>
+                                                                <p className="text-sm font-black text-emerald-600">{issued > 0 ? issued.toFixed(1) : '—'}</p>
+                                                            </div>
+                                                        </div>
+                                                        {target > 0 && (
+                                                            <div className="mt-3 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                                <div 
+                                                                    className={`h-full rounded-full transition-all duration-500 ${issued >= target ? 'bg-emerald-500' : 'bg-indigo-500'}`} 
+                                                                    style={{ width: `${progress}%` }} 
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             {showCropDetails.bioInputs && showCropDetails.bioInputs.length > 0 && (
                                 <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-800">
                                     <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Bio Inputs Applied</h3>
@@ -990,7 +1035,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
         const beneficiaries = lines.slice(1).map(line => {
             const vals = parseLine(line);
             return {
-                hhId: getVal(vals, ['HH ID', 'HHID', 'Farmer ID', 'FID']),
+                hhId: getVal(vals, ['HH_Id', 'HH_ID', 'HH ID', 'HHID', 'Farmer ID', 'FID']),
                 name: getVal(vals, ['Name', 'Beneficiary name', 'Farmer Name']),
                 activity: normalizeActivity((getVal(vals, ['activity', 'Activity']) || '').trim().replace(/^(BYP-|BFE-|AFT-)/, '')),
                 gp: getVal(vals, ['GP', 'Gram Panchayat', 'location-gp']),
@@ -1029,13 +1074,14 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 }
             };
 
-            const [benRes, contribRes, cropsRes, assetRes, bioRes, harvRes] = await Promise.all([
+            const [benRes, contribRes, cropsRes, assetRes, bioRes, harvRes, targetsRes] = await Promise.all([
                 fetch(getProxyUrl(`${BENEFICIARY_DATA_URL}&cb=${Date.now()}`)),
                 fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)),
                 fetchSafe(CROPS_DATA_URL),
                 fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&cb=${Date.now()}`)),
                 fetchSafe(BIO_INPUTS_DATA_URL),
-                fetchSafe(HARVEST_DATA_URL)
+                fetchSafe(HARVEST_DATA_URL),
+                fetchSafe(CROPS_MATERIAL_TARGETS_URL)
             ]);
 
             if (!benRes.ok || !contribRes.ok || !cropsRes.ok) throw new Error("Failed to fetch primary data.");
@@ -1046,8 +1092,35 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             const assetText = (assetRes.ok && assetRes.text) ? await assetRes.text() : '';
             const bioText = await bioRes.text();
             const harvestText = await harvRes.text();
+            const targetsText = await targetsRes.text();
 
             const parsedBens = parseCSV(benText);
+            const parsedTargets = (() => {
+                if (!targetsText) return [];
+                const lines = targetsText.trim().split(/\r?\n/).filter(l => l.trim());
+                if (lines.length < 1) return [];
+                const headers = parseLine(lines[0]).map(h => h.trim().toUpperCase());
+                return lines.slice(1).map(line => {
+                    const vals = parseLine(line);
+                    const obj: any = {};
+                    headers.forEach((h, i) => { if (h) obj[h] = vals[i] || ''; });
+                    return obj;
+                });
+            })();
+
+            const materialTargetsByCode = new Map<string, { targetPerAcre: number, unit: string, name: string }>();
+            parsedTargets.forEach(row => {
+                const code = (row['MATERIAL ID'] || '').trim().toUpperCase();
+                const materialName = row['MATERIAL NAME'] || '';
+                const targetStr = row['TARGET'];
+                const units = row['UNITS'] || '';
+                if (code && targetStr) {
+                    const targetPerAcre = parseFloat(targetStr);
+                    if (!isNaN(targetPerAcre)) {
+                        materialTargetsByCode.set(code, { targetPerAcre, unit: units, name: materialName });
+                    }
+                }
+            });
             
             // Create a lookup for village -> cluster to assign clusters to "crops-only" farmers
             const villageClusterMap = new Map<string, string>();
@@ -1077,7 +1150,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
 
         const bioMap = new Map<string, BioInputRecord[]>();
         parsedBio.forEach(row => {
-            const hhId = row['HH_ID'] || row['FARMER_ID'] || row['HH ID'] || row['HHID'] || row['FARMER ID'] || row['FID'] || Object.values(row).find((v:any) => normalizeId(v).startsWith('F'));
+            const hhId = row['HH_Id'] || row['HH_ID'] || row['FARMER_ID'] || row['HH ID'] || row['HHID'] || row['FARMER ID'] || row['FID'] || Object.values(row).find((v:any) => normalizeId(v).startsWith('F'));
             if (hhId) {
                 const normId = normalizeId(hhId);
                 const current = bioMap.get(normId) || [];
@@ -1110,14 +1183,14 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
 
         const harvestMap = new Map<string, HarvestRecord[]>();
         parsedHarvest.forEach(row => {
-            const hhId = row['HH_ID'] || row['FARMER_ID'] || row['HH ID'] || row['HHID'] || row['FARMER ID'] || row['FID'] || Object.values(row).find((v:any) => normalizeId(v).startsWith('F'));
+            const hhId = row['HH_Id'] || row['HH_ID'] || row['FARMER_ID'] || row['HH ID'] || row['HHID'] || row['FARMER ID'] || row['FID'] || Object.values(row).find((v:any) => normalizeId(v).startsWith('F'));
             if (hhId) {
                 const normId = normalizeId(hhId);
                 const current = harvestMap.get(normId) || [];
                 
                 // Fetch quantity
-                let yieldRaw = row['YIELD_QNTL'] || row['YIELD'] || row['QTY'] || row['QUANTITY'] || row['HARVEST_AMT'] || '0';
-                let yieldKgs = parseFloat(yieldRaw) || 0;
+                const yieldRaw = row['YIELD_QNTL'] || row['YIELD'] || row['QTY'] || row['QUANTITY'] || row['HARVEST_AMT'] || '0';
+                const yieldKgs = parseFloat(yieldRaw) || 0;
                 
                 const cropName = row['CROP_HARVESTED'] || row['CROP_TYPE'] || row['CROP'] || 'Unknown Crop';
                 const yieldStr = yieldKgs > 0 ? `${cropName} - ${yieldKgs} KG` : cropName;
@@ -1145,7 +1218,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             const cropsInfoMap = new Map<string, any>(); // To store name, gp, village for synthetic records
             
             parsedCropsRaw.forEach(row => {
-                const hhId = row['HH ID'] || row['HHID'] || row['HH_ID'] || row['FARMER ID'] || row['FID'];
+                const hhId = row['HH_Id'] || row['HH ID'] || row['HHID'] || row['HH_ID'] || row['FARMER ID'] || row['FID'];
                 if (hhId) {
                     const normId = normalizeId(hhId);
                     
@@ -1180,12 +1253,12 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
 
             const contribMap = new Map<string, Record<string, number>>();
             parsedContribs.forEach(row => {
-                const hhId = row['FARMERID'] || row['FID'] || row['ID'] || row['FARMER ID'] || row['HHID'] || row['HH ID'] || row['HH_ID'];
+                const hhId = row['HH_Id'] || row['FARMERID'] || row['FID'] || row['ID'] || row['FARMER ID'] || row['HHID'] || row['HH ID'] || row['HH_ID'];
                 if (hhId) {
                     const normId = normalizeId(hhId);
                     const current = contribMap.get(normId) || {};
                     const idHeaders = [
-                        'FARMERID', 'FID', 'ID', 'FARMER ID', 'HHID', 'HH ID', 'HH_ID', 
+                        'HH_Id', 'FARMERID', 'FID', 'ID', 'FARMER ID', 'HHID', 'HH ID', 'HH_ID', 
                         'BENID', 'BEN_ID', 'FARMER_ID', 'DATE', 'TIMESTAMP', 'TIME', 
                         'SUBMISSIONDATE', 'VILLAGE', 'GP', 'CLUSTER', 'NAME', 'FARMER NAME',
                         'HHHEADNAME', 'BENEFICIARYNAME', 'CASTE', 'CATEGORY'
@@ -1208,11 +1281,19 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             parsedAssets.forEach(row => {
                 const activityStr = String(row['ACTIVITY'] || '').toUpperCase();
                 if (activityStr.includes('CROP')) {
-                    const hhId = row['FARMER ID'] || row['BEN_ID'] || row['BENID'] || row['HH ID'] || row['HHID'];
+                    const hhId = row['HH_Id'] || row['FARMER ID'] || row['BEN_ID'] || row['BENID'] || row['HH ID'] || row['HHID'] || row['HH_ID'];
                     if (hhId) {
                         const normId = normalizeId(hhId);
                         const current = assetMap.get(normId) || {};
-                        const materialName = row['THIS_MATERIAL_LABEL'];
+                        const code = String(row['MATERIAL_ID'] || '').trim().toUpperCase();
+                        let materialName = row['THIS_MATERIAL_LABEL']?.trim() || code;
+                        
+                        if (materialTargetsByCode.has(code)) {
+                            materialName = materialTargetsByCode.get(code)!.name;
+                        } else if (!materialName) {
+                            materialName = 'Unknown Material';
+                        }
+                        
                         const count = parseFloat(row['MATERIALS_DETAILS-MATERIAL_COUNT'] || '0') || 0;
                         if (materialName && count > 0) {
                             current[materialName] = (current[materialName] || 0) + count;
@@ -1247,7 +1328,19 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 
                 const contribution = activityKey ? userContribs[activityKey] : 0;
 
-                return { ...b, contribution, cropDetails, normId, materialsReceived: userAssets, bioInputs, harvests };
+                let materialTargets: Record<string, number> | undefined = undefined;
+                if (isCropsActivity && cropDetails) {
+                    const totalExtent = cropDetails.reduce((sum, c) => sum + (c.extent || 0), 0);
+                    materialTargets = {};
+                    materialTargetsByCode.forEach((meta, code) => {
+                        const targetVal = (code === 'HDFC-A1.11-0044' || code === 'HDFC-A1.11-0051') 
+                            ? meta.targetPerAcre 
+                            : meta.targetPerAcre * totalExtent;
+                        materialTargets![meta.name] = (materialTargets![meta.name] || 0) + targetVal;
+                    });
+                }
+
+                return { ...b, contribution, cropDetails, normId, materialsReceived: userAssets, materialTargets, bioInputs, harvests };
             });
 
             // Augment with missing crops records
@@ -1264,6 +1357,15 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                     const villageNorm = (info?.village || '').toUpperCase();
                     const cluster = villageClusterMap.get(villageNorm) || 'Other';
                     
+                    const materialTargets: Record<string, number> = {};
+                    const totalExtent = plots.reduce((sum, c) => sum + (c.extent || 0), 0);
+                    materialTargetsByCode.forEach((meta, code) => {
+                        const targetVal = (code === 'HDFC-A1.11-0044' || code === 'HDFC-A1.11-0051') 
+                            ? meta.targetPerAcre 
+                            : meta.targetPerAcre * totalExtent;
+                        materialTargets[meta.name] = (materialTargets[meta.name] || 0) + targetVal;
+                    });
+                    
                     augmentedBens.push({
                         hhId: plots[0].hhId,
                         name: info?.name || 'Unknown Farmer',
@@ -1279,6 +1381,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                         contribution: 0,
                         cropDetails: plots,
                         materialsReceived: assetMap.get(normId) || {},
+                        materialTargets: materialTargets,
                         bioInputs: bioMap.get(normId),
                         harvests: harvestMap.get(normId)
                     });

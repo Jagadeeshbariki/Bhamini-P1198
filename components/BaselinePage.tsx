@@ -346,7 +346,7 @@ const BaselinePage: React.FC = () => {
                                     <td className="px-6 py-5">
                                         <div className="font-black text-gray-900 dark:text-white text-sm group-hover:text-indigo-600 transition-colors">{row.hhHeadName}</div>
                                         <div className="flex flex-col gap-0.5">
-                                            <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-tight">FID: {row.farmerId || 'N/A'}</span>
+                                            <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-tight">HH Id: {row.farmerId || 'N/A'}</span>
                                             <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">UID: {row.aadharNumber || 'MISSING'}</span>
                                         </div>
                                     </td>
@@ -384,7 +384,7 @@ const BaselinePage: React.FC = () => {
                                 <div>
                                     <h3 className="text-base font-black text-gray-900 dark:text-white leading-tight">{row.hhHeadName}</h3>
                                     <div className="flex flex-col">
-                                        <span className="text-[10px] font-black text-indigo-500 uppercase">{row.farmerId || 'No FID'}</span>
+                                        <span className="text-[10px] font-black text-indigo-500 uppercase">HH Id: {row.farmerId || 'No HH Id'}</span>
                                         <span className="text-[9px] font-black text-gray-400 uppercase">UID: {row.aadharNumber || '---'}</span>
                                     </div>
                                 </div>
@@ -425,7 +425,7 @@ const BaselinePage: React.FC = () => {
                                     {selectedBeneficiary.hhHeadName || 'Unknown Beneficiary'}
                                 </h2>
                                 <div className="flex flex-col gap-0.5">
-                                    <p className="text-[11px] font-bold text-indigo-500 tracking-tighter uppercase">Farmer ID: {selectedBeneficiary.farmerId || '---'}</p>
+                                    <p className="text-[11px] font-bold text-indigo-500 tracking-tighter uppercase">HH Id: {selectedBeneficiary.farmerId || '---'}</p>
                                     <p className="text-[10px] font-black text-gray-400 uppercase">Aadhar (UID): {selectedBeneficiary.aadharNumber || 'NOT FOUND'}</p>
                                 </div>
                             </div>

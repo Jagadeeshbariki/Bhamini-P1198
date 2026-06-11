@@ -473,7 +473,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
 
                 const contribMap = new Map<string, any>();
                 rawContrib.forEach((row: any) => {
-                    const id = row['Farmer ID'] || row['FARMERID'];
+                    const id = row['HH_Id'] || row['HH_ID'] || row['HHID'] || row['HH ID'] || row['Farmer ID'] || row['FARMERID'];
                     if (id) {
                         contribMap.set(id.toString().trim(), row);
                     }

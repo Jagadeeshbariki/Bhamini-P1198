@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   BASELINE_DATA_URL,
+  BENEFICIARY_DATA_URL,
   CONTRIBUTION_DATA_URL,
   MASTER_TARGETS_URL,
   MATERIAL_CONTRIBUTION_URL,
@@ -25,6 +26,7 @@ interface BaselineRecord {
   gp: string;
   village: string;
   category: string;
+  dateRegMap: Record<string, string>;
 }
 
 interface ActivityTarget {
@@ -46,6 +48,7 @@ interface MergedContribution {
   activity: string;
   date: string;
   category: string;
+  financialYear: string;
   individualTarget?: number;
   productsReceived?: { name: string; count: number; unitContrib: number; date: string }[];
 }
@@ -173,17 +176,59 @@ const ContributionPage: React.FC = () => {
     return str;
   };
 
+  const getFinancialYear = (dateString: string): string => {
+    if (!dateString) return "N/A";
+    const datePart = dateString.split(' ')[0];
+    
+    let parsedDate = new Date(datePart);
+    
+    // Always manual parse first to handle DD-MM-YYYY and DD-Mon-YYYY natively
+    // We strictly match only 1-2 digit days, 1-3 char months, and 2-4 digit years.
+    const isDDMMYYYY = /^(\d{1,2})[-/]([A-Za-z]{3}|\d{1,2})[-/](\d{2}|\d{4})$/.exec(datePart);
+    if (isDDMMYYYY) {
+        const p0 = parseInt(isDDMMYYYY[1], 10);
+        const p1Str = isDDMMYYYY[2];
+        const p1 = parseInt(p1Str, 10);
+        let p2 = parseInt(isDDMMYYYY[3], 10);
+        
+        // Ensure 4-digit year
+        if (p2 < 100) p2 += 2000;
+        
+        let monthIdx = 0;
+        if (isNaN(p1)) {
+            const months: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+            const m = p1Str.toLowerCase().slice(0, 3);
+            monthIdx = months[m] !== undefined ? months[m] : 0;
+        } else {
+            // Assume DD-MM-YYYY format
+            monthIdx = p1 - 1;
+        }
+        
+        const candidateDate = new Date(p2, monthIdx, p0);
+        if (!isNaN(candidateDate.getTime())) {
+            parsedDate = candidateDate;
+        }
+    }
+
+    if (isNaN(parsedDate.getTime())) return "N/A";
+
+    const month = parsedDate.getMonth();
+    const year = parsedDate.getFullYear();
+
+    if (month < 3) {
+      return `${year - 1}-${year.toString().slice(-2)}`;
+    } else {
+      return `${year}-${(year + 1).toString().slice(-2)}`;
+    }
+  };
+
   const getFuzzyValue = (row: any, keys: string[]) => {
     const rowKeys = Object.keys(row);
     for (const k of keys) {
       const match = rowKeys.find((rk) => {
         const rkUpper = rk.toUpperCase();
         const kUpper = k.toUpperCase();
-        return (
-          rkUpper === kUpper ||
-          rkUpper.includes(kUpper) ||
-          kUpper.includes(rkUpper)
-        );
+        return rkUpper === kUpper || rkUpper.includes(kUpper);
       });
       if (match) return row[match];
     }
@@ -206,24 +251,27 @@ const ContributionPage: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [baselineRes, contribRes, targetsRes, materialRes, distRes] = await Promise.all([
+        const [baselineRes, beneficiaryRes, contribRes, targetsRes, materialRes, distRes] = await Promise.all([
           fetch(getProxyUrl(`${BASELINE_DATA_URL}&cb=${Date.now()}`)),
+          fetch(getProxyUrl(`${BENEFICIARY_DATA_URL}&cb=${Date.now()}`)),
           fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&cb=${Date.now()}`)),
           fetch(getProxyUrl(`${MASTER_TARGETS_URL}&cb=${Date.now()}`)),
           fetch(getProxyUrl(`${MATERIAL_CONTRIBUTION_URL}&cb=${Date.now()}`)),
           fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&cb=${Date.now()}`)),
         ]);
 
-        if (!baselineRes.ok || !contribRes.ok)
+        if (!baselineRes.ok || !beneficiaryRes.ok || !contribRes.ok)
           throw new Error("Synchronization failure.");
 
         const baselineText = await baselineRes.text();
+        const beneficiaryText = await beneficiaryRes.text();
         const contribText = await contribRes.text();
         const targetsText = targetsRes.ok ? await targetsRes.text() : "";
         const materialText = materialRes.ok ? await materialRes.text() : "";
         const distText = distRes.ok ? await distRes.text() : "";
 
         const rawBaseline = parseCSV(baselineText);
+        const rawBeneficiary = parseCSV(beneficiaryText);
         const rawContrib = parseCSV(contribText);
         const rawTargets = parseCSV(targetsText);
         const rawMaterialMap = parseCSV(materialText);
@@ -303,37 +351,132 @@ const ContributionPage: React.FC = () => {
             activity,
             target,
             contributionTarget,
-            financialYear: r["FINANCIAL YEAR"] || r["financial year"] || r["Financial Year"] || r["financial_year"] || "",
+            financialYear: (r["FINANCIAL YEAR"] || r["financial year"] || r["Financial Year"] || r["financial_year"] || "").trim(),
           };
         });
         setTargets(parsedTargets);
 
+        const getContribActivityColumn = (activityName: string) => {
+            if (!activityName) return '';
+            const l = activityName.toLowerCase().replace(/_/g, ' ');
+            if (l === 'ns' || l === 'byp-ns') return 'BYP-NS';
+            if (l === 'bfe' || l === 'byp-bfe') return 'BYP-BFE';
+            if (l.includes('fisheries')) return 'FISHERIES';
+            if (l === 'crops' || l.includes('crop models')) return 'CROP MODELS';
+            if (l === 'eco-farmpond' || l === 'eco farmpond') return 'ECO-FARMPOND';
+            if (l === 'processing hubs' || l.includes('processing')) return 'PROCESSING HUBS';
+            if (l === 'asc') return 'ASC';
+            if (l === 'goatery' || l.includes('goat shed') || l === 'goat') return 'GOATERY';
+            if (l === 'mobile irrigation') return 'MOBILE IRR';
+            if (l === 'fixed irrigation' || l.includes('fixed')) return 'FIXED IRRIG';
+            if (l.includes('irrigation')) return 'MOBILE IRR';
+            return mapTargetActivity(activityName);
+        };
+
         const baselineMap = new Map<string, BaselineRecord>();
         rawBaseline.forEach((row) => {
           const rawId = getFuzzyValue(row, [
+            "HH_Id",
+            "HH_ID",
+            "HHID",
+            "HH ID",
             "FARMERID",
             "FID",
             "ID",
-            "FARMER ID",
-            "HHID",
-            "HH ID",
-            "HH_ID",
+            "FARMER ID"
           ]);
           const normId = normalizeId(rawId);
           if (normId) {
-            baselineMap.set(normId, {
-              farmerId: (rawId || "").toString(),
-              hhHeadName: getFuzzyValue(row, [
-                "HHHEADNAME",
-                "FARMERNAME",
-                "NAME",
-                "BENEFICIARYNAME",
-              ]),
-              cluster: getFuzzyValue(row, ["CLUSTER"]),
-              gp: getFuzzyValue(row, ["GP", "GRAMPANCHAYAT"]),
-              village: getFuzzyValue(row, ["VILLAGE"]),
-              category: getFuzzyValue(row, ["CATEGORY", "CASTE"]),
-            });
+            let existing = baselineMap.get(normId);
+            if (!existing) {
+                existing = {
+                  farmerId: (rawId || "").toString(),
+                  hhHeadName: getFuzzyValue(row, [
+                    "HHHEADNAME",
+                    "FARMERNAME",
+                    "NAME",
+                    "BENEFICIARYNAME",
+                  ]) || "",
+                  cluster: getFuzzyValue(row, ["CLUSTER"]) || "",
+                  gp: getFuzzyValue(row, ["GP", "GRAMPANCHAYAT"]) || "",
+                  village: getFuzzyValue(row, ["VILLAGE"]) || "",
+                  category: getFuzzyValue(row, ["CATEGORY", "CASTE"]) || "",
+                  dateRegMap: {}
+                };
+                baselineMap.set(normId, existing);
+            }
+            const rawActivity = getFuzzyValue(row, [
+               "ACTIVITY_REGISTRATION-ACTIVITY",
+               "ACTIVITY",
+               "BENEFICIARYACTIVITY"
+            ]);
+            const normalizedActivity = getContribActivityColumn((rawActivity || "").replace(/^(BYP-|BFE-|AFT-)/i, ''));
+            const dateReg = getFuzzyValue(row, [
+              "ACTIVITY_REGISTRATION-DATE_REG",
+              "DATE_REG",
+              "DATE REG",
+              "SUBMISSIONDATE",
+              "DATE"
+            ]);
+            if (normalizedActivity && dateReg) {
+                existing.dateRegMap[normalizedActivity] = dateReg;
+            }
+            if (dateReg && !existing.dateRegMap['__FALLBACK']) {
+                existing.dateRegMap['__FALLBACK'] = dateReg;
+            }
+          }
+        });
+
+        rawBeneficiary.forEach((row) => {
+          const rawId = getFuzzyValue(row, [
+            "HH_Id",
+            "HH_ID",
+            "HHID",
+            "HH ID",
+            "FARMERID",
+            "FID",
+            "ID",
+            "FARMER ID"
+          ]);
+          const normId = normalizeId(rawId);
+          if (normId) {
+            let existing = baselineMap.get(normId);
+            if (!existing) {
+                existing = {
+                  farmerId: (rawId || "").toString(),
+                  hhHeadName: getFuzzyValue(row, [
+                    "HHHEADNAME",
+                    "FARMERNAME",
+                    "NAME",
+                    "BENEFICIARYNAME",
+                  ]) || "",
+                  cluster: getFuzzyValue(row, ["CLUSTER"]) || "",
+                  gp: getFuzzyValue(row, ["GP", "GRAMPANCHAYAT"]) || "",
+                  village: getFuzzyValue(row, ["VILLAGE"]) || "",
+                  category: getFuzzyValue(row, ["CATEGORY", "CASTE"]) || "",
+                  dateRegMap: {}
+                };
+                baselineMap.set(normId, existing);
+            }
+            const rawActivity = getFuzzyValue(row, [
+               "ACTIVITY_REGISTRATION-ACTIVITY",
+               "ACTIVITY",
+               "BENEFICIARYACTIVITY"
+            ]);
+            const normalizedActivity = getContribActivityColumn((rawActivity || "").replace(/^(BYP-|BFE-|AFT-)/i, ''));
+            const dateReg = getFuzzyValue(row, [
+              "ACTIVITY_REGISTRATION-DATE_REG",
+              "DATE_REG",
+              "DATE REG",
+              "SUBMISSIONDATE",
+              "DATE"
+            ]);
+            if (normalizedActivity && dateReg) {
+                existing.dateRegMap[normalizedActivity] = dateReg;
+            }
+            if (dateReg && !existing.dateRegMap['__FALLBACK']) {
+                existing.dateRegMap['__FALLBACK'] = dateReg;
+            }
           }
         });
 
@@ -378,25 +521,8 @@ const ContributionPage: React.FC = () => {
         const farmerTargetMap = new Map<string, number>();
         const farmerProductsMap = new Map<string, { name: string; count: number; unitContrib: number; date: string }[]>();
 
-        const getContribActivityColumn = (activityName: string) => {
-            if (!activityName) return '';
-            const l = activityName.toLowerCase().replace(/_/g, ' ');
-            if (l === 'ns' || l === 'byp-ns') return 'BYP-NS';
-            if (l === 'bfe' || l === 'byp-bfe') return 'BYP-BFE';
-            if (l.includes('fisheries')) return 'FISHERIES';
-            if (l === 'crops' || l.includes('crop models')) return 'CROP MODELS';
-            if (l === 'eco-farmpond' || l === 'eco farmpond') return 'ECO-FARMPOND';
-            if (l === 'processing hubs' || l.includes('processing')) return 'PROCESSING HUBS';
-            if (l === 'asc') return 'ASC';
-            if (l === 'goatery' || l.includes('goat shed') || l === 'goat') return 'GOATERY';
-            if (l === 'mobile irrigation') return 'MOBILE IRR';
-            if (l === 'fixed irrigation' || l.includes('fixed')) return 'FIXED IRRIG';
-            if (l.includes('irrigation')) return 'MOBILE IRR';
-            return mapTargetActivity(activityName);
-        };
-
         rawDist.forEach(row => {
-            const hhIdRaw = getFuzzyValue(row, ['HH ID', 'FARMER ID', 'LOCATION-FARMER_ID', 'LOCATION-SHOW_FARMER_ID', 'FARMER_ID', 'FID']);
+            const hhIdRaw = getFuzzyValue(row, ['HH_Id', 'HH_ID', 'HHID', 'HH ID', 'FARMER ID', 'LOCATION-FARMER_ID', 'LOCATION-SHOW_FARMER_ID', 'FARMER_ID', 'FID']);
             const bIdRaw = getFuzzyValue(row, ['BENEFICIARY ID', 'BEN_ID', 'BNF_SECTION_-ADHAAR_NUMBER_', 'BNF_SECTION-ADHAAR_NUMBER', 'ADHAAR']);
             const hhId = normalizeId(hhIdRaw);
             const bId = normalizeId(bIdRaw);
@@ -404,17 +530,17 @@ const ContributionPage: React.FC = () => {
             if (!hhId && !bId) return;
 
             const activityName = getFuzzyValue(row, ['ACTIVITY', 'ACTIVITY_REGISTRATION-ACTIVITY']);
-            const activity = getContribActivityColumn(activityName.replace(/^(BYP-|BFE-|AFT-)/i, ''));
+            const activity = getContribActivityColumn((activityName || "").replace(/^(BYP-|BFE-|AFT-)/i, ''));
             
             const code = getFuzzyValue(row, ['THIS_MATERIAL_CODE']);
             const materialId = getFuzzyValue(row, ['MATERIAL_ID']);
             const label = getFuzzyValue(row, ['THIS_MATERIAL_LABEL']);
-            let count = parseFloat(getFuzzyValue(row, ['MATERIALS_DETAILS-MATERIAL_COUNT'])) || 1;
+            const count = parseFloat(getFuzzyValue(row, ['MATERIALS_DETAILS-MATERIAL_COUNT']) || "1");
             const distDate = getFuzzyValue(row, ['MATERIALS_DETAILS-DISTRIBUTED_DATE', 'DATE']);
             
-            let unitContrib = activityTargetMap.get(materialId.trim().toLowerCase()) 
-                 || activityTargetMap.get(code.trim().toLowerCase()) 
-                 || activityTargetMap.get(label.trim().toLowerCase()) 
+            const unitContrib = activityTargetMap.get((materialId || "").trim().toLowerCase()) 
+                 || activityTargetMap.get((code || "").trim().toLowerCase()) 
+                 || activityTargetMap.get((label || "").trim().toLowerCase()) 
                  || 0;
             
             if (unitContrib > 0) {
@@ -438,13 +564,14 @@ const ContributionPage: React.FC = () => {
         const merged: MergedContribution[] = [];
         rawContrib.forEach((row, rowIndex) => {
           const rawId = getFuzzyValue(row, [
+            "HH_Id",
+            "HH_ID",
+            "HHID",
+            "HH ID",
             "FARMERID",
             "FID",
             "ID",
-            "FARMER ID",
-            "HHID",
-            "HH ID",
-            "HH_ID",
+            "FARMER ID"
           ]);
           const normId = normalizeId(rawId);
           const date =
@@ -467,8 +594,8 @@ const ContributionPage: React.FC = () => {
                   ) || 0;
 
                 if (amount > 0) {
-                  let products: { name: string; count: number; unitContrib: number; date: string }[] = farmerProductsMap.get(`${normId}-${normalizedActivity}`) || [];
-                  let indTarget = farmerTargetMap.get(`${normId}-${normalizedActivity}`) || 0;
+                  const products: { name: string; count: number; unitContrib: number; date: string }[] = farmerProductsMap.get(`${normId}-${normalizedActivity}`) || [];
+                  const indTarget = farmerTargetMap.get(`${normId}-${normalizedActivity}`) || 0;
                   merged.push({
                     id: `${normId}-${colName}-${rowIndex}`,
                     farmerId: baseline.farmerId,
@@ -480,6 +607,7 @@ const ContributionPage: React.FC = () => {
                     amount: amount,
                     activity: normalizedActivity,
                     date: date,
+                    financialYear: getFinancialYear(baseline.dateRegMap[normalizedActivity] || baseline.dateRegMap['__FALLBACK'] || Object.values(baseline.dateRegMap)[0] || ""),
                     individualTarget: indTarget,
                     productsReceived: products.length > 0 ? products : undefined
                   });
@@ -560,6 +688,8 @@ const ContributionPage: React.FC = () => {
         selectedVillage === "All" || d.village === selectedVillage;
       const matchesActivity =
         selectedActivity === "All" || d.activity === selectedActivity;
+      const matchesFY =
+        selectedFinancialYear === "All" || (d.financialYear || "").trim() === selectedFinancialYear;
       const matchesSearch =
         !query ||
         d.name.toLowerCase().includes(query) ||
@@ -570,7 +700,8 @@ const ContributionPage: React.FC = () => {
         matchesGP &&
         matchesVillage &&
         matchesActivity &&
-        matchesSearch
+        matchesSearch &&
+        matchesFY
       );
     });
   }, [
@@ -579,6 +710,7 @@ const ContributionPage: React.FC = () => {
     selectedGP,
     selectedVillage,
     selectedActivity,
+    selectedFinancialYear,
     searchQuery,
   ]);
 
@@ -604,7 +736,7 @@ const ContributionPage: React.FC = () => {
     const allClusters = new Set([
       ...Object.keys(clusterMap),
       ...targets
-        .filter(t => (selectedActivity === "All" || t.activity === selectedActivity) && (selectedFinancialYear === "All" || t.financialYear === selectedFinancialYear))
+        .filter(t => (selectedActivity === "All" || t.activity === selectedActivity) && (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear))
         .map(t => t.cluster)
     ]);
 
@@ -617,7 +749,7 @@ const ContributionPage: React.FC = () => {
           (t) =>
             t.cluster === label &&
             (selectedActivity === "All" || t.activity === selectedActivity) &&
-            (selectedFinancialYear === "All" || t.financialYear === selectedFinancialYear)
+            (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear)
         );
         const target = clusterTargets.reduce(
           (acc, t) => acc + t.contributionTarget,
@@ -637,7 +769,7 @@ const ContributionPage: React.FC = () => {
     const allActivities = new Set([
       ...Object.keys(activityMap),
       ...targets
-        .filter(t => (selectedCluster === "All" || t.cluster === selectedCluster) && (selectedFinancialYear === "All" || t.financialYear === selectedFinancialYear))
+        .filter(t => (selectedCluster === "All" || t.cluster === selectedCluster) && (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear))
         .map(t => t.activity)
     ]);
 
@@ -649,7 +781,7 @@ const ContributionPage: React.FC = () => {
           (t) =>
             t.activity === label &&
             (selectedCluster === "All" || t.cluster === selectedCluster) &&
-            (selectedFinancialYear === "All" || t.financialYear === selectedFinancialYear)
+            (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear)
         );
         const target = actTargets.reduce(
           (acc, t) => acc + t.contributionTarget,
@@ -673,7 +805,7 @@ const ContributionPage: React.FC = () => {
       const matchesActivity =
         selectedActivity === "All" || t.activity === selectedActivity;
       const matchesFY =
-        selectedFinancialYear === "All" || t.financialYear === selectedFinancialYear;
+        selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear;
       return matchesCluster && matchesActivity && matchesFY;
     });
     const totalTarget = filteredTargets.reduce(
@@ -692,11 +824,13 @@ const ContributionPage: React.FC = () => {
   }, [filteredData, targets, selectedCluster, selectedActivity, selectedFinancialYear]);
 
   const financialYears = useMemo(() => {
+    const fromTargets = targets.map((t) => (t.financialYear || "").trim());
+    const fromMerged = mergedData.map((d) => (d.financialYear || "").trim());
     return [
       "All",
-      ...Array.from(new Set(targets.map((t) => t.financialYear).filter(Boolean))).sort()
+      ...Array.from(new Set([...fromTargets, ...fromMerged].filter(f => f && f !== 'N/A'))).sort()
     ];
-  }, [targets]);
+  }, [targets, mergedData]);
 
   if (loading)
     return (
@@ -951,7 +1085,7 @@ const ContributionPage: React.FC = () => {
                       </div>
                       <div className="flex flex-col mt-1">
                         <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-tight">
-                          FID: {row.farmerId}
+                          HH Id: {row.farmerId}
                         </span>
                         <span className="text-[9px] font-black text-gray-400 uppercase">
                           {row.category}

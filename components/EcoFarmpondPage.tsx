@@ -129,7 +129,7 @@ const EcoFarmpondPage: React.FC = () => {
 
             const contribMap = new Map<string, number>();
             rawContribs.forEach(row => {
-                const rawId = getFuzzyValue(row, ['FARMERID', 'FID', 'ID', 'FARMER ID', 'HH_id', 'HH ID', 'HHID']);
+                const rawId = getFuzzyValue(row, ['HH_Id', 'HH_ID', 'FARMERID', 'FID', 'ID', 'FARMER ID', 'HH_id', 'HH ID', 'HHID']);
                 const normId = normalizeId(rawId);
                 
                 const pondCol = Object.keys(row).find(k => k.toUpperCase().includes('ECO-FARMPOND') || k.toUpperCase().includes('FARMPOND'));
@@ -143,7 +143,7 @@ const EcoFarmpondPage: React.FC = () => {
             });
 
             const parsedPonds: FarmpondRecord[] = rawPonds.map(row => {
-                const hhId = getFuzzyValue(row, ['HH_id', 'HH ID', 'HHID', 'Farmer ID', 'FARMERID']) || '';
+                const hhId = getFuzzyValue(row, ['HH_Id', 'HH_ID', 'HH_id', 'HH ID', 'HHID', 'Farmer ID', 'FARMERID']) || '';
                 const normHhId = normalizeId(hhId);
                 
                 return {

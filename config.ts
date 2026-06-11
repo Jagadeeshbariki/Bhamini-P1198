@@ -51,6 +51,7 @@ export const ELEVATED_GOAT_SHED_URL = 'https://docs.google.com/spreadsheets/d/e/
 
 // 15. CROPS DATA
 export const CROPS_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR4QtZipnTgk2e8RU7NapbDg0b0re6_0YRrkd8fK34HEibBwpx6sa0g5gR9WK4UP3bEnuYSmO7fZpCN/pub?gid=1609179150&single=true&output=csv';
+export const CROPS_MATERIAL_TARGETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQsKt9qZZldhzxePq4bcrvOP8HN-xHBkhUa3eqowfWLIlBZwtLWCdh-2KvrolnkY0Y5_eNs6f00wKy2/pub?gid=1388220297&single=true&output=csv';
 export const BIO_INPUTS_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR4QtZipnTgk2e8RU7NapbDg0b0re6_0YRrkd8fK34HEibBwpx6sa0g5gR9WK4UP3bEnuYSmO7fZpCN/pub?gid=1233605541&single=true&output=csv'; // Add Bio Inputs CSV URL here
 export const HARVEST_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR4QtZipnTgk2e8RU7NapbDg0b0re6_0YRrkd8fK34HEibBwpx6sa0g5gR9WK4UP3bEnuYSmO7fZpCN/pub?gid=282552033&single=true&output=csv'; // Add Harvest CSV URL here
 

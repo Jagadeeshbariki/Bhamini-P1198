@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ASSET_DISTRIBUTION_URL, getProxyUrl } from '../config';
+import { ASSET_DISTRIBUTION_URL, BENEFICIARY_DATA_URL, CROPS_DATA_URL, CROPS_MATERIAL_TARGETS_URL, getProxyUrl } from '../config';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line
@@ -30,6 +30,7 @@ interface ODKAssetDistributionProps {
 
 const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) => {
     const [data, setData] = useState<DistributionRecord[]>([]);
+    const [cropTargets, setCropTargets] = useState<Record<string, Record<string, number>>>({}); // { cluster: { materialName: targetValue } }
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedActivity, setSelectedActivity] = useState('All');
@@ -79,15 +80,128 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
         });
     };
 
+    const parseGenericCSV = (csv: string) => {
+        const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 1) return [];
+        const parseLine = (line: string): string[] => {
+            const values = [];
+            let inQuote = false, val = '';
+            for (let j = 0; j < line.length; j++) {
+                if (line[j] === '"') inQuote = !inQuote;
+                else if (line[j] === ',' && !inQuote) { values.push(val.trim()); val = ''; }
+                else val += line[j];
+            }
+            values.push(val.trim().replace(/^"|"$/g, ''));
+            return values;
+        };
+        const headers = parseLine(lines[0]).map(h => h.trim().toUpperCase());
+        return lines.slice(1).map(line => {
+            const row = parseLine(line);
+            const obj: Record<string, string> = {};
+            headers.forEach((h, i) => { if (h) obj[h] = row[i] || ''; });
+            return obj;
+        });
+    };
+
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const response = await fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`));
-                if (!response.ok) throw new Error('Failed to fetch distribution data');
-                const csvText = await response.text();
-                const parsed = parseCSV(csvText);
+                const fetchSafe = (url: string) => fetch(getProxyUrl(`${url}&t=${Date.now()}`)).catch(() => null);
+                
+                const [distRes, benRes, cropsRes, targetsRes] = await Promise.all([
+                    fetchSafe(ASSET_DISTRIBUTION_URL),
+                    fetchSafe(BENEFICIARY_DATA_URL),
+                    fetchSafe(CROPS_DATA_URL),
+                    fetchSafe(CROPS_MATERIAL_TARGETS_URL)
+                ]);
+
+                if (!distRes || !distRes.ok) throw new Error('Failed to fetch distribution data');
+                
+                const distText = await distRes.text();
+                const parsed = parseCSV(distText);
                 setData(parsed);
+
+                let cropsTargetsByCluster: Record<string, Record<string, number>> = {};
+                
+                if (benRes?.ok && cropsRes?.ok && targetsRes?.ok) {
+                    const benText = await benRes.text();
+                    const cropsText = await cropsRes.text();
+                    const targetsText = await targetsRes.text();
+                    
+                    const parsedBens = parseGenericCSV(benText);
+                    const parsedCrops = parseGenericCSV(cropsText);
+                    const parsedTargets = parseGenericCSV(targetsText);
+
+                    // Map material codes/names to target logic
+                    const materialTargetsMap = new Map<string, { targetPerAcre: number, name: string }>();
+                    parsedTargets.forEach(row => {
+                        const code = (row['MATERIAL ID'] || '').trim().toUpperCase();
+                        const materialName = row['MATERIAL NAME'] || '';
+                        const targetStr = row['TARGET'];
+                        if (code && targetStr) {
+                            const targetPerAcre = parseFloat(targetStr);
+                            if (!isNaN(targetPerAcre)) {
+                                materialTargetsMap.set(code, { targetPerAcre, name: materialName });
+                            }
+                        }
+                    });
+
+                    // Build village/GP to cluster map
+                    const villageClusterMap = new Map<string, string>();
+                    const hhIdClusterMap = new Map<string, string>();
+                    
+                    parsedBens.forEach(b => {
+                        const cluster = b['CLUSTER'] || b['LOCATION-BLOCK'] || 'Unknown';
+                        const v = (b['VILLAGE'] || b['LOCATION-VILLAGE'] || '').trim().toUpperCase();
+                        const gp = (b['GP'] || b['LOCATION-GP'] || '').trim().toUpperCase();
+                        const hhId = (b['HH_ID'] || b['HH ID'] || b['BEN_ID'] || b['BENID'] || '').trim() || 
+                                     (b['PLOT_REG-FARMER_ID'] || '');
+                                     
+                        if (v) villageClusterMap.set(v, cluster);
+                        if (gp && !villageClusterMap.has(gp)) villageClusterMap.set(gp, cluster);
+                        
+                        const normId = hhId.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        if (normId) hhIdClusterMap.set(normId, cluster);
+                    });
+
+                    // Aggregate Extent and Farmer counts per cluster
+                    const clusterCropsInfo: Record<string, { extent: number, farmerIds: Set<string> }> = {};
+                    
+                    parsedCrops.forEach(c => {
+                        const rawId = c['HH ID'] || c['HH_ID'] || c['PLOT_REG-FARMER_ID'] || c['FARMER_ID'] || '';
+                        const normId = rawId.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        
+                        let cluster = hhIdClusterMap.get(normId);
+                        if (!cluster) {
+                            const village = (c['VILLAGE'] || '').trim().toUpperCase();
+                            const gp = (c['GP'] || '').trim().toUpperCase();
+                            cluster = villageClusterMap.get(village) || villageClusterMap.get(gp) || 'Unknown';
+                        }
+                        
+                        if (!clusterCropsInfo[cluster]) {
+                            clusterCropsInfo[cluster] = { extent: 0, farmerIds: new Set() };
+                        }
+                        
+                        const extent = parseFloat(c['EXTENT'] || c['PLOT_REG-AREA'] || '0') || 0;
+                        clusterCropsInfo[cluster].extent += extent;
+                        if (normId) clusterCropsInfo[cluster].farmerIds.add(normId);
+                    });
+
+                    // Calculate targets
+                    cropsTargetsByCluster = {};
+                    Object.entries(clusterCropsInfo).forEach(([cluster, info]) => {
+                        cropsTargetsByCluster[cluster] = {};
+                        materialTargetsMap.forEach((meta, code) => {
+                            const targetVal = (code === 'HDFC-A1.11-0044' || code === 'HDFC-A1.11-0051') 
+                                ? meta.targetPerAcre * info.farmerIds.size
+                                : meta.targetPerAcre * info.extent;
+                            cropsTargetsByCluster[cluster][meta.name] = (cropsTargetsByCluster[cluster][meta.name] || 0) + targetVal;
+                        });
+                    });
+                }
+                
+                setCropTargets(cropsTargetsByCluster);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -344,19 +458,60 @@ const ODKAssetDistribution: React.FC<ODKAssetDistributionProps> = ({ onBack }) =
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                            {Object.entries(pivotData.summary[activity].materials).map(([material, clusters]) => (
+                                            {Object.entries(pivotData.summary[activity].materials).map(([material, clusters]) => {
+                                                const isCrops = activity.toLowerCase() === 'crops';
+                                                
+                                                const normalizeNames = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/crops$/, '');
+                                                const normMaterial = normalizeNames(material);
+
+                                                let totalTarget = 0;
+                                                if (isCrops) {
+                                                    pivotData.clusters.forEach(c => {
+                                                        const matchKey = Object.keys(cropTargets[c] || {}).find(k => normalizeNames(k) === normMaterial);
+                                                        if (matchKey && cropTargets[c]) {
+                                                            totalTarget += cropTargets[c][matchKey] || 0;
+                                                        }
+                                                    });
+                                                }
+                                                
+                                                return (
                                                 <tr key={material} className="hover:bg-gray-50/30 transition-colors">
                                                     <td className="py-3 font-bold text-gray-600 dark:text-gray-400">{material}</td>
-                                                    {pivotData.clusters.map(c => (
-                                                        <td key={c} className="py-3 text-center font-bold text-gray-900 dark:text-white">
-                                                            {clusters[c]?.toLocaleString() || '-'}
-                                                        </td>
-                                                    ))}
+                                                    {pivotData.clusters.map(c => {
+                                                        const dist = clusters[c] || 0;
+                                                        let target = 0;
+                                                        if (isCrops && cropTargets[c]) {
+                                                            const matchKey = Object.keys(cropTargets[c]).find(k => normalizeNames(k) === normMaterial);
+                                                            if (matchKey) {
+                                                                target = cropTargets[c][matchKey] || 0;
+                                                            }
+                                                        }
+                                                        
+                                                        return (
+                                                            <td key={c} className="py-3 text-center font-bold text-gray-900 dark:text-white">
+                                                                {isCrops && target > 0 ? (
+                                                                    <div className="flex items-center justify-center space-x-1">
+                                                                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{target.toFixed(1)} /</span>
+                                                                        <span className={dist > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-gray-300 dark:text-gray-600"}>{dist > 0 ? dist.toLocaleString() : '-'}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    dist > 0 ? dist.toLocaleString() : '-'
+                                                                )}
+                                                            </td>
+                                                        );
+                                                    })}
                                                     <td className="py-3 text-center font-black text-indigo-600 dark:text-indigo-400">
-                                                        {Object.values(clusters).reduce((a, b) => a + b, 0).toLocaleString()}
+                                                        {isCrops && totalTarget > 0 ? (
+                                                            <div className="flex items-center justify-center space-x-1">
+                                                                <span className="text-[10px] text-indigo-400 dark:text-indigo-500">{totalTarget.toFixed(1)} /</span>
+                                                                <span>{Object.values(clusters).reduce((a, b) => a + b, 0).toLocaleString()}</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span>{Object.values(clusters).reduce((a, b) => a + b, 0).toLocaleString()}</span>
+                                                        )}
                                                     </td>
                                                 </tr>
-                                            ))}
+                                            )})}
                                         </tbody>
                                     </table>
                                 </div>
