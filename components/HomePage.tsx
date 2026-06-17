@@ -1,5 +1,9 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, LayersControl, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { Maximize, Minimize } from 'lucide-react';
 import PhotoSlider from './PhotoSlider';
 import PhotoGallery from './PhotoGallery';
 import MediaUploadModal from './MediaUploadModal';
@@ -7,23 +11,54 @@ import { useAuth } from '../hooks/useAuth';
 import { 
     GOOGLE_SHEET_PHOTOS_URL,
     GOOGLE_APPS_SCRIPT_URL,
+    VILLAGES_DATA_URL,
     getProxyUrl
 } from '../config';
 
+// Map resizer to trigger invalidateSize when fullscreen changes
+const MapResizer = ({ isFullScreen }: { isFullScreen: boolean }) => {
+    const map = useMap();
+    useEffect(() => {
+        setTimeout(() => map.invalidateSize(), 100);
+    }, [isFullScreen, map]);
+    return null;
+};
+
+// Fix Leaflet's default icon path issues
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
 interface ImageData {
+
     url: string;
     description: string;
     activity: string;
+}
+
+interface VillageData {
+    district: string;
+    block: string;
+    cluster: string;
+    gp: string;
+    village: string;
+    lat: number;
+    lng: number;
 }
 
 const HomePage: React.FC = () => {
     const { user } = useAuth();
     const [sliderImages, setSliderImages] = useState<ImageData[]>([]);
     const [galleryImages, setGalleryImages] = useState<ImageData[]>([]);
+    const [villagesData, setVillagesData] = useState<VillageData[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [isMapFullScreen, setIsMapFullScreen] = useState(false);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const filterRef = useRef<HTMLDivElement>(null);
 
@@ -81,11 +116,19 @@ const HomePage: React.FC = () => {
         return '';
     };
 
-    const fetchPhotos = useCallback(async (silent = false) => {
+    const fetchPhotosAndVillages = useCallback(async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const response = await fetch(getProxyUrl(`${GOOGLE_SHEET_PHOTOS_URL}&t=${Date.now()}`));
-            const csvText = await response.text();
+            const [photosRes, villagesRes] = await Promise.all([
+                fetch(getProxyUrl(`${GOOGLE_SHEET_PHOTOS_URL}&t=${Date.now()}`)),
+                fetch(getProxyUrl(`${VILLAGES_DATA_URL}&t=${Date.now()}`))
+            ]);
+            
+            const [csvText, villagesText] = await Promise.all([
+                photosRes.text(),
+                villagesRes.text()
+            ]);
+            
             const rows = parseCSVToObjects(csvText);
             const slider: ImageData[] = [];
             const gallery: ImageData[] = [];
@@ -109,16 +152,35 @@ const HomePage: React.FC = () => {
             });
             setSliderImages(slider.reverse());
             setGalleryImages(gallery.reverse());
+
+            const villageRows = parseCSVToObjects(villagesText);
+            const vData: VillageData[] = [];
+            villageRows.forEach(row => {
+                const lat = parseFloat(row['LAT']);
+                const lng = parseFloat(row['LONG']);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    vData.push({
+                        district: row['DISTRICT'] || '',
+                        block: row['BLOCK'] || '',
+                        cluster: row['CLUSTER'] || row['Cluster'] || '',
+                        gp: row['GP'] || '',
+                        village: row['NAMEOFVILLAGE'] || row['VILLAGE'] || '',
+                        lat,
+                        lng
+                    });
+                }
+            });
+            setVillagesData(vData);
         } catch (err) {
             console.error(err);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        fetchPhotos();
-    }, [fetchPhotos]);
+        fetchPhotosAndVillages();
+    }, [fetchPhotosAndVillages]);
 
     const availableActivities = useMemo(() => {
         return Array.from(new Set(galleryImages.map(img => img.activity))).sort();
@@ -184,14 +246,106 @@ const HomePage: React.FC = () => {
 
     return (
         <div className="space-y-12">
-            <section className="animate-fade-in">
+            
+            {villagesData.length > 0 && (
+                <section className={isMapFullScreen ? "fixed inset-0 z-[9999] bg-white dark:bg-gray-900" : "animate-fade-in"}>
+                    {!isMapFullScreen && (
+                        <div className="text-center mb-6 mt-12">
+                            <h2 className="text-2xl font-black text-gray-800 dark:text-white uppercase tracking-tight">Working Villages</h2>
+                            <div className="h-1 w-12 bg-indigo-500 mt-2 mx-auto rounded-full"></div>
+                        </div>
+                    )}
+                    <div className={
+                        isMapFullScreen 
+                        ? "h-full w-full relative" 
+                        : "mx-4 overflow-hidden rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 h-[600px] relative"
+                    }>
+                        <button 
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setIsMapFullScreen(!isMapFullScreen);
+                            }}
+                            className="bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 rounded shadow border border-gray-200 dark:border-gray-700 flex items-center justify-center gap-2 text-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
+                            style={{ position: 'absolute', top: '15px', left: '60px', zIndex: 10000, padding: '0.5rem 0.75rem' }}
+                            aria-label="Toggle Fullscreen"
+                        >
+                            {isMapFullScreen ? <Minimize size={16} /> : <Maximize size={16} />}
+                            <span className="text-xs font-bold">{isMapFullScreen ? 'Exit Full Screen' : 'Full Screen'}</span>
+                        </button>
+                        <MapContainer 
+                            bounds={villagesData.map(v => [v.lat, v.lng] as [number, number])}
+                            scrollWheelZoom={true} 
+                            style={{ height: '100%', width: '100%' }}
+                            className="z-0 h-full w-full"
+                        >
+                            <MapResizer isFullScreen={isMapFullScreen} />
+                            <LayersControl position="topright">
+                                <LayersControl.BaseLayer checked name="Map">
+                                    <TileLayer
+                                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                    />
+                                </LayersControl.BaseLayer>
+                                <LayersControl.BaseLayer name="Satellite">
+                                    <TileLayer
+                                        attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                                    />
+                                </LayersControl.BaseLayer>
+                            </LayersControl>
+                            {villagesData.map((v, i) => {
+                                let color = '#6B7280';
+                                if (v.cluster.toLowerCase() === 'cluster_1') color = '#EF4444';
+                                else if (v.cluster.toLowerCase() === 'cluster_2') color = '#3B82F6';
+                                else if (v.cluster.toLowerCase() === 'cluster_3') color = '#10B981';
+                                else if (v.cluster) color = '#F59E0B'; // fallback color
+
+                                const customIcon = L.divIcon({
+                                    className: 'custom-cluster-marker bg-transparent border-none',
+                                    html: `<svg width="28" height="40" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 3px 4px rgba(0,0,0,0.4));">
+                                        <path d="M12 0C5.37258 0 0 5.37258 0 12C0 21 12 36 12 36C12 36 24 21 24 12C24 5.37258 18.6274 0 12 0ZM12 16.2C9.6804 16.2 7.8 14.3196 7.8 12C7.8 9.6804 9.6804 7.8 12 7.8C14.3196 7.8 16.2 9.6804 16.2 12C16.2 14.3196 14.3196 16.2 12 16.2Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+                                    </svg>`,
+                                    iconSize: [28, 40],
+                                    iconAnchor: [14, 40],
+                                    popupAnchor: [0, -40]
+                                });
+
+                                return (
+                                <Marker key={i} position={[v.lat, v.lng]} icon={customIcon}>
+                                    <Popup className="rounded-xl overflow-hidden shadow-lg">
+                                        <div className="p-2 space-y-1">
+                                            <h3 className="font-black text-gray-800 uppercase tracking-widest text-xs border-b pb-1 mb-2">{v.village}</h3>
+                                            <p className="text-[10px] text-gray-500"><strong>GP:</strong> {v.gp}</p>
+                                            <p className="text-[10px] text-gray-500"><strong>Block:</strong> {v.block}</p>
+                                            <p className="text-[10px] text-gray-500"><strong>District:</strong> {v.district}</p>
+                                            {v.cluster && <p className="text-[10px] text-gray-500"><strong>Cluster:</strong> <span style={{color, fontWeight: 'bold'}}>{v.cluster}</span></p>}
+                                        </div>
+                                    </Popup>
+                                </Marker>
+                                );
+                            })}
+                        </MapContainer>
+                        <div className="absolute bottom-6 left-6 z-[400] bg-white dark:bg-gray-800 p-3 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 pointer-events-auto">
+                            <h4 className="text-[10px] font-black uppercase mb-3 text-gray-800 dark:text-gray-200 tracking-widest border-b pb-1">Legend</h4>
+                            <div className="space-y-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                <div className="flex items-center gap-3"><div className="w-3 h-3 bg-[#EF4444] rounded-full border-2 border-white/80 shadow-sm"></div>Cluster 1</div>
+                                <div className="flex items-center gap-3"><div className="w-3 h-3 bg-[#3B82F6] rounded-full border-2 border-white/80 shadow-sm"></div>Cluster 2</div>
+                                <div className="flex items-center gap-3"><div className="w-3 h-3 bg-[#10B981] rounded-full border-2 border-white/80 shadow-sm"></div>Cluster 3</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            <section className="animate-fade-in mt-12">
                 <div className="text-center mb-6">
                     <h2 className="text-2xl font-black text-gray-800 dark:text-white uppercase tracking-tight">Project Highlights</h2>
                 </div>
                 {sliderImages.length > 0 && <PhotoSlider images={sliderImages} />}
             </section>
-            
-            <section className="animate-fade-in">
+
+            <section className="animate-fade-in mt-12">
                 <div className="flex flex-col md:flex-row items-center justify-between mb-8 px-4 gap-4">
                     <div className="text-left flex items-center gap-6">
                         <div>
@@ -290,7 +444,7 @@ const HomePage: React.FC = () => {
             <MediaUploadModal 
                 isOpen={isUploadModalOpen} 
                 onClose={() => setIsUploadModalOpen(false)} 
-                onUploadSuccess={fetchPhotos} 
+                onUploadSuccess={fetchPhotosAndVillages} 
             />
             
             <style>{`

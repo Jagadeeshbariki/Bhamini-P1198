@@ -1,6 +1,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { BASELINE_DATA_URL, getProxyUrl } from '../config';
+import { useAuth } from '../hooks/useAuth';
+import { 
+    PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
+    BarChart, Bar, XAxis, YAxis, CartesianGrid
+} from 'recharts';
 
 interface HouseholdData {
     farmerId: string;
@@ -26,6 +31,9 @@ interface HouseholdData {
 }
 
 const BaselinePage: React.FC = () => {
+    const { user } = useAuth();
+    const isProjectStaff = user?.role === 'project' || user?.role === 'admin';
+
     const [allData, setAllData] = useState<HouseholdData[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedBeneficiary, setSelectedBeneficiary] = useState<HouseholdData | null>(null);
@@ -265,6 +273,40 @@ const BaselinePage: React.FC = () => {
         });
     }, [allData, selectedCluster, selectedGP, selectedVillage, searchQuery]);
 
+    const dashboardMetrics = useMemo(() => {
+        if (!isProjectStaff) return null;
+
+        const totalBaselines = filteredData.length;
+        const totalVillages = new Set(filteredData.map(d => d.village).filter(Boolean)).size;
+        const totalGPs = new Set(filteredData.map(d => d.gp).filter(Boolean)).size;
+        const totalClusters = new Set(filteredData.map(d => d.cluster).filter(Boolean)).size;
+
+        const genderCounts = filteredData.reduce((acc, curr) => {
+            const gender = (curr.gender || 'Unknown').trim();
+            acc[gender] = (acc[gender] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        const genderData = Object.entries(genderCounts).map(([name, value]) => ({ name, value }));
+
+        const categoryCounts = filteredData.reduce((acc, curr) => {
+            const c = (curr.category || 'Unknown').trim();
+            acc[c] = (acc[c] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        const categoryData = Object.entries(categoryCounts)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
+
+        return {
+            totalBaselines, totalVillages, totalGPs, totalClusters,
+            genderData, categoryData
+        };
+    }, [filteredData, isProjectStaff]);
+
+    const COLORS = ['#4f46e5', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6'];
+
     if (loading && allData.length === 0) return (
         <div className="flex flex-col items-center justify-center min-h-[50vh]">
             <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -326,6 +368,89 @@ const BaselinePage: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Project Staff Insights Dashboard */}
+            {isProjectStaff && dashboardMetrics && (
+                <div className="bg-white dark:bg-gray-800 p-5 md:p-8 rounded-[2rem] md:rounded-[2.5rem] shadow-xl border border-indigo-100 dark:border-indigo-900/50">
+                    <h2 className="text-sm font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-6">Staff Insights</h2>
+                    
+                    {/* Top Level Metrics */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl flex flex-col justify-center items-center">
+                            <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400">{dashboardMetrics.totalBaselines.toLocaleString()}</span>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Total Baseline</span>
+                        </div>
+                        <div className="bg-pink-50 dark:bg-pink-900/20 p-4 rounded-2xl flex flex-col justify-center items-center">
+                            <span className="text-3xl font-black text-pink-600 dark:text-pink-400">{dashboardMetrics.totalVillages.toLocaleString()}</span>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Villages</span>
+                        </div>
+                        <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-2xl flex flex-col justify-center items-center">
+                            <span className="text-3xl font-black text-amber-600 dark:text-amber-400">{dashboardMetrics.totalGPs.toLocaleString()}</span>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">GPs Covered</span>
+                        </div>
+                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl flex flex-col justify-center items-center">
+                            <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{dashboardMetrics.totalClusters.toLocaleString()}</span>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Clusters</span>
+                        </div>
+                    </div>
+
+                    {/* Charts */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-700">
+                            <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 text-center">Male vs Female HH Head</h3>
+                            <div className="h-64">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={dashboardMetrics.genderData}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                            labelLine={false}
+                                        >
+                                            {dashboardMetrics.genderData.map((entry, index) => (
+                                                <Cell key={'cell-'+index} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip 
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                            itemStyle={{ fontWeight: 'bold' }}
+                                        />
+                                        <Legend wrapperStyle={{ fontSize: '12px', fontWeight: 'bold' }} verticalAlign="bottom" height={36}/>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-700">
+                            <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 text-center">Social Category Distribution</h3>
+                            <div className="h-64">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={dashboardMetrics.categoryData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: '#6B7280' }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: '#6B7280' }} />
+                                        <Tooltip 
+                                            cursor={{ fill: 'rgba(79, 70, 229, 0.05)' }}
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                            itemStyle={{ fontWeight: 'bold' }}
+                                        />
+                                        <Bar dataKey="value" fill="#8b5cf6" radius={[6, 6, 0, 0]}>
+                                            {dashboardMetrics.categoryData.map((entry, index) => (
+                                                <Cell key={'cell-'+index} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* List View */}
             <div className="space-y-4">

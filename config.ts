@@ -62,6 +62,9 @@ export const MASTER_TARGETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PAC
 export const STAFF_ATTENDANCE_LOG_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQgDjzuMMVuzxXeuCn6QmSMMAGuZJYXc6hdlhl42lD70miLVJgSpqQYRCllJBTuSmkriBOIbvExxfAC/pub?gid=0&single=true&output=csv';
 export const STAFF_ATTENDANCE_GAS_URL = 'https://script.google.com/macros/s/AKfycbyAkK7HWVr6JQ2ZcKwwOcrsiizir94bbrqCkYVBTmDKltxhkZDpkJ1ywgUJc7VY37myng/exec';
 
+// 18. VILLAGES MAP DATA
+export const VILLAGES_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2T6skNnpDlaFl8n93i0eO7zlF0bK-sdndW1-AIRRpWf-YJkYzXjiC8B1e5hFdZ2KqMsNTKN9NCmPG/pub?gid=948225721&single=true&output=csv';
+
 // 9. SYSTEM ENDPOINT
 export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby4omIqQ9ANnowOT75v9b-7LJmrZ1_Fb1iZGfSNRVo8TbkmsuGv4Mf9h36MMwVPkjaiVw/exec';
 
