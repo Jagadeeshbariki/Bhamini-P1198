@@ -1,8 +1,9 @@
-const url = "https://script.google.com/macros/s/AKfycbwp9LTcw2mEBJs2JQWq6NxexdbGtkFO_IrDFXz_8XItnD2VoQHOA79TysWeuSwxbY3wdw/exec";
+const url = "https://script.google.com/macros/s/AKfycby2s0HDWZdwIqvT7UtsCm491PZ3Gqs6aZkRczItIdNsnAUOTPoFAEB0Ylxps-02YAfYbw/exec";
 const payload = {
     action: 'updateAcquittance',
-    rowKey: 'uuid:b4067253-abcb-4467-bc18-283188565b93',
-    acquittanceReceived: 'Yes'
+    rowKey: 'uuid:5beb072c-efc5-4753-ae5a-d39a09228991/distribution_details[1]',
+    acquittanceReceived: 'Yes',
+    updatedBy: 'Jagadeesh'
 };
 fetch(url, {
     method: 'POST',

@@ -4,8 +4,9 @@ function doPost(e) {
     if (data.action === 'updateAcquittance') {
       var rowKey = data.rowKey;
       var acquittanceReceived = data.acquittanceReceived;
+      var updatedBy = data.updatedBy; // Capture the updatedBy value from payload
       
-      // Use the exact spreadsheet ID to ensure it works even as a standalone script
+      // We explicitly open the Asset Distribution Sheet by its ID so it never gets lost
       var ss = SpreadsheetApp.openById('1hxAEQyjRBICVkA3UAxluT8Mue6B8_FMApt6ZgUZov9U');
       var sheets = ss.getSheets();
       
@@ -23,11 +24,13 @@ function doPost(e) {
         
         var keyIdx = -1;
         var aqtIdx = -1;
+        var updatedByIdx = -1; // Track the 'updated_by' column
         
         for (var i = 0; i < headers.length; i++) {
           var h = String(headers[i]).trim();
           if (h === 'KEY') keyIdx = i;
           if (h === 'acquittance_received' || h.toLowerCase() === 'acquittance received' || h.toLowerCase() === 'acquittance') aqtIdx = i;
+          if (h === 'updated_by' || h.toLowerCase() === 'updated by' || h.toLowerCase() === 'updatedby') updatedByIdx = i;
         }
         
         if (keyIdx !== -1 && aqtIdx !== -1) {
@@ -37,7 +40,14 @@ function doPost(e) {
           
           for (var r = 1; r < keys.length; r++) { 
             if (String(keys[r][0]).trim() === String(rowKey).trim()) {
+              // 1. Update the acquittance column
               sheet.getRange(r + 1, aqtIdx + 1).setValue(acquittanceReceived);
+              
+              // 2. Update the 'updated_by' column if it exists in the sheet and the payload has a value
+              if (updatedByIdx !== -1 && updatedBy) {
+                sheet.getRange(r + 1, updatedByIdx + 1).setValue(updatedBy);
+              }
+              
               updated = true;
               break;
             }

@@ -185,12 +185,23 @@ const BeneficiaryExpandedDetails: React.FC<{ b: Beneficiary, setPreviewImage: (u
                 timestamp: new Date().toISOString()
             };
 
-            await fetch(ACQUITTANCE_SCRIPT_URL, {
+            const response = await fetch(ACQUITTANCE_SCRIPT_URL, {
                 method: 'POST',
-                mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(payload)
             });
+            
+            const resultText = await response.text();
+            console.log("Acquittance update response:", resultText);
+            
+            try {
+                const resultJson = JSON.parse(resultText);
+                if (resultJson.error) {
+                    console.error("Apps Script Error:", resultJson.error);
+                }
+            } catch (e) {
+                // Not JSON or parse error
+            }
         } catch (error) {
             console.error('Failed to update acquittance:', error);
             const revertedAssets = [...localAssets];
