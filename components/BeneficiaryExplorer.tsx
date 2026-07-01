@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, MASTER_TARGETS_URL, CONTRIBUTION_DATA_URL, MATERIAL_CONTRIBUTION_URL, getProxyUrl } from '../config';
+import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, MASTER_TARGETS_URL, CONTRIBUTION_DATA_URL, MATERIAL_CONTRIBUTION_URL, getProxyUrl, GOOGLE_APPS_SCRIPT_URL, ACQUITTANCE_SCRIPT_URL } from '../config';
+import { useAuth } from '../hooks/useAuth';
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
@@ -37,7 +38,9 @@ interface Asset {
     distributor: string;
     photo?: string;
     parentKey?: string;
+    rowKey?: string;
     targetContribution?: number;
+    acquittanceReceived?: boolean;
 }
 
 interface Beneficiary {
@@ -117,8 +120,87 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
+const ACQUITTANCE_CACHE_KEY = 'acquittance_pending_updates';
+
+export function getPendingAcquittances(): Record<string, string> {
+    try {
+        if (typeof window !== 'undefined') {
+            const stored = localStorage.getItem(ACQUITTANCE_CACHE_KEY);
+            return stored ? JSON.parse(stored) : {};
+        }
+        return {};
+    } catch {
+        return {};
+    }
+}
+
+export function setPendingAcquittance(rowKey: string, value: string) {
+    try {
+        if (typeof window !== 'undefined') {
+            const pending = getPendingAcquittances();
+            pending[rowKey] = value;
+            localStorage.setItem(ACQUITTANCE_CACHE_KEY, JSON.stringify(pending));
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
 const BeneficiaryExpandedDetails: React.FC<{ b: Beneficiary, setPreviewImage: (url: string) => void, formatDriveUrl: (url: string) => string }> = ({ b, setPreviewImage, formatDriveUrl }) => {
     const totalTarget = b.targetContribution || 0;
+    const { user } = useAuth();
+    const isProjectRole = user?.role === 'admin' || user?.role === 'da' || user?.role === 'project';
+    
+    const [localAssets, setLocalAssets] = useState(b.assets);
+    const [updatingAsset, setUpdatingAsset] = useState<string | null>(null);
+
+    useEffect(() => {
+        setLocalAssets(b.assets);
+    }, [b.assets]);
+
+    const handleAcquittanceToggle = async (assetIndex: number, currentValue: boolean) => {
+        const asset = localAssets[assetIndex];
+        const newValue = !currentValue;
+        
+        const newAssets = [...localAssets];
+        newAssets[assetIndex] = { ...asset, acquittanceReceived: newValue };
+        setLocalAssets(newAssets);
+        setUpdatingAsset(`${b.beneficiaryId}-${assetIndex}`);
+        
+        if (asset.rowKey) {
+            setPendingAcquittance(asset.rowKey, newValue ? 'Yes' : 'No');
+        }
+
+        try {
+            const payload = {
+                action: 'updateAcquittance',
+                hhId: b.hhId,
+                beneficiaryId: b.beneficiaryId,
+                materialId: asset.materialId || asset.code,
+                rowKey: asset.rowKey,
+                parentKey: asset.parentKey,
+                label: asset.label,
+                acquittanceReceived: newValue ? 'Yes' : 'No',
+                updatedBy: user?.username || 'Unknown',
+                timestamp: new Date().toISOString()
+            };
+
+            await fetch(ACQUITTANCE_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            });
+        } catch (error) {
+            console.error('Failed to update acquittance:', error);
+            const revertedAssets = [...localAssets];
+            revertedAssets[assetIndex] = { ...asset, acquittanceReceived: currentValue };
+            setLocalAssets(revertedAssets);
+        } finally {
+            setUpdatingAsset(null);
+        }
+    };
+
     return (
         <div className="animate-fade-in flex flex-col gap-4">
             {/* Material Distribution */}
@@ -127,9 +209,9 @@ const BeneficiaryExpandedDetails: React.FC<{ b: Beneficiary, setPreviewImage: (u
                     <h4 className="text-[10px] font-black uppercase text-indigo-500 tracking-widest">Material Distribution</h4>
                 </div>
                 <div className="p-4 border-t border-gray-100 dark:border-gray-700">
-                    {b.assets.length > 0 ? (
+                    {localAssets.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {b.assets.map((asset, idx) => (
+                                {localAssets.map((asset, idx) => (
                                     <div key={idx} className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-2">
                                         <div className="flex justify-between items-start">
                                             <span className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{asset.label}</span>
@@ -141,6 +223,23 @@ const BeneficiaryExpandedDetails: React.FC<{ b: Beneficiary, setPreviewImage: (u
                                             <span className="text-[8px] font-bold text-gray-400 uppercase">{asset.date}</span>
                                             <span className="text-[8px] font-bold text-indigo-400 uppercase">{asset.distributor}</span>
                                         </div>
+                                        
+                                        {isProjectRole && (
+                                            <div className="mt-1 pt-2 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                                                <span className="text-[9px] font-black uppercase text-gray-500">Acquittance Received</span>
+                                                <label className={cn("relative inline-flex items-center", updatingAsset === `${b.beneficiaryId}-${idx}` ? "opacity-50 cursor-not-allowed" : "cursor-pointer")}>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="sr-only peer"
+                                                        checked={asset.acquittanceReceived || false}
+                                                        onChange={() => handleAcquittanceToggle(idx, asset.acquittanceReceived || false)}
+                                                        disabled={updatingAsset === `${b.beneficiaryId}-${idx}`}
+                                                    />
+                                                    <div className="w-7 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-500"></div>
+                                                </label>
+                                            </div>
+                                        )}
+
                                         {asset.photo && (
                                             <div 
                                                 className="mt-2 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 aspect-video relative group cursor-pointer"
@@ -347,6 +446,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
         };
 
         const beneficiaryMap = new Map<string, Beneficiary>();
+        const pendingAcquittances = getPendingAcquittances();
 
         rows.slice(1).forEach(row => {
             if (row.length < 3) return;
@@ -358,6 +458,12 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
 
             const key = bId;
             
+            const rowKey = getVal(row, ['KEY'], true);
+            let isAcquittance = ['yes', 'true', '1'].includes(getVal(row, ['Acquittance Received', 'Acquittance', 'acquittance', 'acquittance_received'], true).toLowerCase());
+            if (rowKey && pendingAcquittances[rowKey] !== undefined) {
+                isAcquittance = pendingAcquittances[rowKey] === 'Yes';
+            }
+            
             const asset: Asset = {
                 code: getVal(row, ['this_material_code'], true),
                 materialId: getVal(row, ['Material_ID'], true),
@@ -368,6 +474,8 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 distributor: getVal(row, ['materials_details-destributor_name'], true),
                 photo: getVal(row, ['Photo', 'this_material_photo', 'photo', 'image'], true),
                 parentKey: getVal(row, ['PARENT_KEY', 'instanceID', 'meta-instanceID', 'KEY'], true),
+                rowKey: rowKey,
+                acquittanceReceived: isAcquittance
             };
 
             if (beneficiaryMap.has(key)) {

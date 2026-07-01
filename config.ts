@@ -67,6 +67,7 @@ export const VILLAGES_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX
 
 // 9. SYSTEM ENDPOINT
 export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby4omIqQ9ANnowOT75v9b-7LJmrZ1_Fb1iZGfSNRVo8TbkmsuGv4Mf9h36MMwVPkjaiVw/exec';
+export const ACQUITTANCE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2s0HDWZdwIqvT7UtsCm491PZ3Gqs6aZkRczItIdNsnAUOTPoFAEB0Ylxps-02YAfYbw/exec';
 
 export const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200';
 
