@@ -19,7 +19,10 @@ import {
 const MapResizer = ({ isFullScreen }: { isFullScreen: boolean }) => {
     const map = useMap();
     useEffect(() => {
-        setTimeout(() => map.invalidateSize(), 100);
+        const timeout = setTimeout(() => {
+            if (map) map.invalidateSize();
+        }, 100);
+        return () => clearTimeout(timeout);
     }, [isFullScreen, map]);
     return null;
 };
@@ -62,6 +65,27 @@ const HomePage: React.FC = () => {
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const filterRef = useRef<HTMLDivElement>(null);
 
+    const getCustomIcon = useCallback((color: string) => {
+        return L.divIcon({
+            className: 'custom-cluster-marker bg-transparent border-none',
+            html: `<svg width="28" height="40" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 3px 4px rgba(0,0,0,0.4));">
+                <path d="M12 0C5.37258 0 0 5.37258 0 12C0 21 12 36 12 36C12 36 24 21 24 12C24 5.37258 18.6274 0 12 0ZM12 16.2C9.6804 16.2 7.8 14.3196 7.8 12C7.8 9.6804 9.6804 7.8 12 7.8C14.3196 7.8 16.2 9.6804 16.2 12C16.2 14.3196 14.3196 16.2 12 16.2Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+            </svg>`,
+            iconSize: [28, 40],
+            iconAnchor: [14, 40],
+            popupAnchor: [0, -40]
+        });
+    }, []);
+
+    // Create a cache for icons
+    const iconCache = useRef<Record<string, L.DivIcon>>({});
+
+    const getIconForColor = (color: string) => {
+        if (!iconCache.current[color]) {
+            iconCache.current[color] = getCustomIcon(color);
+        }
+        return iconCache.current[color];
+    };
     const getDriveDirectUrl = (url: string) => {
         if (!url) return '';
         if (url.includes('drive.google.com') || url.includes('google.com/open')) {
@@ -301,15 +325,7 @@ const HomePage: React.FC = () => {
                                 else if (v.cluster.toLowerCase() === 'cluster_3') color = '#10B981';
                                 else if (v.cluster) color = '#F59E0B'; // fallback color
 
-                                const customIcon = L.divIcon({
-                                    className: 'custom-cluster-marker bg-transparent border-none',
-                                    html: `<svg width="28" height="40" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 3px 4px rgba(0,0,0,0.4));">
-                                        <path d="M12 0C5.37258 0 0 5.37258 0 12C0 21 12 36 12 36C12 36 24 21 24 12C24 5.37258 18.6274 0 12 0ZM12 16.2C9.6804 16.2 7.8 14.3196 7.8 12C7.8 9.6804 9.6804 7.8 12 7.8C14.3196 7.8 16.2 9.6804 16.2 12C16.2 14.3196 14.3196 16.2 12 16.2Z" fill="${color}" stroke="white" stroke-width="1.5"/>
-                                    </svg>`,
-                                    iconSize: [28, 40],
-                                    iconAnchor: [14, 40],
-                                    popupAnchor: [0, -40]
-                                });
+                                const customIcon = getIconForColor(color);
 
                                 return (
                                 <Marker key={i} position={[v.lat, v.lng]} icon={customIcon}>

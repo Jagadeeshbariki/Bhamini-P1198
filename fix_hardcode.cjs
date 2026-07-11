@@ -1,0 +1,30 @@
+const fs = require('fs');
+let content = fs.readFileSync('components/ContributionPage.tsx', 'utf8');
+
+const oldLogic = `                let unitPrice = activityTargetMap.get(activityLower) || activityTargetMap.get(activityLower.replace(/byp-/, '')) || 0;
+                
+                if (activityLower.includes('eco-farmpond') || activityLower.includes('eco farmpond')) unitPrice = 10000;
+                else if (activityLower === 'ns' || activityLower === 'byp-ns') unitPrice = 1000;
+                else if (activityLower === 'bfe' || activityLower === 'byp-bfe') unitPrice = 10000;
+                else if (activityLower.includes('goatery') || activityLower.includes('goat shed')) unitPrice = 6000;
+                
+                if (unitPrice === 0) {
+                       unitPrice = activityTotalContribMap.get(activityLower) || activityTotalContribMap.get(activityLower.replace(/byp-/, '')) || 0;
+                }`;
+
+const newLogic = `                let unitPrice = activityTargetMap.get(activityLower) || activityTargetMap.get(activityLower.replace(/byp-/, '')) || 0;
+                
+                if (unitPrice === 0) {
+                    if (activityLower.includes('eco-farmpond') || activityLower.includes('eco farmpond')) unitPrice = 10000;
+                    else if (activityLower === 'ns' || activityLower === 'byp-ns') unitPrice = 1000;
+                    else if (activityLower === 'bfe' || activityLower === 'byp-bfe') unitPrice = 10000;
+                    else if (activityLower.includes('goatery') || activityLower.includes('goat shed')) unitPrice = 6000;
+                }
+                
+                if (unitPrice === 0) {
+                       unitPrice = activityTotalContribMap.get(activityLower) || activityTotalContribMap.get(activityLower.replace(/byp-/, '')) || 0;
+                }`;
+
+content = content.replace(oldLogic, newLogic);
+fs.writeFileSync('components/ContributionPage.tsx', content);
+console.log('Fixed hardcode logic');

@@ -11,12 +11,15 @@ import {
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   Legend,
+  LabelList,
 } from "recharts";
 
 interface BaselineRecord {
@@ -53,67 +56,17 @@ interface MergedContribution {
   productsReceived?: { name: string; count: number; unitContrib: number; date: string }[];
 }
 
-const CHART_COLORS = [
-  "#6366f1",
-  "#10b981",
-  "#f59e0b",
-  "#3b82f6",
-  "#ef4444",
-  "#8b5cf6",
-  "#ec4899",
-  "#f97316",
-];
-
-const PieChart: React.FC<{ data: { label: string; percent: number }[] }> = ({
-  data,
-}) => {
-  const radius = 40;
-  const circ = 2 * Math.PI * radius;
-
-  if (data.length === 0)
-    return <div className="text-[10px] font-black text-gray-300">NO DATA</div>;
-
-  return (
-    <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-      {data.map((item, idx) => {
-        const dash = (item.percent / 100) * circ;
-        const offset = circ - dash;
-        const stroke = CHART_COLORS[idx % CHART_COLORS.length];
-
-        // Calculate cumulative rotation based on previous items
-        const rotation =
-          (data.slice(0, idx).reduce((acc, curr) => acc + curr.percent, 0) /
-            100) *
-          360;
-
-        return (
-          <circle
-            key={idx}
-            cx="50"
-            cy="50"
-            r={radius}
-            fill="transparent"
-            stroke={stroke}
-            strokeWidth="12"
-            strokeDasharray={circ}
-            strokeDashoffset={offset}
-            style={{
-              transformOrigin: "center",
-              transform: `rotate(${rotation}deg)`,
-              transition: "all 1s cubic-bezier(0.16, 1, 0.3, 1)",
-            }}
-          />
-        );
-      })}
-      <circle
-        cx="50"
-        cy="50"
-        r="30"
-        fill="white"
-        className="dark:fill-gray-800"
-      />
-    </svg>
-  );
+const determineFinancialYear = (dateStr: string) => {
+  if (!dateStr || dateStr === 'N/A') return 'N/A';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return 'N/A';
+  const month = d.getMonth();
+  const year = d.getFullYear();
+  if (month >= 3) {
+      return `${year}-${(year + 1).toString().slice(2)}`;
+  } else {
+      return `${year - 1}-${year.toString().slice(2)}`;
+  }
 };
 
 const ContributionPage: React.FC = () => {
@@ -126,7 +79,9 @@ const ContributionPage: React.FC = () => {
   const [selectedGP, setSelectedGP] = useState("All");
   const [selectedVillage, setSelectedVillage] = useState("All");
   const [selectedActivity, setSelectedActivity] = useState("All");
+  const [trendYear, setTrendYear] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const parseCSV = (csv: string): Record<string, string>[] => {
     const lines = csv
@@ -317,45 +272,6 @@ const ContributionPage: React.FC = () => {
             return targetAct.toUpperCase();
         };
 
-        const parsedTargets = rawTargets.map((r) => {
-          const activity = mapTargetActivity(r["ACTIVITY"] || r["activity"] || "");
-          let target = parseFloat(r["TARGET"] || "0") || 0;
-          let unitPrice = 0;
-          const activityLower = activity.toLowerCase();
-          
-          unitPrice = activityTargetMap.get(activityLower) || activityTargetMap.get(activityLower.replace(/byp-/, '')) || 0;
-          
-          if (unitPrice === 0) {
-                 if (activityLower.includes('eco-farmpond') || activityLower.includes('eco farmpond')) unitPrice = activityTargetMap.get('eco-farm pond') || 10000;
-                 else if (activityLower === 'ns' || activityLower === 'byp-ns') unitPrice = activityTargetMap.get('ns') || 1000;
-                 else if (activityLower === 'bfe' || activityLower === 'byp-bfe') unitPrice = activityTargetMap.get('bfe') || 10000;
-                 else if (activityLower.includes('goatery')) unitPrice = activityTargetMap.get('goat shed') || 6000;
-          }
-          
-          if (unitPrice === 0) {
-                 unitPrice = activityTotalContribMap.get(activityLower) || activityTotalContribMap.get(activityLower.replace(/byp-/, '')) || 0;
-          }
-
-          // Default missing target counts to 1 if unitPrice exists and the row was explicitly provided for this activity
-          if (target === 0 && (r["TARGET"] === undefined || r["TARGET"] === "") && unitPrice > 0) {
-              target = 1;
-          }
-
-          let contributionTarget = parseFloat(r["CONTRIBUTION TARGET"] || r["contribution target"] || "0") || 0;
-          if (contributionTarget === 0 && unitPrice > 0) {
-              contributionTarget = target * unitPrice;
-          }
-          
-          return {
-            cluster: r["CLUSTER"] || r["cluster"] || "",
-            activity,
-            target,
-            contributionTarget,
-            financialYear: (r["FINANCIAL YEAR"] || r["financial year"] || r["Financial Year"] || r["financial_year"] || "").trim(),
-          };
-        });
-        setTargets(parsedTargets);
-
         const getContribActivityColumn = (activityName: string) => {
             if (!activityName) return '';
             const l = activityName.toLowerCase().replace(/_/g, ' ');
@@ -374,16 +290,9 @@ const ContributionPage: React.FC = () => {
         };
 
         const baselineMap = new Map<string, BaselineRecord>();
-        rawBaseline.forEach((row) => {
+        const processBeneficiaryRecord = (row: any) => {
           const rawId = getFuzzyValue(row, [
-            "HH_Id",
-            "HH_ID",
-            "HHID",
-            "HH ID",
-            "FARMERID",
-            "FID",
-            "ID",
-            "FARMER ID"
+            "HH_Id", "HH_ID", "HHID", "HH ID", "FARMERID", "FID", "ID", "FARMER ID"
           ]);
           const normId = normalizeId(rawId);
           if (normId) {
@@ -392,10 +301,7 @@ const ContributionPage: React.FC = () => {
                 existing = {
                   farmerId: (rawId || "").toString(),
                   hhHeadName: getFuzzyValue(row, [
-                    "HHHEADNAME",
-                    "FARMERNAME",
-                    "NAME",
-                    "BENEFICIARYNAME",
+                    "HHHEADNAME", "FARMERNAME", "NAME", "BENEFICIARYNAME",
                   ]) || "",
                   cluster: getFuzzyValue(row, ["CLUSTER"]) || "",
                   gp: getFuzzyValue(row, ["GP", "GRAMPANCHAYAT"]) || "",
@@ -406,17 +312,11 @@ const ContributionPage: React.FC = () => {
                 baselineMap.set(normId, existing);
             }
             const rawActivity = getFuzzyValue(row, [
-               "ACTIVITY_REGISTRATION-ACTIVITY",
-               "ACTIVITY",
-               "BENEFICIARYACTIVITY"
+               "ACTIVITY_REGISTRATION-ACTIVITY", "ACTIVITY", "BENEFICIARYACTIVITY"
             ]);
             const normalizedActivity = getContribActivityColumn((rawActivity || "").replace(/^(BYP-|BFE-|AFT-)/i, ''));
             const dateReg = getFuzzyValue(row, [
-              "ACTIVITY_REGISTRATION-DATE_REG",
-              "DATE_REG",
-              "DATE REG",
-              "SUBMISSIONDATE",
-              "DATE"
+              "ACTIVITY_REGISTRATION-DATE_REG", "DATE_REG", "DATE REG", "SUBMISSIONDATE", "DATE"
             ]);
             if (normalizedActivity && dateReg) {
                 existing.dateRegMap[normalizedActivity] = dateReg;
@@ -425,61 +325,72 @@ const ContributionPage: React.FC = () => {
                 existing.dateRegMap['__FALLBACK'] = dateReg;
             }
           }
-        });
+        };
 
-        rawBeneficiary.forEach((row) => {
-          const rawId = getFuzzyValue(row, [
-            "HH_Id",
-            "HH_ID",
-            "HHID",
-            "HH ID",
-            "FARMERID",
-            "FID",
-            "ID",
-            "FARMER ID"
-          ]);
-          const normId = normalizeId(rawId);
-          if (normId) {
-            let existing = baselineMap.get(normId);
-            if (!existing) {
-                existing = {
-                  farmerId: (rawId || "").toString(),
-                  hhHeadName: getFuzzyValue(row, [
-                    "HHHEADNAME",
-                    "FARMERNAME",
-                    "NAME",
-                    "BENEFICIARYNAME",
-                  ]) || "",
-                  cluster: getFuzzyValue(row, ["CLUSTER"]) || "",
-                  gp: getFuzzyValue(row, ["GP", "GRAMPANCHAYAT"]) || "",
-                  village: getFuzzyValue(row, ["VILLAGE"]) || "",
-                  category: getFuzzyValue(row, ["CATEGORY", "CASTE"]) || "",
-                  dateRegMap: {}
-                };
-                baselineMap.set(normId, existing);
-            }
-            const rawActivity = getFuzzyValue(row, [
-               "ACTIVITY_REGISTRATION-ACTIVITY",
-               "ACTIVITY",
-               "BENEFICIARYACTIVITY"
-            ]);
-            const normalizedActivity = getContribActivityColumn((rawActivity || "").replace(/^(BYP-|BFE-|AFT-)/i, ''));
-            const dateReg = getFuzzyValue(row, [
-              "ACTIVITY_REGISTRATION-DATE_REG",
-              "DATE_REG",
-              "DATE REG",
-              "SUBMISSIONDATE",
-              "DATE"
-            ]);
-            if (normalizedActivity && dateReg) {
-                existing.dateRegMap[normalizedActivity] = dateReg;
-            }
-            if (dateReg && !existing.dateRegMap['__FALLBACK']) {
-                existing.dateRegMap['__FALLBACK'] = dateReg;
-            }
+        rawBaseline.forEach(processBeneficiaryRecord);
+        rawBeneficiary.forEach(processBeneficiaryRecord);
+
+        const beneficiaryCountMap = new Map<string, number>();
+        baselineMap.forEach((record) => {
+            Object.keys(record.dateRegMap).forEach(activity => {
+                if (activity === '__FALLBACK') return;
+                const fy = getFinancialYear(record.dateRegMap[activity] || record.dateRegMap['__FALLBACK'] || "");
+                const key = `${record.cluster.toLowerCase()}|${activity.toLowerCase()}|${fy.toLowerCase()}`;
+                beneficiaryCountMap.set(key, (beneficiaryCountMap.get(key) || 0) + 1);
+            });
+        });
+        const targetMap = new Map<string, { cluster: string, activity: string, target: number, contributionTarget: number, financialYear: string }>();
+
+        const isAssetActivity = (act: string) => ['processing', 'asc', 'mobile irr', 'fixed irrig', 'irrigation'].some(a => act.toLowerCase().includes(a));
+        const isFixedActivity = (act: string) => ['ns', 'byp-ns', 'bfe', 'byp-bfe', 'goatery', 'goat shed', 'eco-farmpond', 'eco farmpond', 'goat', 'crop mod', 'fisheries'].some(a => act.toLowerCase().includes(a)) || (!isAssetActivity(act));
+
+        // 0. Process Target Sheet for anything else
+        rawTargets.forEach((r) => {
+          const activity = mapTargetActivity(getFuzzyValue(r, ["ACTIVITY"]) || "");
+          const cluster = getFuzzyValue(r, ["CLUSTER"]) || "";
+          const rawFy = getFuzzyValue(r, ["FINANCIAL YEAR", "FINANCIAL_YEAR", "FY"]) || "";
+          let financialYear = rawFy.trim();
+          if (financialYear.match(/^\d{4}-\d{2}$/)) {
+              const parts = financialYear.split('-');
+              financialYear = `FY20${parts[1]}`;
+          }
+          if (!cluster || !activity) return;
+
+          const countKey = `${cluster.toLowerCase()}|${activity.toLowerCase()}|${financialYear.toLowerCase()}`;
+          const activityLower = activity.toLowerCase();
+          
+          if (!isAssetActivity(activityLower) && !isFixedActivity(activityLower)) {
+              let target = parseFloat(getFuzzyValue(r, ["TARGET"]) || "0") || 0;
+              let unitPrice = activityTargetMap.get(activityLower) || activityTargetMap.get(activityLower.replace(/byp-/, '')) || 0;
+              
+              if (unitPrice === 0) {
+                     unitPrice = activityTotalContribMap.get(activityLower) || activityTotalContribMap.get(activityLower.replace(/byp-/, '')) || 0;
+              }
+              
+              if (target === 0 && (r["TARGET"] === undefined || r["TARGET"] === "") && unitPrice > 0) {
+                  target = 1;
+              }
+              
+              const displayActivity = activityOptions.find(o => o.toLowerCase() === activityLower) || activity.toUpperCase();
+              const displayCluster = clusters.find(c => c.toLowerCase() === cluster.toLowerCase()) || (cluster.charAt(0).toUpperCase() + cluster.slice(1));
+              
+              if (targetMap.has(countKey)) {
+                  const existing = targetMap.get(countKey)!;
+                  existing.target += target;
+                  existing.contributionTarget += (target * unitPrice);
+              } else {
+                  targetMap.set(countKey, {
+                      cluster: displayCluster,
+                      activity: displayActivity,
+                      target,
+                      contributionTarget: target * unitPrice,
+                      financialYear
+                  });
+              }
           }
         });
 
+        
         const activityHeaders = [
           "BYP-NS",
           "MOBILE IRR",
@@ -494,9 +405,7 @@ const ContributionPage: React.FC = () => {
           "ECO-FARMPOND",
           "FIXED IRRIG",
         ];
-
         const headersInSheet = Object.keys(rawContrib[0] || {});
-
         // Identify which columns in the sheet are actually activity columns
         // We map each sheet header to its normalized activity name if it matches
         const sheetActivityMap = new Map<string, string>();
@@ -517,10 +426,8 @@ const ContributionPage: React.FC = () => {
             sheetActivityMap.set(h, normalized);
           }
         });
-
         const farmerTargetMap = new Map<string, number>();
         const farmerProductsMap = new Map<string, { name: string; count: number; unitContrib: number; date: string }[]>();
-
         rawDist.forEach(row => {
             const hhIdRaw = getFuzzyValue(row, ['HH_Id', 'HH_ID', 'HHID', 'HH ID', 'FARMER ID', 'LOCATION-FARMER_ID', 'LOCATION-SHOW_FARMER_ID', 'FARMER_ID', 'FID']);
             const bIdRaw = getFuzzyValue(row, ['BENEFICIARY ID', 'BEN_ID', 'BNF_SECTION_-ADHAAR_NUMBER_', 'BNF_SECTION-ADHAAR_NUMBER', 'ADHAAR']);
@@ -528,7 +435,6 @@ const ContributionPage: React.FC = () => {
             const bId = normalizeId(bIdRaw);
             
             if (!hhId && !bId) return;
-
             const activityName = getFuzzyValue(row, ['ACTIVITY', 'ACTIVITY_REGISTRATION-ACTIVITY']);
             const activity = getContribActivityColumn((activityName || "").replace(/^(BYP-|BFE-|AFT-)/i, ''));
             
@@ -538,10 +444,10 @@ const ContributionPage: React.FC = () => {
             const count = parseFloat(getFuzzyValue(row, ['MATERIALS_DETAILS-MATERIAL_COUNT']) || "1");
             const distDate = getFuzzyValue(row, ['MATERIALS_DETAILS-DISTRIBUTED_DATE', 'DATE']);
             
-            const unitContrib = activityTargetMap.get((materialId || "").trim().toLowerCase()) 
-                 || activityTargetMap.get((code || "").trim().toLowerCase()) 
-                 || activityTargetMap.get((label || "").trim().toLowerCase()) 
-                 || 0;
+            const unitContrib = activityTargetMap.get((materialId || "").trim().toLowerCase())
+                  || activityTargetMap.get((code || "").trim().toLowerCase())
+                  || activityTargetMap.get((label || "").trim().toLowerCase())
+                  || 0;
             
             if (unitContrib > 0) {
                 const keys = [];
@@ -551,7 +457,7 @@ const ContributionPage: React.FC = () => {
                 keys.forEach(key => {
                     farmerTargetMap.set(key, (farmerTargetMap.get(key) || 0) + (unitContrib * count));
                     if (!farmerProductsMap.has(key)) farmerProductsMap.set(key, []);
-                    farmerProductsMap.get(key)!.push({
+                    farmerProductsMap.get(key).push({
                         name: label || materialId || code || 'Product',
                         count,
                         unitContrib,
@@ -560,59 +466,195 @@ const ContributionPage: React.FC = () => {
                 });
             }
         });
+        
+        const distTargetMap = new Map<string, number>();
+        const distCountMap = new Map<string, number>();
+        
+        rawDist.forEach(row => {
+            const hhIdRaw = getFuzzyValue(row, ['HH_Id', 'HH_ID', 'HHID', 'HH ID', 'FARMER ID', 'LOCATION-FARMER_ID', 'LOCATION-SHOW_FARMER_ID', 'FARMER_ID', 'FID']);
+            const bIdRaw = getFuzzyValue(row, ['BENEFICIARY ID', 'BEN_ID', 'BNF_SECTION_-ADHAAR_NUMBER_', 'BNF_SECTION-ADHAAR_NUMBER', 'ADHAAR']);
+            const hhId = normalizeId(hhIdRaw);
+            const bId = normalizeId(bIdRaw);
+            const normId = hhId || bId;
+            const baseline = normId ? baselineMap.get(normId) : null;
+            
+            const activityName = getFuzzyValue(row, ['ACTIVITY', 'ACTIVITY_REGISTRATION-ACTIVITY']);
+            const activity = getContribActivityColumn((activityName || "").replace(/^(BYP-|BFE-|AFT-)/i, ''));
+            
+            const code = getFuzzyValue(row, ['THIS_MATERIAL_CODE']);
+            const materialId = getFuzzyValue(row, ['MATERIAL_ID']);
+            const label = getFuzzyValue(row, ['THIS_MATERIAL_LABEL']);
+            const count = parseFloat(getFuzzyValue(row, ['MATERIALS_DETAILS-MATERIAL_COUNT']) || "1");
+            const distDate = getFuzzyValue(row, ['MATERIALS_DETAILS-DISTRIBUTED_DATE', 'DATE']);
+            
+            const unitContrib = activityTargetMap.get((materialId || "").trim().toLowerCase())
+                   || activityTargetMap.get((code || "").trim().toLowerCase())
+                   || activityTargetMap.get((label || "").trim().toLowerCase())
+                   || 0;
+            
+            if (unitContrib > 0 && baseline && activity) {
+                const fy = getFinancialYear(distDate || "");
+                const cluster = baseline.cluster || "";
+                const key = `${cluster.toLowerCase()}|${activity.toLowerCase()}|${fy.toLowerCase()}`;
+                distTargetMap.set(key, (distTargetMap.get(key) || 0) + (unitContrib * count));
+                distCountMap.set(key, (distCountMap.get(key) || 0) + count);
+            }
+        });
+
+        // 1. Fixed activities from Beneficiary Data
+        beneficiaryCountMap.forEach((count, key) => {
+            const [cluster, activity, financialYear] = key.split('|');
+            const activityLower = activity.toLowerCase();
+            
+            if (!isAssetActivity(activityLower)) {
+                let unitPrice = activityTargetMap.get(activityLower) || activityTargetMap.get(activityLower.replace(/byp-/, '')) || 0;
+                
+                if (unitPrice === 0) {
+                    if (activityLower.includes('eco-farmpond') || activityLower.includes('eco farmpond')) unitPrice = 10000;
+                    else if (activityLower === 'ns' || activityLower === 'byp-ns') unitPrice = 1000;
+                    else if (activityLower === 'bfe' || activityLower === 'byp-bfe') unitPrice = 10000;
+                    else if (activityLower.includes('goatery') || activityLower.includes('goat shed')) unitPrice = 6000;
+                }
+                
+                if (unitPrice === 0) {
+                       unitPrice = activityTotalContribMap.get(activityLower) || activityTotalContribMap.get(activityLower.replace(/byp-/, '')) || 0;
+                }
+                if (unitPrice > 0) {
+                    const displayActivity = activityOptions.find(o => o.toLowerCase() === activityLower) || activity.toUpperCase();
+                    const displayCluster = clusters.find(c => c.toLowerCase() === cluster) || (cluster.charAt(0).toUpperCase() + cluster.slice(1));
+                    
+                    targetMap.set(key, {
+                        cluster: displayCluster,
+                        activity: displayActivity,
+                        target: count,
+                        contributionTarget: count * unitPrice,
+                        financialYear
+                    });
+                }
+            }
+        });
+
+        // 2. Asset activities from Material Distribution Data
+        distTargetMap.forEach((amount, key) => {
+            const [cluster, activity, financialYear] = key.split('|');
+            const activityLower = activity.toLowerCase();
+            
+            if (isAssetActivity(activityLower)) {
+                const displayActivity = activityOptions.find(o => o.toLowerCase() === activity) || activity.toUpperCase();
+                const displayCluster = clusters.find(c => c.toLowerCase() === cluster) || (cluster.charAt(0).toUpperCase() + cluster.slice(1));
+                
+                targetMap.set(key, {
+                    cluster: displayCluster,
+                    activity: displayActivity,
+                    target: distCountMap.get(key) || 1,
+                    contributionTarget: amount,
+                    financialYear
+                });
+            }
+        });
+
+        setTargets(Array.from(targetMap.values()));
+        
+
 
         const merged: MergedContribution[] = [];
+
         rawContrib.forEach((row, rowIndex) => {
           const rawId = getFuzzyValue(row, [
-            "HH_Id",
-            "HH_ID",
-            "HHID",
-            "HH ID",
-            "FARMERID",
-            "FID",
-            "ID",
-            "FARMER ID"
+            "HH_Id", "HH_ID", "HHID", "HH ID", "FARMERID", "FID", "ID", "FARMER ID"
           ]);
           const normId = normalizeId(rawId);
-          const date =
-            getFuzzyValue(row, [
-              "DATE",
-              "TIMESTAMP",
-              "TIME",
-              "SUBMISSIONDATE",
-            ]) || "N/A";
-
+          
+          const date = getFuzzyValue(row, [
+            "Date Of Deposite", "Date of deposit", "DATE", "TIMESTAMP", "TIME", "SUBMISSIONDATE", "Date"
+          ]) || "N/A";
+          
+          const isNewFormat = Object.keys(row).some(k => k.toLowerCase().includes('activity_name') || k.toLowerCase().trim() === 'activity name');
+          
           if (normId) {
             const baseline = baselineMap.get(normId);
             if (baseline) {
-              // Iterate over the identified activity columns in the sheet
-              sheetActivityMap.forEach((normalizedActivity, colName) => {
-                const valStr = row[colName] || "0";
-                const amount =
-                  parseFloat(
-                    (valStr || "").toString().replace(/[^0-9.]/g, ""),
-                  ) || 0;
+                if (isNewFormat) {
+                    const actRaw = getFuzzyValue(row, ["Activity_name", "Activity Name", "Activity"]);
+                    const amountRaw = getFuzzyValue(row, ["Contribution Amount", "Total Amount Paid ", "Amount"]);
+                    
+                    const amount = parseFloat((amountRaw || "").toString().replace(/[^0-9.]/g, "")) || 0;
+                    
+                    if (amount > 0 && actRaw) {
+                        const normalizedActivity = mapTargetActivity(actRaw.toString().trim());
+                        const products: { name: string; count: number; unitContrib: number; date: string }[] = farmerProductsMap.get(`${normId}-${normalizedActivity}`) || [];
+                        let indTarget = farmerTargetMap.get(`${normId}-${normalizedActivity}`) || 0;
+                        if (!indTarget || isNaN(indTarget)) {
+                            const activityLower = normalizedActivity.toLowerCase();
+                            let unitPrice = activityTargetMap.get(activityLower) || activityTargetMap.get(activityLower.replace(/byp-/, '')) || 0;
+                            
+                            if (activityLower.includes('eco-farmpond') || activityLower.includes('eco farmpond')) unitPrice = 10000;
+                            else if (activityLower === 'ns' || activityLower === 'byp-ns') unitPrice = 1000;
+                            else if (activityLower === 'bfe' || activityLower === 'byp-bfe') unitPrice = 10000;
+                            else if (activityLower.includes('goatery') || activityLower.includes('goat shed')) unitPrice = 6000;
+                            
+                            if (unitPrice === 0) {
+                                   unitPrice = activityTotalContribMap.get(activityLower) || activityTotalContribMap.get(activityLower.replace(/byp-/, '')) || 0;
+                            }
+                            indTarget = unitPrice;
+                        }
+                        merged.push({
+                            id: `${normId}-${normalizedActivity}-${rowIndex}`,
+                            farmerId: baseline.farmerId,
+                            name: baseline.hhHeadName,
+                            cluster: baseline.cluster,
+                            gp: baseline.gp,
+                            village: baseline.village,
+                            category: baseline.category,
+                            amount: amount,
+                            activity: normalizedActivity,
+                            date: date,
+                            financialYear: determineFinancialYear(date),
+                            productsReceived: products,
+                            individualTarget: indTarget
+                        });
+                    }
+                } else {
+                  // Iterate over the identified activity columns in the sheet (old format)
+                  sheetActivityMap.forEach((normalizedActivity, colName) => {
+                    const valStr = row[colName] || "0";
+                    const amount = parseFloat((valStr || "").toString().replace(/[^0-9.]/g, "")) || 0;
 
-                if (amount > 0) {
-                  const products: { name: string; count: number; unitContrib: number; date: string }[] = farmerProductsMap.get(`${normId}-${normalizedActivity}`) || [];
-                  const indTarget = farmerTargetMap.get(`${normId}-${normalizedActivity}`) || 0;
-                  merged.push({
-                    id: `${normId}-${colName}-${rowIndex}`,
-                    farmerId: baseline.farmerId,
-                    name: baseline.hhHeadName,
-                    cluster: baseline.cluster,
-                    gp: baseline.gp,
-                    village: baseline.village,
-                    category: baseline.category,
-                    amount: amount,
-                    activity: normalizedActivity,
-                    date: date,
-                    financialYear: getFinancialYear(baseline.dateRegMap[normalizedActivity] || baseline.dateRegMap['__FALLBACK'] || Object.values(baseline.dateRegMap)[0] || ""),
-                    individualTarget: indTarget,
-                    productsReceived: products.length > 0 ? products : undefined
+                    if (amount > 0) {
+                      const products: { name: string; count: number; unitContrib: number; date: string }[] = farmerProductsMap.get(`${normId}-${normalizedActivity}`) || [];
+                      let indTarget = farmerTargetMap.get(`${normId}-${normalizedActivity}`) || 0;
+                        if (!indTarget || isNaN(indTarget)) {
+                            const activityLower = normalizedActivity.toLowerCase();
+                            let unitPrice = activityTargetMap.get(activityLower) || activityTargetMap.get(activityLower.replace(/byp-/, '')) || 0;
+                            
+                            if (activityLower.includes('eco-farmpond') || activityLower.includes('eco farmpond')) unitPrice = 10000;
+                            else if (activityLower === 'ns' || activityLower === 'byp-ns') unitPrice = 1000;
+                            else if (activityLower === 'bfe' || activityLower === 'byp-bfe') unitPrice = 10000;
+                            else if (activityLower.includes('goatery') || activityLower.includes('goat shed')) unitPrice = 6000;
+                            
+                            if (unitPrice === 0) {
+                                   unitPrice = activityTotalContribMap.get(activityLower) || activityTotalContribMap.get(activityLower.replace(/byp-/, '')) || 0;
+                            }
+                            indTarget = unitPrice;
+                        }
+                      merged.push({
+                        id: `${normId}-${colName}-${rowIndex}`,
+                        farmerId: baseline.farmerId,
+                        name: baseline.hhHeadName,
+                        cluster: baseline.cluster,
+                        gp: baseline.gp,
+                        village: baseline.village,
+                        category: baseline.category,
+                        amount: amount,
+                        activity: normalizedActivity,
+                        date: date,
+                        financialYear: determineFinancialYear(date),
+                        productsReceived: products,
+                        individualTarget: indTarget
+                      });
+                    }
                   });
                 }
-              });
             }
           }
         });
@@ -714,7 +756,15 @@ const ContributionPage: React.FC = () => {
     searchQuery,
   ]);
 
+  
+  
   const stats = useMemo(() => {
+    
+    console.log("CALCULATING STATS. Targets length:", targets.length);
+    if (targets.length > 0) {
+        console.log("Sample target:", targets[0]);
+    }
+
     const totalAmount = filteredData.reduce((acc, d) => acc + d.amount, 0);
     const uniqueFIDs = new Set(filteredData.map((d) => d.farmerId)).size;
 
@@ -734,21 +784,34 @@ const ContributionPage: React.FC = () => {
     });
 
     const allClusters = new Set([
+      
       ...Object.keys(clusterMap),
       ...targets
-        .filter(t => (selectedActivity === "All" || t.activity === selectedActivity) && (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear))
+        .filter(t => (selectedActivity === "All" || t.activity.toLowerCase() === selectedActivity.toLowerCase()) && (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear))
         .map(t => t.cluster)
     ]);
-
     const clusterShare = Array.from(allClusters)
-      .filter((c) => selectedCluster === "All" || c === selectedCluster)
+      .filter((c) => selectedCluster === "All" || c.toLowerCase() === selectedCluster.toLowerCase())
       .map((label) => {
-        const val = clusterMap[label] || 0;
-        const farmersPaid = clusterFarmersMap[label] ? clusterFarmersMap[label].size : 0;
+        // Find variations with same lower case
+        const targetLabelLower = label.toLowerCase();
+        let val = 0;
+        let farmersPaid = 0;
+        Object.keys(clusterMap).forEach(k => {
+            if (k.toLowerCase() === targetLabelLower) {
+                val += clusterMap[k];
+            }
+        });
+        Object.keys(clusterFarmersMap).forEach(k => {
+            if (k.toLowerCase() === targetLabelLower) {
+                farmersPaid += clusterFarmersMap[k].size;
+            }
+        });
+        
         const clusterTargets = targets.filter(
           (t) =>
-            t.cluster === label &&
-            (selectedActivity === "All" || t.activity === selectedActivity) &&
+            t.cluster.toLowerCase() === targetLabelLower &&
+            (selectedActivity === "All" || t.activity.toLowerCase() === selectedActivity.toLowerCase()) &&
             (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear)
         );
         const target = clusterTargets.reduce(
@@ -756,7 +819,7 @@ const ContributionPage: React.FC = () => {
           0
         );
         return {
-          label,
+          label: label.charAt(0).toUpperCase() + label.slice(1),
           val,
           target,
           farmersPaid,
@@ -764,23 +827,42 @@ const ContributionPage: React.FC = () => {
         };
       })
       .filter((c) => c.val > 0 || c.target > 0)
-      .sort((a, b) => b.percent - a.percent);
+      .reduce((acc, curr) => {
+          const existing = acc.find(a => a.label.toLowerCase() === curr.label.toLowerCase());
+          if (existing) {
+              existing.val += curr.val;
+              existing.target += curr.target;
+              existing.farmersPaid += curr.farmersPaid;
+          } else {
+              acc.push(curr);
+          }
+          return acc;
+      }, [])
+      .sort((a, b) => b.percent - a.percent)
+      .slice(0, 3);
 
     const allActivities = new Set([
       ...Object.keys(activityMap),
       ...targets
-        .filter(t => (selectedCluster === "All" || t.cluster === selectedCluster) && (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear))
+        .filter(t => (selectedCluster === "All" || t.cluster.toLowerCase() === selectedCluster.toLowerCase()) && (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear))
         .map(t => t.activity)
     ]);
-
     const activityShare = Array.from(allActivities)
       .map((label) => {
-        const val = activityMap[label] || 0;
-        const farmersPaid = activityFarmersMap[label] ? activityFarmersMap[label].size : 0;
+        const targetLabelLower = label.toLowerCase();
+        let val = 0;
+        let farmersPaid = 0;
+        Object.keys(activityMap).forEach(k => {
+            if (k.toLowerCase() === targetLabelLower) val += activityMap[k];
+        });
+        Object.keys(activityFarmersMap).forEach(k => {
+            if (k.toLowerCase() === targetLabelLower) farmersPaid += activityFarmersMap[k].size;
+        });
+
         const actTargets = targets.filter(
           (t) =>
-            t.activity === label &&
-            (selectedCluster === "All" || t.cluster === selectedCluster) &&
+            t.activity.toLowerCase() === targetLabelLower &&
+            (selectedCluster === "All" || t.cluster.toLowerCase() === selectedCluster.toLowerCase()) &&
             (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear)
         );
         const target = actTargets.reduce(
@@ -788,7 +870,7 @@ const ContributionPage: React.FC = () => {
           0
         );
         return {
-          label,
+          label: label.toUpperCase(),
           val,
           target,
           farmersPaid,
@@ -796,22 +878,81 @@ const ContributionPage: React.FC = () => {
         };
       })
       .filter((a) => a.val > 0 || a.target > 0)
+      .reduce((acc, curr) => {
+          const existing = acc.find(a => a.label.toLowerCase() === curr.label.toLowerCase());
+          if (existing) {
+              existing.val += curr.val;
+              existing.target += curr.target;
+              existing.farmersPaid += curr.farmersPaid;
+          } else {
+              acc.push(curr);
+          }
+          return acc;
+      }, [])
       .sort((a, b) => b.percent - a.percent);
 
     // Filter targets
     const filteredTargets = targets.filter((t) => {
       const matchesCluster =
-        selectedCluster === "All" || t.cluster === selectedCluster;
+        selectedCluster === "All" || t.cluster.toLowerCase() === selectedCluster.toLowerCase();
       const matchesActivity =
-        selectedActivity === "All" || t.activity === selectedActivity;
+        selectedActivity === "All" || t.activity.toLowerCase() === selectedActivity.toLowerCase();
       const matchesFY =
         selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear;
       return matchesCluster && matchesActivity && matchesFY;
     });
+
     const totalTarget = filteredTargets.reduce(
       (acc, t) => acc + t.contributionTarget,
       0
     );
+
+        // Top Contributors
+    const topContributorsMap = new Map<string, { name: string, cluster: string, amount: number, activities: Set<string> }>();
+    filteredData.forEach(d => {
+        if (!topContributorsMap.has(d.farmerId)) {
+            topContributorsMap.set(d.farmerId, { name: d.name, cluster: d.cluster, amount: 0, activities: new Set() });
+        }
+        const entry = topContributorsMap.get(d.farmerId)!;
+        entry.amount += d.amount;
+                    entry.target = Math.max(entry.target, d.individualTarget || 0);
+        entry.activities.add(d.activity);
+    });
+    const topContributors = Array.from(topContributorsMap.values())
+        .map(entry => ({ ...entry, activity: Array.from(entry.activities).join(", ") }))
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 5);
+
+    // Monthly Trend
+    const monthlyMap = new Map<string, { year: number, monthNum: number, label: string, val: number }>();
+    filteredData.forEach(d => {
+        if (d.date && d.date !== 'N/A') {
+            const parsedDate = new Date(d.date);
+            if (!isNaN(parsedDate.getTime())) {
+                const year = parsedDate.getFullYear();
+                const monthNum = parsedDate.getMonth();
+                const label = parsedDate.toLocaleString('default', { month: 'short' }) + ' ' + year;
+                const sortKey = `${year}-${monthNum.toString().padStart(2, '0')}`;
+                
+                if (!monthlyMap.has(sortKey)) {
+                    monthlyMap.set(sortKey, { year, monthNum, label, val: 0 });
+                }
+                monthlyMap.get(sortKey)!.val += d.amount;
+            }
+        }
+    });
+    
+    
+    const monthlyTrend = Array.from(monthlyMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(e => {
+            return {
+                month: e[1].label,
+                val: e[1].val,
+                year: e[1].year.toString(),
+                target: totalTarget
+            };
+        });
 
     return {
       totalAmount,
@@ -820,6 +961,8 @@ const ContributionPage: React.FC = () => {
       uniqueFIDs,
       clusterShare,
       activityShare,
+      topContributors,
+      monthlyTrend,
     };
   }, [filteredData, targets, selectedCluster, selectedActivity, selectedFinancialYear]);
 
@@ -842,380 +985,521 @@ const ContributionPage: React.FC = () => {
       </div>
     );
 
+  const achievementPercent = stats.totalTarget > 0 ? ((stats.totalAmount / stats.totalTarget) * 100).toFixed(2) : "0.00";
+  const pendingContribution = Math.max(0, stats.totalTarget - stats.totalAmount);
+  
+  // Mock data for sparklines and trends
+  const mockTrend = [
+    { value: 20 }, { value: 35 }, { value: 25 }, { value: 45 }, { value: 30 }, { value: 55 }, { value: 60 }
+  ];
+
   return (
-    <div className="space-y-6 animate-fade-in w-full pb-12">
-      {/* Top Row: KPI Box & Cluster Target vs Achievement */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="space-y-4 animate-fade-in w-full pb-12 font-sans bg-[#0f111a] min-h-screen text-white p-4 md:p-6 rounded-3xl">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+        <h2 className="text-xl font-bold">Contribution Dashboard</h2>
         
-        {/* KPI Box */}
-        <div className="bg-[#111827] p-6 md:p-8 rounded-[2rem] shadow-xl flex flex-col font-sans h-[380px] relative justify-center">
-          <div className="flex flex-col gap-10">
-            <div className="flex flex-col gap-2">
-              <p className="text-[12px] font-black uppercase tracking-widest text-emerald-400">Paid Contribution</p>
-              <div className="flex flex-col">
-                 <h2 className="text-4xl lg:text-5xl font-black text-emerald-500">₹{stats.totalAmount.toLocaleString()}</h2>
-                 <span className="text-[10px] font-bold text-emerald-500/60 uppercase tracking-widest mt-1">
-                   from {stats.uniqueFIDs} contributors
-                 </span>
-              </div>
+      </div>
+      {/* Top KPI Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Total Paid */}
+        <div className="bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs font-bold text-gray-400">Total Paid Contribution</p>
+              <h2 className="text-2xl font-black text-[#10B981] mt-1">₹{stats.totalAmount.toLocaleString()}</h2>
+              <p className="text-[10px] text-gray-500 mt-1">From {stats.uniqueFIDs} Contributors</p>
             </div>
-
-            <div className="w-full h-px bg-gray-700/50"></div>
-
-            <div className="flex flex-col gap-2">
-              <p className="text-[12px] font-black uppercase tracking-widest text-gray-400">Target Contribution</p>
-              <div className="flex flex-col">
-                 <h2 className="text-3xl lg:text-4xl font-black text-white">₹{stats.totalTarget.toLocaleString()}</h2>
-                 <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">
-                   for {stats.count} instances
-                 </span>
-              </div>
+            <div className="p-2 bg-[#10B981]/10 rounded-lg">
+              <svg className="w-5 h-5 text-[#10B981]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
             </div>
+          </div>
+          <div className="flex items-end justify-between mt-4">
+             
+             <div className="w-16 h-8">
+               <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={mockTrend}>
+                   <Bar dataKey="value" fill="#10B981" radius={[2,2,0,0]} />
+                 </BarChart>
+               </ResponsiveContainer>
+             </div>
           </div>
         </div>
 
-        {/* Cluster Target vs Achievement */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-xl flex flex-col gap-4 w-full h-[380px] overflow-hidden">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-50 dark:border-gray-700 pb-2 flex-shrink-0">
-            Cluster Target vs Achievement
-          </h3>
-          <div className="flex-1 w-full min-h-0 min-w-0 relative">
-            <div className="absolute inset-0 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2">
-              <div className="min-w-[400px] h-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={stats.clusterShare}
-                    margin={{ top: 10, right: 0, left: -25, bottom: 65 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                    <XAxis dataKey="label" angle={-45} textAnchor="end" height={60} axisLine={false} tickLine={false} tick={{ fontSize: 8, fill: "#9CA3AF", fontWeight: "bold" }} interval={0} />
-                    <YAxis domain={[0, 'auto']} tickCount={8} axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#9CA3AF" }} tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} />
-                    <RechartsTooltip cursor={{ fill: "transparent" }} contentStyle={{ borderRadius: "1rem", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)", fontSize: "12px" }} formatter={(value: number) => `₹${value.toLocaleString()}`} />
-                    <Legend iconSize={8} wrapperStyle={{ fontSize: '10px', paddingTop: '20px' }} verticalAlign="bottom" align="center" />
-                    <Bar dataKey="target" name="Target" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={16} />
-                    <Bar dataKey="val" name="Collected" fill="#10B981" radius={[4, 4, 0, 0]} barSize={16} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+        {/* Card 2: Target Contribution */}
+        <div className="bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs font-bold text-gray-400">Target Contribution</p>
+              <h2 className="text-2xl font-black text-white mt-1">₹{stats.totalTarget.toLocaleString()}</h2>
+              <p className="text-[10px] text-gray-500 mt-1">For {stats.count} Instances</p>
             </div>
+            <div className="p-2 bg-[#8B5CF6]/10 rounded-lg">
+              <svg className="w-5 h-5 text-[#8B5CF6]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+          </div>
+          <div className="flex items-end justify-between mt-4">
+             
+             <div className="w-16 h-8">
+               <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={mockTrend}>
+                   <Bar dataKey="value" fill="#8B5CF6" radius={[2,2,0,0]} />
+                 </BarChart>
+               </ResponsiveContainer>
+             </div>
+          </div>
+        </div>
+
+        {/* Card 3: Achievement % */}
+        <div className="bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs font-bold text-gray-400">Achievement %</p>
+              <h2 className="text-2xl font-black text-white mt-1">{achievementPercent}%</h2>
+              <p className="text-[10px] text-gray-500 mt-1">Overall Achievement</p>
+            </div>
+            <div className="p-2 bg-[#F59E0B]/10 rounded-lg">
+              <svg className="w-5 h-5 text-[#F59E0B]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            </div>
+          </div>
+          <div className="flex items-end justify-between mt-4">
+             
+             <div className="w-16 h-8">
+               <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={mockTrend}>
+                   <Bar dataKey="value" fill="#F59E0B" radius={[2,2,0,0]} />
+                 </BarChart>
+               </ResponsiveContainer>
+             </div>
+          </div>
+        </div>
+
+        {/* Card 4: Pending Contribution */}
+        <div className="bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs font-bold text-gray-400">Pending Contribution</p>
+              <h2 className="text-2xl font-black text-white mt-1">₹{pendingContribution.toLocaleString()}</h2>
+              <p className="text-[10px] text-gray-500 mt-1">Yet to be Collected</p>
+            </div>
+            <div className="p-2 bg-[#EF4444]/10 rounded-lg">
+              <svg className="w-5 h-5 text-[#EF4444]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+          </div>
+          <div className="flex items-end justify-between mt-4">
+             
+             <div className="w-16 h-8">
+               <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={mockTrend}>
+                   <Bar dataKey="value" fill="#EF4444" radius={[2,2,0,0]} />
+                 </BarChart>
+               </ResponsiveContainer>
+             </div>
           </div>
         </div>
       </div>
 
-      {/* Activity Row: Activity Target vs Achievement */}
-      <div className="w-full">
-        {/* Activity Target vs Achievement */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-xl flex flex-col gap-4 w-full h-[420px] overflow-hidden">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-50 dark:border-gray-700 pb-2 flex-shrink-0">
-            Activity Target vs Achievement
-          </h3>
-          <div className="flex-1 w-full min-h-0 min-w-0 relative">
-            <div className="absolute inset-0 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2">
-              <div className="min-w-[700px] md:min-w-[900px] h-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={stats.activityShare}
-                    margin={{ top: 10, right: 0, left: -25, bottom: 65 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                    <XAxis dataKey="label" angle={-45} textAnchor="end" height={60} axisLine={false} tickLine={false} tick={{ fontSize: 8, fill: "#9CA3AF", fontWeight: "bold" }} interval={0} />
-                    <YAxis domain={[0, 'auto']} tickCount={8} axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#9CA3AF" }} tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} />
-                    <RechartsTooltip cursor={{ fill: "transparent" }} contentStyle={{ borderRadius: "1rem", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)", fontSize: "12px" }} formatter={(value: number) => `₹${value.toLocaleString()}`} />
-                    <Legend iconSize={8} wrapperStyle={{ fontSize: '10px', paddingTop: '20px' }} verticalAlign="bottom" align="center" />
-                    <Bar dataKey="target" name="Target" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={16} />
-                    <Bar dataKey="val" name="Collected" fill="#10B981" radius={[4, 4, 0, 0]} barSize={16} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+      {/* Middle Row */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        {/* Left Column (Bar Chart) - 4 cols */}
+        <div className="xl:col-span-5 bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex flex-col">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-300">Cluster Target vs Achievement</h3>
+            <div className="flex items-center gap-4 text-[10px] font-bold">
+               
+               <div className="flex items-center gap-1"><div className="w-2 h-2 bg-[#F59E0B] rounded-sm"></div>Target</div><div className="flex items-center gap-1"><div className="w-2 h-2 bg-[#10B981] rounded-sm"></div>Collected</div>
             </div>
+          </div>
+          <div className="flex-1 w-full min-h-[250px]">
+             <ResponsiveContainer width="100%" height="100%">
+               <BarChart data={stats.clusterShare} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
+                 <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} />
+                 <YAxis tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} width={50} />
+                 <RechartsTooltip cursor={{ fill: "#374151", opacity: 0.4 }} contentStyle={{ backgroundColor: "#1e2333", border: "1px solid #374151", borderRadius: "8px" }} formatter={(value) => `₹${Number(value).toLocaleString()}`} />
+                 <Bar dataKey="target" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={12}><LabelList dataKey="target" position="top" fill="#9CA3AF" fontSize={10} formatter={(value) => `₹${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`} /></Bar>
+                 <Bar dataKey="val" fill="#10B981" radius={[4, 4, 0, 0]} barSize={12} />
+               </BarChart>
+             </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Middle Column (Activity Chart) - 4 cols */}
+        <div className="xl:col-span-4 bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex flex-col">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-300">Activity Target vs Achievement</h3>
+            <div className="flex items-center gap-4 text-[10px] font-bold">
+               <div className="flex items-center gap-1"><div className="w-2 h-2 bg-[#F59E0B] rounded-sm"></div>Target</div>
+               <div className="flex items-center gap-1"><div className="w-2 h-2 bg-[#10B981] rounded-sm"></div>Collected</div>
+            </div>
+          </div>
+          <div className="flex-1 w-full min-h-[250px]">
+             <ResponsiveContainer width="100%" height="100%">
+               <BarChart data={stats.activityShare.slice(0, 8)} layout="vertical" margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
+                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#374151" />
+                 <XAxis type="number" tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} />
+                 <YAxis type="category" dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#9CA3AF" }} width={80} />
+                 <RechartsTooltip cursor={{ fill: "#374151", opacity: 0.4 }} contentStyle={{ backgroundColor: "#1e2333", border: "1px solid #374151", borderRadius: "8px" }} formatter={(value) => `₹${Number(value).toLocaleString()}`} />
+                 <Bar dataKey="target" fill="#F59E0B" radius={[0, 4, 4, 0]} barSize={8} />
+                 <Bar dataKey="val" fill="#10B981" radius={[0, 4, 4, 0]} barSize={8} />
+               </BarChart>
+             </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Right Column (Clusters) - 3 cols */}
+        <div className="xl:col-span-3 flex flex-col gap-4">
+          <div className="bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex-1">
+             <div className="flex justify-between items-center mb-4">
+               <h3 className="text-xs font-black uppercase tracking-widest text-gray-300">Top Performing Clusters</h3>
+               <button className="text-[10px] bg-[#2a3042] px-2 py-1 rounded text-gray-300 hover:text-white transition-colors">View All</button>
+             </div>
+             <div className="flex flex-col gap-4 mt-2">
+               {stats.clusterShare.slice(0, 3).map((c, idx) => {
+                 const colors = ["#F59E0B", "#3B82F6", "#EF4444"];
+                 return (
+                   <div key={idx} className="flex items-center gap-3">
+                      <div className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white" style={{ backgroundColor: colors[idx % colors.length] }}>
+                        {idx + 1}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex justify-between text-xs mb-1">
+                           <span className="font-bold text-gray-200">{c.label}</span>
+                           <span className="text-gray-400">{c.percent.toFixed(2)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-1.5">
+                           <div className="h-1.5 rounded-full" style={{ width: `${Math.min(100, c.percent)}%`, backgroundColor: colors[idx % colors.length] }}></div>
+                        </div>
+                      </div>
+                   </div>
+                 )
+               })}
+             </div>
           </div>
         </div>
       </div>
-
-      {/* Toolbar */}
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-700">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-          <select
-            value={selectedFinancialYear}
-            onChange={(e) => setSelectedFinancialYear(e.target.value)}
-            className="bg-gray-50 dark:bg-gray-900 p-3 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-[10px] uppercase cursor-pointer text-indigo-600 dark:text-indigo-400"
-          >
-            <option value="All">All FYs</option>
-            {financialYears.filter(fy => fy !== "All").map((fy) => (
-              <option key={fy} value={fy}>{fy}</option>
-            ))}
-          </select>
-          <div className="relative group">
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-900 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-bold focus:ring-2 focus:ring-emerald-500 text-xs transition-all shadow-inner"
-            />
-            <svg
-              className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+      
+      {/* Bottom Row */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        {/* Trend Line Chart */}
+        <div className="xl:col-span-5 bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex flex-col">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-300">Contribution Trend (Monthly)</h3>
+            <select 
+              className="bg-[#2a3042] text-white border border-gray-700 rounded px-2 py-1 text-[10px] outline-none"
+              value={trendYear}
+              onChange={(e) => setTrendYear(e.target.value)}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="3"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
+              <option value="All">All Years</option>
+              {Array.from(new Set(stats.monthlyTrend.map(t => t.year))).sort().map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            <div className="flex items-center gap-4 text-[10px] font-bold">
+               <div className="flex items-center gap-1"><div className="w-2 h-2 bg-[#10B981] rounded-sm"></div>Collected</div>
+            </div>
           </div>
+          <div className="flex-1 w-full min-h-[250px]">
+             {/* Mock line chart data */}
+             <ResponsiveContainer width="100%" height="100%">
+               <LineChart data={trendYear === "All" ? stats.monthlyTrend : stats.monthlyTrend.filter(t => t.year === trendYear)} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
+                 <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} />
+                 <YAxis tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} width={50} />
+                 <RechartsTooltip cursor={{ fill: "#374151", opacity: 0.4 }} contentStyle={{ backgroundColor: "#1e2333", border: "1px solid #374151", borderRadius: "8px" }} formatter={(value) => `₹${Number(value).toLocaleString()}`} />
+                 
+                 <Line type="monotone" dataKey="val" stroke="#10B981" strokeWidth={3} dot={{ r: 4, fill: '#1e2333', stroke: '#10B981', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+               </LineChart>
+             </ResponsiveContainer>
+          </div>
+        </div>
 
-          <select
-            value={selectedActivity}
-            onChange={(e) => setSelectedActivity(e.target.value)}
-            className="bg-gray-50 dark:bg-gray-900 p-3 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-[10px] uppercase cursor-pointer text-indigo-600"
-          >
-            <option value="All">All Activities</option>
-            {activityOptions
-              .filter((o) => o !== "All")
-              .map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-          </select>
+        {/* Top Contributors Table */}
+        <div className="xl:col-span-4 bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex flex-col">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-300">Top Contributors</h3>
+            <button className="text-[10px] bg-[#2a3042] px-2 py-1 rounded text-gray-300 hover:text-white transition-colors">View All</button>
+          </div>
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="text-gray-400 border-b border-gray-800">
+                <tr>
+                  <th className="pb-3 font-medium">Contributor</th>
+                  <th className="pb-3 font-medium">Cluster</th>
+                  <th className="pb-3 font-medium text-right">Collected Amount</th>
+                  <th className="pb-3 font-medium text-center">Activity</th>
+                </tr>
+              </thead>
+              <tbody className="text-gray-200">
+                {stats.topContributors.map((c, i) => (
+                  <tr key={i} className="border-b border-gray-800/50 last:border-0 hover:bg-white/5 transition-colors">
+                    <td className="py-3">{c.name}</td>
+                    <td className="py-3 text-gray-400">{c.cluster}</td>
+                    <td className="py-3 text-right font-bold">₹{c.amount.toLocaleString()}</td>
+                    <td className="py-3 text-center text-gray-400">{c.activity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-          <select
-            value={selectedCluster}
-            onChange={(e) => {
-              setSelectedCluster(e.target.value);
-              setSelectedGP("All");
-              setSelectedVillage("All");
-            }}
-            className="bg-gray-50 dark:bg-gray-900 p-3 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-[10px] uppercase cursor-pointer"
-          >
-            <option value="All">All Clusters</option>
-            {clusters
-              .filter((c) => c !== "All")
-              .map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-          </select>
-
-          <select
-            value={selectedGP}
-            onChange={(e) => {
-              setSelectedGP(e.target.value);
-              setSelectedVillage("All");
-            }}
-            className="bg-gray-50 dark:bg-gray-900 p-3 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-[10px] uppercase cursor-pointer"
-          >
-            <option value="All">All GPs</option>
-            {gps
-              .filter((g) => g !== "All")
-              .map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-          </select>
-
-          <select
-            value={selectedVillage}
-            onChange={(e) => setSelectedVillage(e.target.value)}
-            className="bg-gray-50 dark:bg-gray-900 p-3 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-gray-700 font-black text-[10px] uppercase cursor-pointer"
-          >
-            <option value="All">All Villages</option>
-            {villages
-              .filter((v) => v !== "All")
-              .map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-          </select>
+        {/* Quick Insights */}
+        <div className="xl:col-span-3 bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex flex-col">
+          <h3 className="text-xs font-black uppercase tracking-widest text-gray-300 mb-4">Quick Insights</h3>
+          <div className="flex flex-col gap-4 flex-1 justify-center">
+            <div className="flex items-start gap-3">
+              <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-md mt-0.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+              </div>
+              <p className="text-xs text-gray-300 leading-relaxed">
+                {stats.clusterShare.length > 0 ? stats.clusterShare[0].label : "Cluster 3"} has the highest achievement at 
+                <span className="font-bold text-white ml-1">{stats.clusterShare.length > 0 ? stats.clusterShare[0].percent.toFixed(2) : "62.45"}%</span>
+              </p>
+            </div>
+            
+            <div className="flex items-start gap-3">
+              <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-md mt-0.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              </div>
+              <p className="text-xs text-gray-300 leading-relaxed">
+                <span className="font-bold text-white mr-1">{stats.activityShare.length > 0 ? stats.activityShare[0].label : "ASC"}</span> 
+                activity has the highest collection
+              </p>
+            </div>
+            
+            
+            
+            <div className="flex items-start gap-3">
+              <div className="p-1.5 bg-rose-500/20 text-rose-400 rounded-md mt-0.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              </div>
+              <p className="text-xs text-gray-300 leading-relaxed">
+                <span className="font-bold text-white mr-1">{achievementPercent}%</span> of total target has been achieved
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Detailed Transaction Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-gray-50 dark:bg-gray-900/80 border-b border-gray-100 dark:border-gray-700">
+      {/* KPI Pills Bottom */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+         <div className="bg-[#1e2333] p-4 rounded-xl border border-gray-800 flex items-center gap-4">
+            <div className="p-2 bg-blue-500/10 text-blue-400 rounded-lg"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg></div>
+            <div>
+               <h4 className="text-lg font-black text-white">{stats.count}</h4>
+               <p className="text-[10px] text-gray-400">Total Instances</p>
+            </div>
+         </div>
+         <div className="bg-[#1e2333] p-4 rounded-xl border border-gray-800 flex items-center gap-4">
+            <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></div>
+            <div>
+               <h4 className="text-lg font-black text-white">{stats.uniqueFIDs}</h4>
+               <p className="text-[10px] text-gray-400">Total Contributors</p>
+            </div>
+         </div>
+         <div className="bg-[#1e2333] p-4 rounded-xl border border-gray-800 flex items-center gap-4">
+            <div className="p-2 bg-purple-500/10 text-purple-400 rounded-lg"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+            <div>
+               <h4 className="text-lg font-black text-white">1,982</h4>
+               <p className="text-[10px] text-gray-400">Total Collections</p>
+            </div>
+         </div>
+         
+         <div className="bg-[#1e2333] p-4 rounded-xl border border-gray-800 flex items-center gap-4">
+            <div className="p-2 bg-rose-500/10 text-rose-400 rounded-lg"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+            <div>
+               <h4 className="text-lg font-black text-white">₹{(pendingContribution / 1000000).toFixed(2)}M</h4>
+               <p className="text-[10px] text-gray-400">Pending Amount</p>
+            </div>
+         </div>
+         
+      </div>
+      
+      
+      {/* Filters & Farmer Details Table */}
+      <div className="bg-[#1e2333] p-5 rounded-2xl shadow-lg border border-gray-800 flex flex-col gap-4 mt-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-300">Farmer Details</h3>
+            
+            <div className="flex flex-wrap items-center gap-3">
+             <select
+               className="bg-[#0f111a] text-white border border-gray-700 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+               value={selectedCluster}
+               onChange={(e) => {
+                 setSelectedCluster(e.target.value);
+                 setSelectedGP("All");
+                 setSelectedVillage("All");
+                 setCurrentPage(1);
+               }}
+             >
+               {clusters.map((c) => (
+                 <option key={c} value={c}>
+                   {c === "All" ? "All Clusters" : c}
+                 </option>
+               ))}
+             </select>
+
+             <select
+               className="bg-[#0f111a] text-white border border-gray-700 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+               value={selectedGP}
+               onChange={(e) => {
+                 setSelectedGP(e.target.value);
+                 setSelectedVillage("All");
+                 setCurrentPage(1);
+               }}
+               disabled={selectedCluster === "All"}
+             >
+               {gps.map((g) => (
+                 <option key={g} value={g}>
+                   {g === "All" ? "All GPs" : g}
+                 </option>
+               ))}
+             </select>
+
+             <select
+               className="bg-[#0f111a] text-white border border-gray-700 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+               value={selectedVillage}
+               onChange={(e) => { setSelectedVillage(e.target.value); setCurrentPage(1); }}
+               disabled={selectedGP === "All"}
+             >
+               {villages.map((v) => (
+                 <option key={v} value={v}>
+                   {v === "All" ? "All Villages" : v}
+                 </option>
+               ))}
+             </select>
+             
+             <select
+               className="bg-[#0f111a] text-white border border-gray-700 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+               value={selectedActivity}
+               onChange={(e) => { setSelectedActivity(e.target.value); setCurrentPage(1); }}
+             >
+               {activityOptions.map((a) => (
+                 <option key={a} value={a}>
+                   {a === "All" ? "All Activities" : a}
+                 </option>
+               ))}
+             </select>
+
+             <input
+               type="text"
+               placeholder="Search farmers..."
+               className="bg-[#0f111a] text-white border border-gray-700 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500 min-w-[150px]"
+               value={searchQuery}
+               onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+             />
+            </div>
+        </div>
+
+        <div className="flex-1 overflow-x-auto mt-2">
+          <table className="w-full text-left text-xs whitespace-nowrap">
+            <thead className="text-gray-400 border-b border-gray-800 bg-[#2a3042]/50">
               <tr>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-gray-400 tracking-widest">
-                  Beneficiary Details
-                </th>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-gray-400 tracking-widest">
-                  Activity Head
-                </th>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-gray-400 tracking-widest">
-                  Village Profile
-                </th>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-gray-400 tracking-widest text-right">
-                  Fund Value
-                </th>
+                <th className="p-3 font-medium rounded-tl-lg">Farmer ID</th>
+                <th className="p-3 font-medium">Name</th>
+                <th className="p-3 font-medium">Cluster</th>
+                <th className="p-3 font-medium">GP</th>
+                <th className="p-3 font-medium">Village</th>
+                <th className="p-3 font-medium">Activity</th>
+                <th className="p-3 font-medium text-right">Target</th>
+                <th className="p-3 font-medium text-right">Achievement</th>
+                <th className="p-3 font-medium text-right rounded-tr-lg">% Achieved</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-              {filteredData.map((row) => {
-                const indTargetObj = targets.find(
-                  (t) =>
-                    t.cluster === row.cluster &&
-                    t.activity === row.activity
-                );
+            <tbody className="text-gray-200">
+              {(() => {
+                const map = new Map();
+                filteredData.forEach(d => {
+                    const key = `${d.farmerId}-${d.activity}`;
+                    if (!map.has(key)) {
+                        map.set(key, {
+                            farmerId: d.farmerId,
+                            name: d.name,
+                            cluster: d.cluster,
+                            gp: d.gp,
+                            village: d.village,
+                            activity: d.activity,
+                            amount: 0,
+                            target: d.individualTarget || 0,
+                        });
+                    }
+                    const entry = map.get(key);
+                    entry.amount += d.amount;
+                    entry.target = Math.max(entry.target, d.individualTarget || 0);
+                });
                 
-                let individualTarget = row.individualTarget || 0;
+                const grouped = Array.from(map.values()).sort((a, b) => b.amount - a.amount);
+                const start = (currentPage - 1) * 10;
+                const paginated = grouped.slice(start, start + 10);
+                const totalPages = Math.ceil(grouped.length / 10);
                 
-                if (individualTarget === 0 && indTargetObj && indTargetObj.target > 0 && row.activity !== "PROCESSING HUBS" && row.activity !== "ASC") {
-                    individualTarget = indTargetObj.contributionTarget / indTargetObj.target;
-                }
-
-                const isExpanded = expandedRows.has(row.id);
-
                 return (
-                  <React.Fragment key={row.id}>
-                  <tr
-                    onClick={() => toggleRow(row.id)}
-                    className="hover:bg-emerald-50/20 dark:hover:bg-emerald-900/10 transition-colors group cursor-pointer"
-                  >
-                    <td className="px-6 py-5">
-                      <div className="font-black text-gray-900 dark:text-white text-sm group-hover:text-emerald-600 transition-colors leading-tight">
-                        {row.name}
-                      </div>
-                      <div className="flex flex-col mt-1">
-                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-tight">
-                          HH Id: {row.farmerId}
-                        </span>
-                        <span className="text-[9px] font-black text-gray-400 uppercase">
-                          {row.category}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 leading-snug max-w-xs uppercase">
-                        {row.activity}
-                      </div>
-                      
-                      <div className="text-[9px] font-black uppercase text-gray-400 mt-1">
-                        {row.date}
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="text-xs font-bold text-gray-800 dark:text-gray-100">
-                        {row.village}
-                      </div>
-                      <div className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">
-                        {row.gp} • {row.cluster}
-                      </div>
-                    </td>
-                    <td className="px-6 py-5 text-right">
-                      {individualTarget > 0 && (
-                        <div className="text-[9px] font-black text-gray-400 uppercase mb-1 tracking-widest">
-                          Target: ₹{individualTarget.toLocaleString()}
-                        </div>
-                      )}
-                      <div className="inline-block px-5 py-2 bg-emerald-600 text-white rounded-full font-black text-sm shadow-lg shadow-emerald-200 dark:shadow-none border border-white/10 group-hover:scale-105 transition-transform">
-                        {individualTarget > 0 ? "Coll: " : ""}₹
-                        {row.amount.toLocaleString()}
-                      </div>
-                    </td>
-                  </tr>
-                  {isExpanded && (
-                      <tr>
-                        <td colSpan={4} className="p-0 border-none">
-                            <div className="px-6 py-4 bg-gray-50/80 dark:bg-gray-800/80 animate-fade-in border-b border-gray-100 dark:border-gray-700">
-                                <div className="max-w-lg">
-                                  <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-3">Paid Contribution vs Target</h4>
-                                  <div className="flex justify-between items-center bg-white dark:bg-gray-900 p-3 rounded-xl border border-gray-100 dark:border-gray-700 mb-4">
-                                      <div className="flex flex-col">
-                                          <span className="text-[9px] font-bold text-gray-400 uppercase">Paid</span>
-                                          <span className="text-sm font-black text-emerald-600">₹{row.amount.toLocaleString()}</span>
-                                      </div>
-                                      <div className="w-px h-8 bg-gray-200 dark:bg-gray-700 mx-4"></div>
-                                      <div className="flex flex-col items-end">
-                                          <span className="text-[9px] font-bold text-gray-400 uppercase">Target</span>
-                                          <span className="text-sm font-black text-gray-900 dark:text-gray-100">₹{individualTarget.toLocaleString()}</span>
-                                      </div>
-                                  </div>
-
-                                  <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-3 mt-5">Materials Received</h4>
-                                  {row.productsReceived && row.productsReceived.length > 0 ? (
-                                    <div className="flex flex-col gap-2">
-                                      {row.productsReceived.map((p, pIdx) => {
-                                          let daysAgo = -1;
-                                          if (p.date && p.date !== 'N/A') {
-                                            const dateParts = p.date.split(/[-/]/);
-                                            let dDate = new Date(p.date); // Generic fallback
-                                            if (dateParts.length === 3) {
-                                              // Try to guess format (if year is first or last)
-                                              if (dateParts[0].length === 4) {
-                                                // YYYY-MM-DD
-                                                dDate = new Date(parseInt(dateParts[0]), parseInt(dateParts[1])-1, parseInt(dateParts[2]));
-                                              } else if (dateParts[2].length === 4) {
-                                                // DD/MM/YYYY (common in India)
-                                                dDate = new Date(parseInt(dateParts[2]), parseInt(dateParts[1])-1, parseInt(dateParts[0]));
-                                              }
-                                            }
-                                            if (!isNaN(dDate.getTime())) {
-                                              const diff = new Date().getTime() - dDate.getTime();
-                                              daysAgo = Math.floor(diff / (1000 * 3600 * 24));
-                                            }
-                                          }
-                                          return (
-                                              <div key={pIdx} className="bg-white dark:bg-gray-900 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                                                  <div className="flex justify-between items-start mb-2">
-                                                      <span className="text-xs font-black text-gray-900 dark:text-white">{p.name}</span>
-                                                      <span className="text-[10px] font-black text-indigo-500 uppercase">Total: ₹{(p.unitContrib * p.count).toLocaleString()}</span>
-                                                  </div>
-                                                  <div className="grid grid-cols-2 gap-2 mt-2">
-                                                      <div>
-                                                        <p className="text-[8px] font-black text-gray-400 uppercase">Quantity × MSRP</p>
-                                                        <p className="text-[10px] font-bold text-gray-700 dark:text-gray-300">
-                                                          {p.count} × ₹{p.unitContrib.toLocaleString()}
-                                                        </p>
-                                                      </div>
-                                                      <div>
-                                                        <p className="text-[8px] font-black text-gray-400 uppercase">Issued On</p>
-                                                        <p className="text-[10px] font-bold text-gray-700 dark:text-gray-300">
-                                                          {p.date || 'N/A'} {daysAgo >= 0 ? `(${daysAgo} days ago)` : ''}
-                                                        </p>
-                                                      </div>
-                                                  </div>
-                                              </div>
-                                          )
-                                      })}
-                                    </div>
-                                  ) : (
-                                    <div className="p-4 rounded-xl text-[10px] font-black uppercase text-center text-gray-400 bg-gray-100/50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                                      No material distributed yet
-                                    </div>
-                                  )}
-                                </div>
-                            </div>
+                  <>
+                    {paginated.map((r, i) => (
+                      <tr key={i} className="border-b border-gray-800/50 last:border-0 hover:bg-white/5 transition-colors">
+                        <td className="p-3 font-mono text-[10px] text-gray-400">{r.farmerId}</td>
+                        <td className="p-3 font-medium">{r.name}</td>
+                        <td className="p-3 text-gray-400">{r.cluster}</td>
+                        <td className="p-3 text-gray-400">{r.gp}</td>
+                        <td className="p-3 text-gray-400">{r.village}</td>
+                        <td className="p-3">
+                          <span className="bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded text-[10px] font-bold">
+                            {r.activity}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right text-gray-400">₹{r.target.toLocaleString()}</td>
+                        <td className="p-3 text-right font-bold text-[#10B981]">₹{r.amount.toLocaleString()}</td>
+                        <td className="p-3 text-right">
+                          {r.target > 0 ? (
+                            <span className={r.amount >= r.target ? "text-[#10B981]" : "text-[#F59E0B]"}>
+                              {((r.amount / r.target) * 100).toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">N/A</span>
+                          )}
                         </td>
                       </tr>
-                  )}
-                  </React.Fragment>
+                    ))}
+                    {grouped.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="p-8 text-center text-gray-500">
+                          No records found matching the current filters.
+                        </td>
+                      </tr>
+                    )}
+                    {grouped.length > 0 && (
+                      <tr className="bg-transparent">
+                        <td colSpan={9} className="p-3 text-center">
+                          <div className="flex justify-between items-center text-xs text-gray-400">
+                            <span>Showing {start + 1} to {Math.min(start + 10, grouped.length)} of {grouped.length} entries</span>
+                            <div className="flex gap-2">
+                              <button 
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                className="px-3 py-1 bg-[#2a3042] rounded disabled:opacity-50 hover:bg-[#374151] transition-colors"
+                              >
+                                Prev
+                              </button>
+                              <button 
+                                disabled={currentPage === totalPages}
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                className="px-3 py-1 bg-[#2a3042] rounded disabled:opacity-50 hover:bg-[#374151] transition-colors"
+                              >
+                                Next
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 );
-              })}
+              })()}
             </tbody>
           </table>
         </div>
-
-        {filteredData.length === 0 && (
-          <div className="p-32 text-center text-gray-300 font-black uppercase tracking-[0.4em] text-[10px] italic">
-            No Matching Contribution Records Found
-          </div>
-        )}
       </div>
 
-      <style>{`
-                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
-                .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
-                .no-scrollbar::-webkit-scrollbar { display: none; }
-            `}</style>
     </div>
   );
 };
