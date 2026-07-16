@@ -147,7 +147,7 @@ const ReportPage: React.FC = () => {
                 
             setRecords(sortedRecords);
         } catch (err) {
-            console.error('Failed to load report data:', err);
+            console.warn('Failed to load report data:', err);
         } finally {
             setLoading(false);
         }
@@ -280,7 +280,7 @@ const ReportPage: React.FC = () => {
 
             pdf.save(`Work_Report_${user?.username}_${filterMonth + 1}_${filterYear}.pdf`);
         } catch (err) {
-            console.error('Download failed:', err);
+            console.warn('Download failed:', err);
             alert('Download failed. Please try again.');
         } finally {
             setIsDownloading(false);

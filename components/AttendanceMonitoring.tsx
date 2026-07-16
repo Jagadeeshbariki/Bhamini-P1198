@@ -113,10 +113,10 @@ const AttendanceMonitoring: React.FC = () => {
                 const text = await res.text();
                 setLogs(parseCSV(text));
             } else {
-                console.error(`Fetch error: ${res.status}`);
+                console.warn(`Fetch error: ${res.status}`);
             }
         } catch (err) {
-            console.error("Failed to fetch logs:", err);
+            console.warn("Failed to fetch logs:", err);
         } finally {
             setLoading(false);
         }

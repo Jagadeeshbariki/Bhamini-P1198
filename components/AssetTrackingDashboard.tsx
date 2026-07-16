@@ -133,9 +133,13 @@ const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack 
         const fetchData = async () => {
             setLoading(true);
             try {
+                const safeFetch = (url: string) => fetch(getProxyUrl(url)).catch(err => {
+                    console.warn("Fetch failed for " + url, err);
+                    return { ok: false, text: async () => '' } as any;
+                });
                 const [assetRes, distRes] = await Promise.all([
-                    fetch(getProxyUrl(`${ASSETS_DATA_URL}&t=${Date.now()}`)),
-                    fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`))
+                    safeFetch(`${ASSETS_DATA_URL}&t=${Date.now()}`),
+                    safeFetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`)
                 ]);
                 
                 const assetText = await assetRes.text();
@@ -198,7 +202,7 @@ const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack 
                 setAssets(parsedAssets);
                 setDistributions(parsedDists);
             } catch (err) {
-                console.error("Failed to fetch asset data:", err);
+                console.warn("Failed to fetch asset data:", err);
             } finally {
                 setLoading(false);
             }

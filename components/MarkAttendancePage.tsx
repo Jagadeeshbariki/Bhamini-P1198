@@ -125,12 +125,12 @@ const MarkAttendancePage: React.FC = () => {
                     }
                 });
             } catch (e) {
-                console.error("Error parsing local storage attendance:", e);
+                console.warn("Error parsing local storage attendance:", e);
             }
 
             setMarkedRecords(recordMap);
         } catch (err) {
-            console.error('Failed to load data:', err);
+            console.warn('Failed to load data:', err);
         }
     }, [user]);
 

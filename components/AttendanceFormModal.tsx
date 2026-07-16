@@ -67,7 +67,7 @@ const AttendanceFormModal: React.FC<AttendanceFormModalProps> = ({ user, date, i
             }
         } catch (err) {
             setError(`Connection error. If this persists, please check your internet.`);
-            console.error(err);
+            console.warn(err);
         } finally {
             setIsSubmitting(false);
         }

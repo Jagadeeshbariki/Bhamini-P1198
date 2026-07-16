@@ -34,7 +34,7 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                     });
                 },
                 (err) => {
-                    console.error("Geolocation error:", err);
+                    console.warn("Geolocation error:", err);
                     setError("Could not get location. Please enable GPS.");
                 },
                 {
@@ -109,7 +109,7 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                         throw new Error(result.message || 'Failed to upload image');
                     }
                 } catch (err: any) {
-                    console.error("Upload error:", err);
+                    console.warn("Upload error:", err);
                     setStatus('error');
                     setError(err.message || "An unexpected error occurred during upload.");
                 }

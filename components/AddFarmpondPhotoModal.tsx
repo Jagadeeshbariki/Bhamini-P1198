@@ -101,7 +101,7 @@ const AddFarmpondPhotoModal: React.FC<AddFarmpondPhotoModalProps> = ({ data, onC
                 }
             };
         } catch (err: any) {
-            console.error("Upload error:", err);
+            console.warn("Upload error:", err);
             setStatus('error');
             setErrorMessage(err.message || 'Something went wrong during upload');
         } finally {

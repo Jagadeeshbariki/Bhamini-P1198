@@ -143,9 +143,13 @@ const HomePage: React.FC = () => {
     const fetchPhotosAndVillages = useCallback(async (silent = false) => {
         if (!silent) setLoading(true);
         try {
+            const safeFetch = (url: string) => fetch(getProxyUrl(url)).catch(err => {
+                console.warn("Fetch failed for " + url, err);
+                return { ok: false, text: async () => '' } as any;
+            });
             const [photosRes, villagesRes] = await Promise.all([
-                fetch(getProxyUrl(`${GOOGLE_SHEET_PHOTOS_URL}&t=${Date.now()}`)),
-                fetch(getProxyUrl(`${VILLAGES_DATA_URL}&t=${Date.now()}`))
+                safeFetch(`${GOOGLE_SHEET_PHOTOS_URL}&t=${Date.now()}`),
+                safeFetch(`${VILLAGES_DATA_URL}&t=${Date.now()}`)
             ]);
             
             const [csvText, villagesText] = await Promise.all([
@@ -196,7 +200,7 @@ const HomePage: React.FC = () => {
             });
             setVillagesData(vData);
         } catch (err) {
-            console.error(err);
+            console.warn(err);
         } finally {
             if (!silent) setLoading(false);
         }

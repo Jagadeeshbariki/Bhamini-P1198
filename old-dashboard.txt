@@ -1,0 +1,211 @@
+            {/* 3. ANALYTICS GRID */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-1">
+                {/* Key Metrics Bento */}
+                <div className="lg:col-span-3 grid grid-cols-1 gap-1">
+                    <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-xl shadow-indigo-100 dark:shadow-none flex flex-col justify-between relative overflow-hidden group min-h-[120px]">
+                        <Users className="absolute -right-4 -bottom-4 w-16 h-16 opacity-10 group-hover:scale-110 transition-transform duration-700" />
+                        <div className="flex justify-between items-start z-10">
+                            <div>
+                                <p className="text-[7px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Beneficiaries</p>
+                                <p className="text-2xl font-black tracking-tighter">{(stats.total || 0).toLocaleString()}</p>
+                            </div>
+                            {stats.totalTarget > 0 && (
+                                <div className="text-right">
+                                    <p className="text-[7px] font-black uppercase opacity-60 tracking-[0.1em] mb-1">Target</p>
+                                    <p className="text-sm font-black">{(stats.totalTarget || 0).toLocaleString()}</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="mt-2 flex items-center gap-2 z-10 relative">
+                            {stats.totalTarget > 0 ? (
+                                <div className="h-1 flex-1 bg-white/20 rounded-full overflow-hidden">
+                                    <div className="h-full bg-white transition-all duration-1000" style={{ width: `${Math.min((stats.total / stats.totalTarget) * 100, 100)}%` }} />
+                                </div>
+                            ) : (
+                                <div className="h-1 w-6 bg-white/30 rounded-full"></div>
+                            )}
+                            <span className="text-[6px] font-black uppercase opacity-60">Live Registry</span>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-1">
+                        <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between h-full">
+                            <div>
+                                <p className="text-[7px] font-black uppercase text-gray-400 tracking-widest mb-1">Avg. Age</p>
+                                <p className="text-lg font-black text-gray-900 dark:text-white">{stats.averageAge.toFixed(1)}</p>
+                            </div>
+                            <div className="mt-0.5 text-[7px] font-black uppercase text-indigo-500">Years Old</div>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between h-full">
+                            <div>
+                                <p className="text-[7px] font-black uppercase text-gray-400 tracking-widest mb-1">Coverage</p>
+                                <p className="text-lg font-black text-gray-900 dark:text-white">{stats.uniqueVillages}</p>
+                            </div>
+                            <div className="mt-0.5 text-[7px] font-black uppercase text-emerald-500">{stats.uniqueGPs} GPs</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Activity & Cluster Distribution Column */}
+                <div className="lg:col-span-5 flex flex-col gap-1">
+                    {/* Activity Target vs Achievement */}
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Activity Target vs Achievement</h3>
+                            <ActivityIcon className="w-3 h-3 text-indigo-500" />
+                        </div>
+                        <div className="flex-grow pb-1">
+                            <div className="h-[380px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={stats.activityData} margin={{ top: 30, right: 10, left: 10, bottom: 20 }}>
+                                        <XAxis 
+                                            dataKey="name" 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af', dy: 10 }}
+                                            interval={0}
+                                            angle={-45}
+                                            textAnchor="end"
+                                            height={110}
+                                        />
+                                        <YAxis 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            tickFormatter={(value) => (value || 0).toLocaleString()}
+                                            tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af' }}
+                                        />
+                                        <Tooltip 
+                                            cursor={{ fill: 'rgba(0,0,0,0.05)' }} 
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
+                                        />
+                                        <Bar dataKey="value" name="Achievement Count" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="targetCount" name="Target Count" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Cluster Target vs Achievement */}
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                        <div className="flex justify-between items-center mb-1">
+                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Cluster Target vs Achievement</h3>
+                            <MapPin className="w-3 h-3 text-emerald-500" />
+                        </div>
+                        <div className="flex-grow h-[220px] relative">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={stats.clusterData} margin={{ top: 20, right: 10, left: 10, bottom: 20 }}>
+                                    <XAxis 
+                                        dataKey="name" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af', dy: 10 }}
+                                    />
+                                    <YAxis 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tickFormatter={(value) => value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value}
+                                        tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af' }}
+                                    />
+                                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
+                                    <Bar dataKey="collected" name="Collected" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="target" name="Target" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Gender & Material Column */}
+                <div className="lg:col-span-4 flex flex-col gap-1">
+                    {/* Gender Split Chart */}
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                        <div className="flex justify-between items-center mb-1">
+                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Gender Split</h3>
+                            <Users className="w-3 h-3 text-pink-500" />
+                        </div>
+                        <div className="flex-grow h-[280px] relative">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                                    <Pie
+                                        data={stats.genderData}
+                                        innerRadius={0}
+                                        outerRadius={65}
+                                        dataKey="value"
+                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                        labelLine={{ stroke: '#e5e7eb', strokeWidth: 1 }}
+                                        onClick={(data) => setFilterGender(data.name)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        {stats.genderData.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="mt-1 flex flex-wrap justify-center gap-x-1.5 gap-y-0.5">
+                            {stats.genderData.map((g, idx) => (
+                                <button 
+                                    key={idx} 
+                                    onClick={() => setFilterGender(g.name)}
+                                    className={cn(
+                                        "flex items-center gap-1 px-1 py-0.5 rounded-lg transition-all",
+                                        filterGender === g.name ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200" : "hover:bg-gray-50 dark:hover:bg-gray-700"
+                                    )}
+                                >
+                                    <div className="w-1 h-1 rounded-full" style={{ background: COLORS[idx % COLORS.length] }}></div>
+                                    <span className="text-[6px] font-black uppercase text-gray-500">{g.name} {g.percentage.toFixed(0)}%</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Material Distribution Chart */}
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                        <div className="flex justify-between items-center mb-1">
+                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Material Status</h3>
+                            <Download className="w-3 h-3 text-amber-500" />
+                        </div>
+                        <div className="flex-grow h-[280px] relative">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                                    <Pie
+                                        data={stats.materialData}
+                                        innerRadius={0}
+                                        outerRadius={65}
+                                        dataKey="value"
+                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                        labelLine={{ stroke: '#e5e7eb', strokeWidth: 1 }}
+                                        onClick={(data) => setFilterMaterialStatus(data.name)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        {stats.materialData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.name === 'Received' ? '#10b981' : '#f43f5e'} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="mt-1 flex flex-wrap justify-center gap-x-1.5 gap-y-0.5">
+                            {stats.materialData.map((m, idx) => (
+                                <button 
+                                    key={idx} 
+                                    onClick={() => setFilterMaterialStatus(m.name)}
+                                    className={cn(
+                                        "flex items-center gap-1 px-1 py-0.5 rounded-lg transition-all",
+                                        filterMaterialStatus === m.name ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200" : "hover:bg-gray-50 dark:hover:bg-gray-700"
+                                    )}
+                                >
+                                    <div className="w-1 h-1 rounded-full" style={{ background: m.name === 'Received' ? '#10b981' : '#f43f5e' }}></div>
+                                    <span className="text-[6px] font-black uppercase text-gray-500">{m.name}: {m.value}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* 4. DETAILED TABLE */}

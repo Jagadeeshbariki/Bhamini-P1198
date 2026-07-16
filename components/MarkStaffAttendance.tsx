@@ -87,7 +87,7 @@ const MarkStaffAttendance: React.FC = () => {
             const userHistory = data.filter(d => d.username && d.username.toLowerCase() === user.username.toLowerCase());
             setHistory(userHistory.reverse());
         } catch (err) {
-            console.error("Failed to fetch history:", err);
+            console.warn("Failed to fetch history:", err);
         }
     }, [user]);
 
@@ -123,7 +123,7 @@ const MarkStaffAttendance: React.FC = () => {
             setStream(s);
             setIsCameraLoading(false);
         } catch (err: any) {
-            console.error("Camera error:", err);
+            console.warn("Camera error:", err);
             setIsCameraLoading(false);
             if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.message?.toLowerCase().includes('permission')) {
                 setError("Camera permission denied. Please allow access in browser settings.");
@@ -161,7 +161,7 @@ const MarkStaffAttendance: React.FC = () => {
         el.srcObject = stream;
         el.onloadedmetadata = () => {
             el.play().catch(e => {
-                console.error("Autoplay failed:", e);
+                console.warn("Autoplay failed:", e);
                 setError("Tap the feed to start manually.");
             });
         };
@@ -201,7 +201,7 @@ const MarkStaffAttendance: React.FC = () => {
                 stopCamera();
             }
         } catch (err) {
-            console.error("Capture failure:", err);
+            console.warn("Capture failure:", err);
             setError("Failed to capture image.");
         }
     };
@@ -283,7 +283,7 @@ const MarkStaffAttendance: React.FC = () => {
             }, 3000);
             
         } catch (err) {
-            console.error("Submission error:", err);
+            console.warn("Submission error:", err);
             setError("Submission failed. Please try again.");
             setIsSubmitting(false);
         }

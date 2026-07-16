@@ -26,7 +26,7 @@ export const BASELINE_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX
 export const MAINTENANCE_BILLS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2T6skNnpDlaFl8n93i0eO7zlF0bK-sdndW1-AIRRpWf-YJkYzXjiC8B1e5hFdZ2KqMsNTKN9NCmPG/pub?gid=1851901743&single=true&output=csv';
 
 // 7. ASSET TRACKING
-export const ASSETS_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRFh_YS7XbVtnjgN7RNYgyNDZtWrobCdLqrAuvXLFBREwGnBHrQA6M0oJMmGPE6tnGhcZR1I-8Uv7cs/pub?gid=0&single=true&output=csv';
+export const ASSETS_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRFh_YS7XbVtnjgN7RNYgyNDZtWrobCdLqrAuvXLFBREwGnBHrQA6M0oJMmGPE6tnGhcZR1I-8Uv7cs/pub?gid=1506847810&single=true&output=csv';
 export const MATERIAL_CONTRIBUTION_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRFh_YS7XbVtnjgN7RNYgyNDZtWrobCdLqrAuvXLFBREwGnBHrQA6M0oJMmGPE6tnGhcZR1I-8Uv7cs/pub?gid=2092417444&single=true&output=csv';
 
 

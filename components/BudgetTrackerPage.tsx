@@ -128,7 +128,7 @@ const BudgetTrackerPage: React.FC = () => {
             console.log("Parsed records:", parsed.length);
             setAllData(parsed);
         } catch (err: any) {
-            console.error("Fetch error:", err);
+            console.warn("Fetch error:", err);
             if (err.name === 'AbortError') {
                 setError("Request timed out. The spreadsheet might be taking too long to respond. Please try again.");
             } else {
@@ -432,7 +432,7 @@ const BudgetTrackerPage: React.FC = () => {
                                                 fetchData();
                                             }, 3000);
                                         } catch (err: any) {
-                                            console.error("Submission error:", err);
+                                            console.warn("Submission error:", err);
                                             alert("Error submitting update: " + (err.name === 'AbortError' ? "Request timed out" : err.message));
                                         } finally {
                                             setIsSubmitting(false);

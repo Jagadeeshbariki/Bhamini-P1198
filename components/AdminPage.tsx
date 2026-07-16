@@ -152,7 +152,7 @@ const AdminPage: React.FC = () => {
             setUsersList(userRes);
             if (userRes.length > 0 && !selectedUsername) setSelectedUsername(userRes[0].username);
         } catch (err) {
-            console.error('Admin sync error:', err);
+            console.warn('Admin sync error:', err);
         } finally {
             setLoading(false);
         }

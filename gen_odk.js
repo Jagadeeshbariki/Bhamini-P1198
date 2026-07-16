@@ -1,3 +1,6 @@
+const fs = require('fs');
+
+const code = `
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ASSETS_DATA_URL, ASSET_DISTRIBUTION_URL, getProxyUrl } from '../config';
 import { 
@@ -7,11 +10,11 @@ import {
 import { 
     Target, CheckCircle, Clock, Percent, Activity, Box, Map, Calendar,
     Filter, Download, Search, ChevronRight, AlertTriangle, ArrowUp, ArrowDown,
-    Menu, X, Maximize2, Sparkles, XCircle, Info, ArrowLeft
+    Menu, X, Maximize2, Sparkles, XCircle, Info
 } from 'lucide-react';
 
 // Custom CSS for scrollbar and animations
-const customStyles = `
+const customStyles = \`
   .pbi-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -26,13 +29,40 @@ const customStyles = `
   .pbi-scrollbar::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
   }
-`;
+\`;
+
+// ---- Parsers & Types ----
+interface TargetRecord {
+    Transaction_ID: string;
+    Asset_Name: string;
+    Asset_Code: string;
+    Activity: string;
+    Activity_Code: string;
+    Financial_Year: string;
+    Target_Units: string;
+    Target_Qty: number;
+    Cluster: string;
+}
+
+interface DistRecord {
+    Asset_Code: string;
+    Asset_Name: string;
+    Activity: string;
+    Activity_Code: string;
+    Cluster: string;
+    Distributed_Qty: number;
+    Date: string;
+    Beneficiary_Name: string;
+    Beneficiary_ID: string;
+    Submitter: string;
+    Photo: string;
+}
 
 // Simple CSV parser
-const parseCSV = (csv: string) => {
-    const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
+const parseCSV = (csv) => {
+    const lines = csv.trim().split(/\\r?\\n/).filter(l => l.trim());
     if (lines.length < 1) return [];
-    const parseLine = (line: string) => {
+    const parseLine = (line) => {
         const values = [];
         let inQuote = false, val = '';
         for (let j = 0; j < line.length; j++) {
@@ -46,25 +76,25 @@ const parseCSV = (csv: string) => {
     const headers = parseLine(lines[0]).map(h => h.trim().toUpperCase());
     return lines.slice(1).map(line => {
         const values = parseLine(line);
-        const obj: any = {};
+        const obj = {};
         headers.forEach((h, i) => obj[h] = values[i] || '');
         return obj;
     });
 };
 
-interface Props {
-    onBack?: () => void;
-}
+const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6', '#6366f1'];
+const bgColors = ['bg-sky-50', 'bg-emerald-50', 'bg-amber-50', 'bg-violet-50', 'bg-pink-50', 'bg-rose-50', 'bg-teal-50', 'bg-indigo-50'];
+const textColors = ['text-sky-600', 'text-emerald-600', 'text-amber-600', 'text-violet-600', 'text-pink-600', 'text-rose-600', 'text-teal-600', 'text-indigo-600'];
 
-const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
-    const [targets, setTargets] = useState<any[]>([]);
-    const [distributions, setDistributions] = useState<any[]>([]);
+const ODKAssetDistribution = ({ onBack }) => {
+    const [targets, setTargets] = useState([]);
+    const [distributions, setDistributions] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState(null);
 
     // Filters
     const [filterFY, setFilterFY] = useState('All');
-    const [filterCluster, setFilterCluster] = useState('Globally');
+    const [filterCluster, setFilterCluster] = useState('All');
     const [filterActivity, setFilterActivity] = useState('All');
     const [filterMaterial, setFilterMaterial] = useState('All');
     
@@ -80,7 +110,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                const fetchSafe = (url: string) => fetch(getProxyUrl(`${url}&t=${Date.now()}`)).catch(() => null);
+                const fetchSafe = (url) => fetch(getProxyUrl(\`\${url}&t=\${Date.now()}\`)).catch(() => null);
                 
                 const [targetRes, distRes] = await Promise.all([
                     fetchSafe(ASSETS_DATA_URL),
@@ -97,53 +127,46 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                 const parsedTargets = parseCSV(targetText);
                 const parsedDist = parseCSV(distText);
 
-                const processedTargets: any[] = [];
-                const codeToNameMap: Record<string, {name: string, activity: string}> = {};
-
+                // Process Targets
+                // ASSETS_DATA_URL columns:
+                // S.No, Project Code, Transaction_id, Budget Head, activity_code, Asset Name, Asset_code, units, FY, Number Of Asset Purchased
+                // Cluster 1 Qty received at stock, Cluster 2 Qty received at stock, Cluster 3 Qty received at stock
+                const processedTargets = [];
                 parsedTargets.forEach(row => {
                     const tId = row['TRANSACTION_ID'] || '';
-                    const aName = row['ASSET_NAME'] || row['ASSET NAME'] || '';
+                    const aName = row['ASSET NAME'] || '';
                     const aCode = row['ASSET_CODE'] || '';
-                    const act = row['ACTIVITY'] || row['BUDGET HEAD'] || '';
+                    const act = row['BUDGET HEAD'] || '';
                     const actCode = row['ACTIVITY_CODE'] || '';
                     const fy = row['FY'] || '';
-                    const units = row['TARGET_UNITS'] || row['UNITS'] || '';
-                    const targetQty = parseFloat(row['TARGET_QTY']) || parseFloat(row['NUMBER OF ASSET PURCHASED']) || 0;
+                    const units = row['UNITS'] || '';
+                    const globalQty = parseFloat(row['NUMBER OF ASSET PURCHASED']) || 0;
                     
-                    let cluster = row['CLUSTER'] || 'Globally';
-                    if (cluster.toLowerCase() === 'cluster_1') cluster = 'Cluster 1';
-                    if (cluster.toLowerCase() === 'cluster_2') cluster = 'Cluster 2';
-                    if (cluster.toLowerCase() === 'cluster_3') cluster = 'Cluster 3';
+                    // check if we have cluster specific targets
+                    const c1 = parseFloat(row['CLUSTER 1 QTY RECEIVED AT STOCK']) || 0;
+                    const c2 = parseFloat(row['CLUSTER 2 QTY RECEIVED AT STOCK']) || 0;
+                    const c3 = parseFloat(row['CLUSTER 3 QTY RECEIVED AT STOCK']) || 0;
 
-                    if (aCode) {
-                        codeToNameMap[aCode] = { name: aName, activity: act };
-                    }
-
-                    if (targetQty > 0) {
-                        processedTargets.push({ 
-                            Transaction_ID: tId, 
-                            Asset_Name: aName, 
-                            Asset_Code: aCode, 
-                            Activity: act, 
-                            Activity_Code: actCode, 
-                            Financial_Year: fy, 
-                            Target_Units: units, 
-                            Target_Qty: targetQty, 
-                            Cluster: cluster 
-                        });
+                    if (c1 > 0) processedTargets.push({ Transaction_ID: tId, Asset_Name: aName, Asset_Code: aCode, Activity: act, Activity_Code: actCode, Financial_Year: fy, Target_Units: units, Target_Qty: c1, Cluster: 'Cluster 1' });
+                    if (c2 > 0) processedTargets.push({ Transaction_ID: tId, Asset_Name: aName, Asset_Code: aCode, Activity: act, Activity_Code: actCode, Financial_Year: fy, Target_Units: units, Target_Qty: c2, Cluster: 'Cluster 2' });
+                    if (c3 > 0) processedTargets.push({ Transaction_ID: tId, Asset_Name: aName, Asset_Code: aCode, Activity: act, Activity_Code: actCode, Financial_Year: fy, Target_Units: units, Target_Qty: c3, Cluster: 'Cluster 3' });
+                    
+                    if (c1 === 0 && c2 === 0 && c3 === 0 && globalQty > 0) {
+                         processedTargets.push({ Transaction_ID: tId, Asset_Name: aName, Asset_Code: aCode, Activity: act, Activity_Code: actCode, Financial_Year: fy, Target_Units: units, Target_Qty: globalQty, Cluster: 'Global' });
                     }
                 });
 
-                const processedDist: any[] = [];
+                // Process Distributions
+                // ASSET_DISTRIBUTION_URL columns:
+                // this_material_code, this_material_label, materials_details-material_count, materials_details-material_unit, Material_ID, materials_details-distributed_date, Farmer ID, Beneficiary name, Activity, Cluster, Activity_id
+                const processedDist = [];
                 parsedDist.forEach(row => {
                     const aCode = row['MATERIAL_ID'] || row['THIS_MATERIAL_CODE'] || '';
-                    
-                    const mappedInfo = codeToNameMap[aCode];
-                    const aName = mappedInfo?.name || row['THIS_MATERIAL_LABEL'] || '';
-                    const act = mappedInfo?.activity || row['ACTIVITY'] || '';
-                    
+                    const aName = row['THIS_MATERIAL_LABEL'] || '';
+                    const act = row['ACTIVITY'] || '';
                     const actCode = row['ACTIVITY_ID'] || '';
-                    let cluster = row['CLUSTER'] || 'Globally';
+                    let cluster = row['CLUSTER'] || 'Global';
+                    // normalize cluster name if needed
                     if(cluster.toLowerCase() === 'cluster_1') cluster = 'Cluster 1';
                     if(cluster.toLowerCase() === 'cluster_2') cluster = 'Cluster 2';
                     if(cluster.toLowerCase() === 'cluster_3') cluster = 'Cluster 3';
@@ -152,21 +175,9 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                     let dateStr = row['DATE OF SUBMISSION'] || row['MATERIALS_DETAILS-DISTRIBUTED_DATE'] || '';
                     if (dateStr.includes('T')) dateStr = dateStr.split('T')[0];
                     else if (dateStr) {
+                         // assume it might be DD-MMM-YYYY
                          const d = new Date(dateStr);
                          if(!isNaN(d.getTime())) dateStr = d.toISOString().split('T')[0];
-                    }
-                    let fy = '';
-                    if (dateStr) {
-                        const d = new Date(dateStr);
-                        if (!isNaN(d.getTime())) {
-                            const month = d.getMonth();
-                            const year = d.getFullYear();
-                            if (month >= 3) {
-                                fy = `${year}-${String(year + 1).slice(2)}`;
-                            } else {
-                                fy = `${year - 1}-${String(year).slice(2)}`;
-                            }
-                        }
                     }
 
                     const benName = row['BENEFICIARY NAME'] || '';
@@ -177,7 +188,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                     if(qty > 0) {
                         processedDist.push({
                             Asset_Code: aCode, Asset_Name: aName, Activity: act, Activity_Code: actCode, 
-                            Cluster: cluster, Distributed_Qty: qty, Date: dateStr, Financial_Year: fy, Beneficiary_Name: benName,
+                            Cluster: cluster, Distributed_Qty: qty, Date: dateStr, Beneficiary_Name: benName,
                             Beneficiary_ID: benId, Submitter: submitter, Photo: photo
                         });
                     }
@@ -187,7 +198,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                 setDistributions(processedDist);
                 setLoading(false);
 
-            } catch (err: any) {
+            } catch (err) {
                 console.error(err);
                 setError(err.message || 'Unknown error');
                 setLoading(false);
@@ -197,50 +208,31 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
     }, []);
 
     // Derived Filters
-    const fyOptions = useMemo(() => ['All', ...Array.from(new Set([...targets.map(t => t.Financial_Year), ...distributions.map(d => d.Financial_Year)].filter(Boolean))).sort()], [targets, distributions]);
-    const clusterOptions = useMemo(() => ['Globally', ...Array.from(new Set([...targets.map(t => t.Cluster), ...distributions.map(d => d.Cluster)].filter(c => c && c !== 'Globally'))).sort()], [targets, distributions]);
+    const fyOptions = useMemo(() => ['All', ...Array.from(new Set(targets.map(t => t.Financial_Year).filter(Boolean))).sort()], [targets]);
+    const clusterOptions = useMemo(() => ['All', ...Array.from(new Set([...targets.map(t => t.Cluster), ...distributions.map(d => d.Cluster)].filter(Boolean))).sort()], [targets, distributions]);
     const actOptions = useMemo(() => ['All', ...Array.from(new Set([...targets.map(t => t.Activity), ...distributions.map(d => d.Activity)].filter(Boolean))).sort()], [targets, distributions]);
-    const matOptions = useMemo(() => {
-        let t = targets;
-        let d = distributions;
-        if (filterActivity !== 'All') {
-            t = t.filter(x => x.Activity === filterActivity);
-            d = d.filter(x => x.Activity === filterActivity);
-        }
-        return ['All', ...Array.from(new Set([...t.map(x => x.Asset_Name), ...d.map(x => x.Asset_Name)].filter(Boolean))).sort()];
-    }, [targets, distributions, filterActivity]);
-
-    useEffect(() => {
-        if (filterMaterial !== 'All' && !matOptions.includes(filterMaterial)) {
-            setFilterMaterial('All');
-        }
-    }, [matOptions, filterMaterial]);
+    const matOptions = useMemo(() => ['All', ...Array.from(new Set([...targets.map(t => t.Asset_Name), ...distributions.map(d => d.Asset_Name)].filter(Boolean))).sort()], [targets, distributions]);
 
     // Apply Filters to get working set
     const fTargets = useMemo(() => {
         return targets.filter(t => {
             if (filterFY !== 'All' && t.Financial_Year !== filterFY) return false;
-            if (filterCluster !== 'Globally' && t.Cluster !== filterCluster && t.Cluster !== 'Globally') return false;
+            if (filterCluster !== 'All' && t.Cluster !== filterCluster) return false;
             if (filterActivity !== 'All' && t.Activity !== filterActivity) return false;
             if (filterMaterial !== 'All' && t.Asset_Name !== filterMaterial) return false;
             return true;
-        }).map(t => {
-            if (filterCluster !== 'Globally' && t.Cluster === 'Globally') {
-                return { ...t, Cluster: filterCluster };
-            }
-            return t;
         });
     }, [targets, filterFY, filterCluster, filterActivity, filterMaterial]);
 
     const fDist = useMemo(() => {
         return distributions.filter(d => {
-            if (filterFY !== 'All' && d.Financial_Year !== filterFY) return false;
-            if (filterCluster !== 'Globally' && d.Cluster !== filterCluster) return false;
+            // Dist doesn't have FY explicitly, so we just filter by cluster/act/mat
+            if (filterCluster !== 'All' && d.Cluster !== filterCluster) return false;
             if (filterActivity !== 'All' && d.Activity !== filterActivity) return false;
             if (filterMaterial !== 'All' && d.Asset_Name !== filterMaterial) return false;
             return true;
         });
-    }, [distributions, filterFY, filterCluster, filterActivity, filterMaterial]);
+    }, [distributions, filterCluster, filterActivity, filterMaterial]);
 
     // ---- Aggregations ----
     const totalTarget = fTargets.reduce((s, t) => s + (t.Target_Qty || 0), 0);
@@ -257,7 +249,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
 
     // Grouping by Cluster
     const clusterStats = useMemo(() => {
-        const map: Record<string, any> = {};
+        const map = {};
         fTargets.forEach(t => {
             if(!map[t.Cluster]) map[t.Cluster] = { name: t.Cluster, target: 0, dist: 0 };
             map[t.Cluster].target += t.Target_Qty;
@@ -275,7 +267,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
 
     // Grouping by Activity
     const actStats = useMemo(() => {
-        const map: Record<string, any> = {};
+        const map = {};
         fTargets.forEach(t => {
             const k = t.Activity || 'Unknown';
             if(!map[k]) map[k] = { name: k, target: 0, dist: 0 };
@@ -295,7 +287,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
 
     // Grouping by Material
     const matStats = useMemo(() => {
-        const map: Record<string, any> = {};
+        const map = {};
         fTargets.forEach(t => {
             const k = t.Asset_Name || 'Unknown';
             if(!map[k]) map[k] = { name: k, target: 0, dist: 0 };
@@ -315,7 +307,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
 
     // Trend Data
     const trendData = useMemo(() => {
-        const map: Record<string, number> = {};
+        const map = {};
         fDist.forEach(d => {
             const date = d.Date || 'Unknown';
             if(date === 'Unknown') return;
@@ -326,28 +318,28 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
 
     // Matrix (Activities vs Clusters)
     const matrixData = useMemo(() => {
-        const map: Record<string, any> = {};
+        const map = {};
         // populate all cells
         clusterStats.forEach(c => {
             actStats.forEach(a => {
-                map[`${String(a.name)}_${String(c.name)}`] = { act: String(a.name), cluster: String(c.name), target: 0, dist: 0 };
+                map[\`\${a.name}_\${c.name}\`] = { act: a.name, cluster: c.name, target: 0, dist: 0 };
             });
         });
         fTargets.forEach(t => {
-            const k = `${t.Activity || 'Unknown'}_${t.Cluster}`;
+            const k = \`\${t.Activity || 'Unknown'}_\${t.Cluster}\`;
             if(map[k]) map[k].target += t.Target_Qty;
         });
         fDist.forEach(d => {
-            const k = `${d.Activity || 'Unknown'}_${d.Cluster}`;
+            const k = \`\${d.Activity || 'Unknown'}_\${d.Cluster}\`;
             if(map[k]) map[k].dist += d.Distributed_Qty;
         });
         
-        const rows = actStats.map(a => String(a.name));
-        const cols = clusterStats.map(c => String(c.name));
+        const rows = actStats.map(a => a.name);
+        const cols = clusterStats.map(c => c.name);
         const grid = rows.map(r => {
-            const rowObj: any = { activity: r };
+            const rowObj = { activity: r };
             cols.forEach(c => {
-                const cell = map[`${String(r)}_${String(c)}`];
+                const cell = map[\`\${r}_\${c}\`];
                 rowObj[c] = cell && cell.target > 0 ? (cell.dist / cell.target) * 100 : (cell && cell.dist > 0 ? 100 : 0);
             });
             return rowObj;
@@ -357,17 +349,15 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
 
     // Unified Table Data
     const tableData = useMemo(() => {
-        const map: Record<string, any> = {};
+        const map = {};
         fTargets.forEach(t => {
-            const k = `${t.Asset_Code}`;
-            if(!map[k]) map[k] = { cluster: filterCluster, activity: t.Activity, material: t.Asset_Name, code: t.Asset_Code, target: 0, dist: 0, lastDate: null };
+            const k = \`\${t.Cluster}|\${t.Activity}|\${t.Asset_Name}|\${t.Asset_Code}\`;
+            if(!map[k]) map[k] = { cluster: t.Cluster, activity: t.Activity, material: t.Asset_Name, code: t.Asset_Code, target: 0, dist: 0, lastDate: null };
             map[k].target += t.Target_Qty;
-            map[k].activity = t.Activity;
-            map[k].material = t.Asset_Name;
         });
         fDist.forEach(d => {
-            const k = `${d.Asset_Code}`;
-            if(!map[k]) map[k] = { cluster: filterCluster, activity: d.Activity, material: d.Asset_Name, code: d.Asset_Code, target: 0, dist: 0, lastDate: null };
+            const k = \`\${d.Cluster}|\${d.Activity}|\${d.Asset_Name}|\${d.Asset_Code}\`;
+            if(!map[k]) map[k] = { cluster: d.Cluster, activity: d.Activity, material: d.Asset_Name, code: d.Asset_Code, target: 0, dist: 0, lastDate: null };
             map[k].dist += d.Distributed_Qty;
             if(!map[k].lastDate || d.Date > map[k].lastDate) map[k].lastDate = d.Date;
         });
@@ -386,12 +376,12 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
     const totalPages = Math.ceil(tableData.length / rowsPerPage);
 
     // Helpers
-    const getAchvColor = (pct: number) => {
+    const getAchvColor = (pct) => {
         if(pct >= 90) return 'bg-emerald-500';
         if(pct >= 60) return 'bg-amber-400';
         return 'bg-rose-500';
     };
-    const getAchvTextColor = (pct: number) => {
+    const getAchvTextColor = (pct) => {
         if(pct >= 90) return 'text-emerald-600';
         if(pct >= 60) return 'text-amber-600';
         return 'text-rose-600';
@@ -421,7 +411,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
             <style dangerouslySetInnerHTML={{ __html: customStyles }} />
             
             {/* Sidebar Filters (Desktop) & Overlay (Mobile) */}
-            <div className={`fixed inset-0 z-40 lg:static lg:block ${sidebarOpen ? 'block' : 'hidden'}`}>
+            <div className={\`fixed inset-0 z-40 lg:static lg:block \${sidebarOpen ? 'block' : 'hidden'}\`}>
                 <div className="absolute inset-0 bg-gray-900/50 lg:hidden" onClick={() => setSidebarOpen(false)}></div>
                 <div className="relative flex flex-col w-64 h-full bg-white border-r border-gray-200 shadow-xl lg:shadow-none animate-in slide-in-from-left-4 lg:animate-none">
                     <div className="flex items-center justify-between p-4 border-b border-gray-100">
@@ -577,10 +567,10 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                                         <div key={i} className="flex items-center justify-between">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-6 h-6 rounded bg-gray-50 flex items-center justify-center text-[10px] font-bold text-gray-500">{i+1}</div>
-                                                <span className="text-sm font-semibold text-gray-700">{String(c.name)}</span>
+                                                <span className="text-sm font-semibold text-gray-700">{c.name}</span>
                                             </div>
                                             <div className="text-right">
-                                                <span className={`text-sm font-bold ${getAchvTextColor(c.achv)}`}>{c.achv.toFixed(1)}%</span>
+                                                <span className={\`text-sm font-bold \${getAchvTextColor(c.achv)}\`}>{c.achv.toFixed(1)}%</span>
                                             </div>
                                         </div>
                                     ))}
@@ -596,10 +586,10 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                                         <div key={i} className="flex items-center justify-between">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-6 h-6 rounded bg-rose-50 flex items-center justify-center text-[10px] font-bold text-rose-500">!</div>
-                                                <span className="text-sm font-semibold text-gray-700">{String(c.name)}</span>
+                                                <span className="text-sm font-semibold text-gray-700">{c.name}</span>
                                             </div>
                                             <div className="text-right">
-                                                <span className={`text-sm font-bold ${getAchvTextColor(c.achv)}`}>{c.achv.toFixed(1)}%</span>
+                                                <span className={\`text-sm font-bold \${getAchvTextColor(c.achv)}\`}>{c.achv.toFixed(1)}%</span>
                                             </div>
                                         </div>
                                     ))}
@@ -612,19 +602,19 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                                 <ul className="space-y-2 text-sm text-indigo-100 relative z-10 font-medium">
                                     <li className="flex items-start gap-2">
                                         <div className="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></div>
-                                        <span>Highest cluster is <strong className="text-white">{clusterStats[0]?.name || 'N/A'}</strong> at {clusterStats[0]?.achv.toFixed(0)}%.</span>
+                                        <span>Highest cluster is <strong>{clusterStats[0]?.name || 'N/A'}</strong> at {clusterStats[0]?.achv.toFixed(0)}%.</span>
                                     </li>
                                     <li className="flex items-start gap-2">
                                         <div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0"></div>
-                                        <span>Lowest cluster is <strong className="text-white">{clusterStats[clusterStats.length-1]?.name || 'N/A'}</strong>.</span>
+                                        <span>Lowest cluster is <strong>{clusterStats[clusterStats.length-1]?.name || 'N/A'}</strong>.</span>
                                     </li>
                                     <li className="flex items-start gap-2">
                                         <div className="mt-1 w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></div>
-                                        <span><strong className="text-white">{actStats[0]?.name || 'N/A'}</strong> is the highest volume activity.</span>
+                                        <span><strong>{actStats[0]?.name || 'N/A'}</strong> is the highest volume activity.</span>
                                     </li>
                                     <li className="flex items-start gap-2">
                                         <div className="mt-1 w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0"></div>
-                                        <span>Overall project stands at <strong className="text-white">{achvPct.toFixed(1)}%</strong> completion.</span>
+                                        <span>Overall project stands at <strong>{achvPct.toFixed(1)}%</strong> completion.</span>
                                     </li>
                                 </ul>
                             </div>
@@ -636,14 +626,14 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                                 <h3 className="text-xs font-black text-gray-900 uppercase tracking-wider mb-6">Cluster Performance</h3>
                                 <div className="space-y-5 max-h-[300px] overflow-y-auto pbi-scrollbar pr-2">
-                                    {clusterStats.map((c: any) => (
-                                        <div key={String(c.name)} className="cursor-pointer" onClick={() => setFilterCluster(String(c.name))}>
+                                    {clusterStats.map(c => (
+                                        <div key={c.name}>
                                             <div className="flex justify-between text-xs font-semibold mb-1">
-                                                <span className="text-gray-700">{String(c.name)}</span>
+                                                <span className="text-gray-700">{c.name}</span>
                                                 <span className="text-gray-500">{c.dist.toLocaleString()} / {c.target.toLocaleString()} ({c.achv.toFixed(1)}%)</span>
                                             </div>
                                             <div className="w-full bg-gray-100 rounded-full h-2">
-                                                <div className={`h-2 rounded-full ${getAchvColor(c.achv)}`} style={{ width: `${Math.min(100, c.achv)}%` }}></div>
+                                                <div className={\`h-2 rounded-full \${getAchvColor(c.achv)}\`} style={{ width: \`\${Math.min(100, c.achv)}%\` }}></div>
                                             </div>
                                         </div>
                                     ))}
@@ -679,35 +669,17 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                             {/* Activity Performance */}
                             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                                <h3 className="text-xs font-black text-gray-900 uppercase tracking-wider mb-6">Activity Performance (Achievement %)</h3>
+                                <h3 className="text-xs font-black text-gray-900 uppercase tracking-wider mb-6">Activity Performance (Target vs Dist)</h3>
                                 <div className="h-[350px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={actStats} margin={{ top: 10, right: 10, left: -20, bottom: 60 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                             <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} tick={{ fontSize: 9, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                                            <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
-                                            <RechartsTooltip 
-                                                cursor={{fill: '#f8fafc'}} 
-                                                content={({ active, payload, label }) => {
-                                                    if (active && payload && payload.length) {
-                                                        const data = payload[0].payload;
-                                                        return (
-                                                            <div className="bg-white p-3 border border-gray-100 shadow-lg rounded-lg">
-                                                                <p className="font-bold text-gray-800 text-xs mb-2">{label}</p>
-                                                                <p className="text-gray-600 text-[11px] font-medium mb-1">Target: <span className="font-bold text-gray-900">{data.target.toLocaleString()}</span></p>
-                                                                <p className="text-gray-600 text-[11px] font-medium mb-1">Distributed: <span className="font-bold text-indigo-600">{data.dist.toLocaleString()}</span></p>
-                                                                <p className="text-gray-600 text-[11px] font-medium">Achieved: <span className="font-bold text-emerald-600">{data.achv.toFixed(1)}%</span></p>
-                                                            </div>
-                                                        );
-                                                    }
-                                                    return null;
-                                                }}
-                                            />
-                                            <Bar dataKey="achv" name="Achievement %" radius={[4, 4, 0, 0]} barSize={32}>
-                                                {actStats.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.achv >= 90 ? '#10b981' : entry.achv >= 60 ? '#fbbf24' : '#6366f1'} />
-                                                ))}
-                                            </Bar>
+                                            <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                            <RechartsTooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 600 }} />
+                                            <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 600, marginTop: '20px' }} />
+                                            <Bar dataKey="target" name="Target Qty" fill="#cbd5e1" radius={[2, 2, 0, 0]} barSize={20} />
+                                            <Bar dataKey="dist" name="Distributed Qty" fill="#4f46e5" radius={[2, 2, 0, 0]} barSize={20} />
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -727,7 +699,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {matrixData.grid.map((row: any, i) => (
+                                            {matrixData.grid.map((row, i) => (
                                                 <tr key={i} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
                                                     <td className="py-2 px-3 text-xs font-semibold text-gray-700 truncate max-w-[150px]" title={row.activity}>{row.activity}</td>
                                                     {matrixData.cols.map(c => {
@@ -742,7 +714,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                                                         }
                                                         return (
                                                             <td key={c} className="py-1 px-1">
-                                                                <div className={`${bg} ${txt} text-[10px] font-bold py-1.5 px-1 text-center rounded`}>
+                                                                <div className={\`\${bg} \${txt} text-[10px] font-bold py-1.5 px-1 text-center rounded\`}>
                                                                     {val.toFixed(0)}%
                                                                 </div>
                                                             </td>
@@ -801,8 +773,8 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            paginatedTable.map((row: any, idx: number) => (
-                                                <tr key={idx} className="hover:bg-gray-50/50 transition-colors cursor-pointer">
+                                            paginatedTable.map((row, idx) => (
+                                                <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
                                                     <td className="px-6 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">{row.cluster}</td>
                                                     <td className="px-6 py-3 text-xs font-medium text-gray-500 max-w-[200px] truncate">{row.activity}</td>
                                                     <td className="px-6 py-3 text-xs font-bold text-gray-900 max-w-[250px] truncate">
@@ -813,7 +785,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                                                     <td className="px-6 py-3 text-xs font-bold text-gray-900 text-right">{row.dist.toLocaleString()}</td>
                                                     <td className="px-6 py-3 text-xs font-medium text-rose-500 text-right">{row.pending.toLocaleString()}</td>
                                                     <td className="px-6 py-3 text-center">
-                                                        <span className={`inline-flex items-center justify-center px-2 py-1 rounded text-[10px] font-bold ${getAchvColor(row.achv)} text-white min-w-[3rem]`}>
+                                                        <span className={\`inline-flex items-center justify-center px-2 py-1 rounded text-[10px] font-bold \${getAchvColor(row.achv)} text-white min-w-[3rem]\`}>
                                                             {row.achv.toFixed(0)}%
                                                         </span>
                                                     </td>
@@ -861,3 +833,6 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
 };
 
 export default ODKAssetDistribution;
+`;
+
+fs.writeFileSync('components/ODKAssetDistribution.tsx', code);

@@ -234,7 +234,7 @@ const BaselinePage: React.FC = () => {
                 const parsed = parseCSV(csvText);
                 setAllData(parsed);
             } catch (err) {
-                console.error(err);
+                console.warn(err);
             } finally {
                 setLoading(false);
             }

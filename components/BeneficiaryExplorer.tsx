@@ -1,19 +1,16 @@
+import { ExecutiveDashboard } from './ExecutiveDashboard';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
-import { 
-    BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, 
-    XAxis, YAxis, Tooltip 
-} from 'recharts';
 import { 
     Users, MapPin, Filter, Search, 
     Download, X, ArrowUpDown, ArrowUp,
     Activity as ActivityIcon, UserCheck,
-    ChevronDown, ChevronUp, ArrowLeft
+    ChevronDown, ChevronUp, ArrowLeft,
+    TrendingUp, TrendingDown, Target, Package, CheckCircle, AlertTriangle, Lightbulb, Calendar, Map as MapIcon, Heart, Star, LayoutDashboard, Database
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, MASTER_TARGETS_URL, CONTRIBUTION_DATA_URL, MATERIAL_CONTRIBUTION_URL, getProxyUrl, GOOGLE_APPS_SCRIPT_URL, ACQUITTANCE_SCRIPT_URL } from '../config';
+import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, MASTER_TARGETS_URL, CONTRIBUTION_DATA_URL, BASELINE_DATA_URL, MATERIAL_CONTRIBUTION_URL, getProxyUrl, GOOGLE_APPS_SCRIPT_URL, ACQUITTANCE_SCRIPT_URL } from '../config';
 import { useAuth } from '../hooks/useAuth';
 
 function cn(...inputs: ClassValue[]) {
@@ -26,6 +23,7 @@ interface ActivityTarget {
     target: number;
     contributionTarget: number;
     financialYear: string;
+    materialTarget: number;
 }
 
 interface Asset {
@@ -59,6 +57,7 @@ interface Beneficiary {
     contribution: number;
     targetContribution: number;
     financialYear?: string;
+    registrationDate?: string;
 }
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#f43f5e'];
@@ -88,7 +87,7 @@ const MoneyTooltip = ({ active, payload }: any) => {
                                 <span className="text-[9px] font-black uppercase text-gray-500 dark:text-gray-400">{entry.name}</span>
                             </div>
                             <span className="text-[10px] font-black text-gray-900 dark:text-white">
-                                ₹{entry.value >= 1000 ? (entry.value / 1000).toFixed(entry.value % 1000 === 0 ? 0 : 1) + 'k' : entry.value.toLocaleString()}
+                                ₹{entry.value >= 1000 ? (entry.value / 1000).toFixed(entry.value % 1000 === 0 ? 0 : 1) + 'k' : (entry.value || 0).toLocaleString()}
                             </span>
                         </div>
                     ))}
@@ -107,7 +106,7 @@ const CustomTooltip = ({ active, payload }: any) => {
                 <p className="text-[10px] font-black uppercase text-gray-400 mb-1">{data.name}</p>
                 <div className="flex items-baseline gap-2">
                     <p className="text-lg font-black text-indigo-600 dark:text-indigo-400">
-                        {data.value.toLocaleString()}
+                        {(data.value || 0).toLocaleString()}
                     </p>
                     {data.percentage !== undefined && (
                         <p className="text-[10px] font-black text-gray-400">({data.percentage.toFixed(1)}%)</p>
@@ -197,13 +196,13 @@ const BeneficiaryExpandedDetails: React.FC<{ b: Beneficiary, setPreviewImage: (u
             try {
                 const resultJson = JSON.parse(resultText);
                 if (resultJson.error) {
-                    console.error("Apps Script Error:", resultJson.error);
+                    console.warn("Apps Script Error:", resultJson.error);
                 }
             } catch (e) {
                 // Not JSON or parse error
             }
         } catch (error) {
-            console.error('Failed to update acquittance:', error);
+            console.warn('Failed to update acquittance:', error);
             const revertedAssets = [...localAssets];
             revertedAssets[assetIndex] = { ...asset, acquittanceReceived: currentValue };
             setLocalAssets(revertedAssets);
@@ -308,10 +307,10 @@ const BeneficiaryExpandedDetails: React.FC<{ b: Beneficiary, setPreviewImage: (u
                                         <div key={i} className="flex justify-between items-center bg-white dark:bg-gray-800 p-1.5 rounded-md border border-gray-100 dark:border-gray-700">
                                             <div className="flex flex-col">
                                                 <span className="text-[10px] font-bold text-gray-700 dark:text-gray-300">{a.label || a.code || 'Unknown Product'}</span>
-                                                <span className="text-[8px] text-gray-500">Qty: {a.count || 1} × ₹{(a.targetContribution || 0).toLocaleString()}</span>
+                                                <span className="text-[8px] text-gray-500">Qty: {a.count || 1} × ₹{((a.targetContribution || 0) || 0).toLocaleString()}</span>
                                             </div>
                                             <span className="text-[10px] font-black text-gray-900 dark:text-white">
-                                                ₹{itemContrib.toLocaleString()}
+                                                ₹{(itemContrib || 0).toLocaleString()}
                                             </span>
                                         </div>
                                     );
@@ -323,13 +322,13 @@ const BeneficiaryExpandedDetails: React.FC<{ b: Beneficiary, setPreviewImage: (u
                         <div className="flex justify-between items-center">
                             <span className="text-[11px] font-black text-gray-900 dark:text-white uppercase">Overall Target</span>
                             <span className="text-[11px] font-black uppercase text-gray-700 dark:text-gray-300">
-                                ₹{totalTarget.toLocaleString()}
+                                ₹{(totalTarget || 0).toLocaleString()}
                             </span>
                         </div>
                         <div className="flex justify-between items-center mt-1">
                             <span className="text-[11px] font-black text-gray-900 dark:text-white uppercase">Paid Contribution</span>
                             <span className="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded text-[11px] font-black uppercase">
-                                ₹{b.contribution.toLocaleString()}
+                                ₹{(b.contribution || 0).toLocaleString()}
                             </span>
                         </div>
                     </div>
@@ -349,6 +348,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
     const [targets, setTargets] = useState<ActivityTarget[]>([]);
     const [unitContributionMap, setUnitContributionMap] = useState<Map<string, number>>(new Map());
     const [loading, setLoading] = useState(true);
+    const [baselineSize, setBaselineSize] = useState(0);
     
     // Filters
     const [filterCluster, setFilterCluster] = useState('All');
@@ -508,7 +508,8 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                     gp: getVal(row, ['GP', 'location-gp', 'gp']),
                     village: getVal(row, ['Village', 'location-village', 'village']),
                     assets: asset.label ? [asset] : [],
-                    financialYear: getVal(row, ['financial_year', 'financial year', 'fy', 'year'])
+                    financialYear: getVal(row, ['financial_year', 'financial year', 'fy', 'year']),
+                    registrationDate: getVal(row, ['Date of registration', 'activity_registration-date_reg', 'Date of Registration', 'Registration Date', 'date', 'Timestamp', 'timestamp', 'submission_time', 'time'])
                 });
             }
         });
@@ -522,12 +523,18 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
             setLoading(true);
             try {
                 // Fetch Data in Parallel
-                const [masterRes, distRes, targetRes, contribRes, materialMapRes] = await Promise.all([
-                    fetch(getProxyUrl(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`)),
-                    fetch(getProxyUrl(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`)),
-                    fetch(getProxyUrl(`${MASTER_TARGETS_URL}&t=${Date.now()}`)),
-                    fetch(getProxyUrl(`${CONTRIBUTION_DATA_URL}&t=${Date.now()}`)),
-                    fetch(getProxyUrl(`${MATERIAL_CONTRIBUTION_URL}&t=${Date.now()}`))
+                const safeFetch = (url: string) => fetch(getProxyUrl(url)).catch(err => {
+                    console.warn("Fetch failed for " + url, err);
+                    return { ok: false, text: async () => '' } as any;
+                });
+                
+                const [masterRes, distRes, targetRes, contribRes, materialMapRes, baselineRes] = await Promise.all([
+                    safeFetch(`${BENEFICIARY_DATA_URL}&t=${Date.now()}`),
+                    safeFetch(`${ASSET_DISTRIBUTION_URL}&t=${Date.now()}`),
+                    safeFetch(`${MASTER_TARGETS_URL}&t=${Date.now()}`),
+                    safeFetch(`${CONTRIBUTION_DATA_URL}&t=${Date.now()}`),
+                    safeFetch(`${MATERIAL_CONTRIBUTION_URL}&t=${Date.now()}`),
+                    safeFetch(`${BASELINE_DATA_URL}&t=${Date.now()}`)
                 ]);
 
                 const masterText = await masterRes.text();
@@ -535,9 +542,11 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 const targetText = targetRes.ok ? await targetRes.text() : '';
                 const contribText = contribRes.ok ? await contribRes.text() : '';
                 const materialMapText = materialMapRes.ok ? await materialMapRes.text() : '';
+                const baselineText = baselineRes.ok ? await baselineRes.text() : '';
 
                 const masterData = parseCSV(masterText, 'Master List');
                 const distData = parseCSV(distText, 'Distribution List');
+                const baselineData = parseCSV(baselineText, 'Baseline List');
 
                 // Basic generic CSV parser for targets
                 const parseGenericCSV = (csv: string) => {
@@ -584,17 +593,25 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                     activity: getContribActivityColumn(r['activity'] || r['Activity'] || ''),
                     target: parseFloat(r['Target'] || '0') || 0,
                     contributionTarget: parseFloat(r['Contribution Target'] || '0') || 0,
-                    financialYear: r['Financial Year'] || r['Financial year'] || r['financial_year'] || r['FY'] || r['financial_year '] || ''
+                    financialYear: r['Financial Year'] || r['Financial year'] || r['financial_year'] || r['FY'] || r['financial_year '] || '',
+                    materialTarget: parseFloat(r['Material Target'] || r['material_target'] || '0') || 0
                 }));
                 setTargets(parsedTargets);
+                setBaselineSize(baselineData.length);
 
                 const rawContrib = parseGenericCSV(contribText);
-
-                const contribMap = new Map<string, any>();
+                const contribMap = new Map<string, Record<string, number>>();
                 rawContrib.forEach((row: any) => {
                     const id = row['HH_Id'] || row['HH_ID'] || row['HHID'] || row['HH ID'] || row['Farmer ID'] || row['FARMERID'];
-                    if (id) {
-                        contribMap.set(id.toString().trim(), row);
+                    const activity = getContribActivityColumn(row['Activity_name'] || row['Activity Name'] || '');
+                    const amount = parseFloat((row['Total Amount Paid '] || row['Total Amount Paid'] || row['Contribution Amount'] || '0').toString().replace(/,/g, '')) || 0;
+                    if (id && activity) {
+                        const hhid = id.toString().trim();
+                        if (!contribMap.has(hhid)) contribMap.set(hhid, {});
+                        const obj = contribMap.get(hhid);
+                        if (obj) {
+                            obj[activity] = (obj[activity] || 0) + amount;
+                        }
                     }
                 });
 
@@ -616,12 +633,12 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                     const key = b.beneficiaryId;
                     const hhId = b.hhId;
                     if (key) {
-                        const cRow = hhId ? contribMap.get(hhId.toString().trim()) : undefined;
+                        const cObj = hhId ? contribMap.get(hhId.toString().trim()) : undefined;
                         let contrib = 0;
-                        if (cRow) {
+                        if (cObj) {
                             const colName = getContribActivityColumn(b.activity);
-                            if (colName && cRow[colName]) {
-                                contrib = parseFloat(cRow[colName]) || 0;
+                            if (colName && cObj[colName]) {
+                                contrib = cObj[colName];
                             }
                         }
                         b.contribution = contrib;
@@ -705,7 +722,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 setUnitContributionMap(activityTargetMap);
                 setData(allMerged);
             } catch (err) {
-                console.error("Beneficiary fetch failed", err);
+                console.warn("Beneficiary fetch failed", err);
             } finally {
                 setLoading(false);
             }
@@ -770,6 +787,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
     };
 
     const stats = useMemo(() => {
+        const baselineTotal = baselineSize;
         const total = filteredData.length;
         
         const activityCounts: Record<string, number> = {};
@@ -783,6 +801,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
         const activityContribMap: Record<string, { collected: number, target: number }> = {};
         const clusterContribMap: Record<string, { collected: number, target: number }> = {};
         const activityTargetCountMap: Record<string, number> = {};
+        const clusterTargetCountMap: Record<string, number> = {};
 
         let totalCollectedContrib = 0;
         let totalTargetContrib = 0;
@@ -800,6 +819,8 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 
                 if (!activityTargetCountMap[t.activity]) activityTargetCountMap[t.activity] = 0;
                 activityTargetCountMap[t.activity] += t.target;
+                if (!clusterTargetCountMap[t.cluster]) clusterTargetCountMap[t.cluster] = 0;
+                clusterTargetCountMap[t.cluster] += t.target;
 
                 const activityLower = t.activity.toLowerCase();
                 if (!activityLower.includes('processing') && !activityLower.includes('asc')) {
@@ -870,13 +891,13 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
             }))
             .sort((a, b) => b.value - a.value);
 
-        const clusterData = Object.entries(clusterCounts)
-            .map(([name, value]) => ({
+        const allClusters = new Set([...Object.keys(clusterCounts), ...Object.keys(clusterTargetCountMap)]);
+        const clusterData = Array.from(allClusters)
+            .map(name => ({
                 name,
-                value,
-                target: clusterContribMap[name]?.target || 0,
-                collected: clusterContribMap[name]?.collected || 0,
-                percentage: total > 0 ? (value / total) * 100 : 0
+                collected: clusterCounts[name] || 0,
+                target: clusterTargetCountMap[name] || 0,
+                percentage: total > 0 ? ((clusterCounts[name] || 0) / total) * 100 : 0
             }))
             .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -902,8 +923,8 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
         const uniqueVillages = new Set(filteredData.map(d => d.village)).size;
         const uniqueGPs = new Set(filteredData.map(d => d.gp)).size;
 
-        return { total, totalTarget: totalTargetCount, totalCollectedContrib, totalTargetContrib, activityData, genderData, averageAge, uniqueVillages, uniqueGPs, clusterData, materialData };
-    }, [filteredData, targets, filterCluster, filterActivity, filterFinancialYear, unitContributionMap]);
+        return { total, totalTarget: totalTargetCount, totalCollectedContrib, totalTargetContrib, activityData, genderData, averageAge, uniqueVillages, uniqueGPs, clusterData, materialData, baselineTotal };
+    }, [filteredData, targets, filterCluster, filterActivity, filterFinancialYear, unitContributionMap, baselineSize]);
 
     const clearFilters = () => {
         setFilterCluster('All');
@@ -1054,239 +1075,18 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 </div>
             </div>
 
-            {/* 3. ANALYTICS GRID */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-1">
-                {/* Key Metrics Bento */}
-                <div className="lg:col-span-3 grid grid-cols-1 gap-1">
-                    <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-xl shadow-indigo-100 dark:shadow-none flex flex-col justify-between relative overflow-hidden group min-h-[120px]">
-                        <Users className="absolute -right-4 -bottom-4 w-16 h-16 opacity-10 group-hover:scale-110 transition-transform duration-700" />
-                        <div className="flex justify-between items-start z-10">
-                            <div>
-                                <p className="text-[7px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Beneficiaries</p>
-                                <p className="text-2xl font-black tracking-tighter">{stats.total.toLocaleString()}</p>
-                            </div>
-                            {stats.totalTarget > 0 && (
-                                <div className="text-right">
-                                    <p className="text-[7px] font-black uppercase opacity-60 tracking-[0.1em] mb-1">Target</p>
-                                    <p className="text-sm font-black">{stats.totalTarget.toLocaleString()}</p>
-                                </div>
-                            )}
-                        </div>
-                        <div className="mt-2 flex items-center gap-2 z-10 relative">
-                            {stats.totalTarget > 0 ? (
-                                <div className="h-1 flex-1 bg-white/20 rounded-full overflow-hidden">
-                                    <div className="h-full bg-white transition-all duration-1000" style={{ width: `${Math.min((stats.total / stats.totalTarget) * 100, 100)}%` }} />
-                                </div>
-                            ) : (
-                                <div className="h-1 w-6 bg-white/30 rounded-full"></div>
-                            )}
-                            <span className="text-[6px] font-black uppercase opacity-60">Live Registry</span>
-                        </div>
-                    </div>
-                    <div className="bg-emerald-600 p-3 rounded-2xl text-white shadow-xl shadow-emerald-100 dark:shadow-none flex flex-col justify-between relative overflow-hidden group min-h-[120px]">
-                        <ActivityIcon className="absolute -right-4 -bottom-4 w-16 h-16 opacity-10 group-hover:scale-110 transition-transform duration-700" />
-                        <div className="flex justify-between items-start z-10">
-                            <div>
-                                <p className="text-[7px] font-black uppercase opacity-60 tracking-[0.2em] mb-1">Total Contribution</p>
-                                <p className="text-xl font-black tracking-tighter">₹{stats.totalCollectedContrib.toLocaleString()}</p>
-                            </div>
-                            {stats.totalTargetContrib > 0 && (
-                                <div className="text-right">
-                                    <p className="text-[7px] font-black uppercase opacity-60 tracking-[0.1em] mb-1">Target</p>
-                                    <p className="text-sm font-black">₹{stats.totalTargetContrib >= 100000 ? (stats.totalTargetContrib / 100000).toFixed(1) + 'L' : stats.totalTargetContrib >= 1000 ? (stats.totalTargetContrib / 1000).toFixed(0) + 'k' : stats.totalTargetContrib}</p>
-                                </div>
-                            )}
-                        </div>
-                        <div className="mt-2 flex items-center gap-2 z-10 relative">
-                            {stats.totalTargetContrib > 0 ? (
-                                <div className="h-1 flex-1 bg-white/20 rounded-full overflow-hidden">
-                                    <div className="h-full bg-white transition-all duration-1000" style={{ width: `${Math.min((stats.totalCollectedContrib / stats.totalTargetContrib) * 100, 100)}%` }} />
-                                </div>
-                            ) : (
-                                <div className="h-1 w-6 bg-white/30 rounded-full"></div>
-                            )}
-                            <span className="text-[6px] font-black uppercase opacity-60">Financial</span>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1">
-                        <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between h-full">
-                            <div>
-                                <p className="text-[7px] font-black uppercase text-gray-400 tracking-widest mb-1">Avg. Age</p>
-                                <p className="text-lg font-black text-gray-900 dark:text-white">{stats.averageAge.toFixed(1)}</p>
-                            </div>
-                            <div className="mt-0.5 text-[7px] font-black uppercase text-indigo-500">Years Old</div>
-                        </div>
-                        <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between h-full">
-                            <div>
-                                <p className="text-[7px] font-black uppercase text-gray-400 tracking-widest mb-1">Coverage</p>
-                                <p className="text-lg font-black text-gray-900 dark:text-white">{stats.uniqueVillages}</p>
-                            </div>
-                            <div className="mt-0.5 text-[7px] font-black uppercase text-emerald-500">{stats.uniqueGPs} GPs</div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Activity & Cluster Distribution Column */}
-                <div className="lg:col-span-5 flex flex-col gap-1">
-                    {/* Activity Target vs Achievement */}
-                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
-                        <div className="flex justify-between items-center mb-2">
-                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Activity Target vs Achievement</h3>
-                            <ActivityIcon className="w-3 h-3 text-indigo-500" />
-                        </div>
-                        <div className="flex-grow pb-1">
-                            <div className="h-[380px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={stats.activityData} margin={{ top: 30, right: 10, left: 10, bottom: 20 }}>
-                                        <XAxis 
-                                            dataKey="name" 
-                                            axisLine={false} 
-                                            tickLine={false} 
-                                            tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af', dy: 10 }}
-                                            interval={0}
-                                            angle={-45}
-                                            textAnchor="end"
-                                            height={110}
-                                        />
-                                        <YAxis 
-                                            axisLine={false} 
-                                            tickLine={false} 
-                                            tickFormatter={(value) => value.toLocaleString()}
-                                            tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af' }}
-                                        />
-                                        <Tooltip 
-                                            cursor={{ fill: 'rgba(0,0,0,0.05)' }} 
-                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
-                                        />
-                                        <Bar dataKey="value" name="Achievement Count" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                        <Bar dataKey="targetCount" name="Target Count" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Cluster Target vs Achievement */}
-                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
-                        <div className="flex justify-between items-center mb-1">
-                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Cluster Target vs Achievement</h3>
-                            <MapPin className="w-3 h-3 text-emerald-500" />
-                        </div>
-                        <div className="flex-grow h-[220px] relative">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={stats.clusterData} margin={{ top: 20, right: 10, left: 10, bottom: 20 }}>
-                                    <XAxis 
-                                        dataKey="name" 
-                                        axisLine={false} 
-                                        tickLine={false} 
-                                        tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af', dy: 10 }}
-                                    />
-                                    <YAxis 
-                                        axisLine={false} 
-                                        tickLine={false} 
-                                        tickFormatter={(value) => `₹${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`}
-                                        tick={{ fontSize: 9, fontWeight: 900, fill: '#9ca3af' }}
-                                    />
-                                    <Tooltip content={<MoneyTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
-                                    <Bar dataKey="collected" name="Collected" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="target" name="Target" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Gender & Material Column */}
-                <div className="lg:col-span-4 flex flex-col gap-1">
-                    {/* Gender Split Chart */}
-                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
-                        <div className="flex justify-between items-center mb-1">
-                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Gender Split</h3>
-                            <Users className="w-3 h-3 text-pink-500" />
-                        </div>
-                        <div className="flex-grow h-[280px] relative">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                                    <Pie
-                                        data={stats.genderData}
-                                        innerRadius={0}
-                                        outerRadius={65}
-                                        dataKey="value"
-                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                        labelLine={{ stroke: '#e5e7eb', strokeWidth: 1 }}
-                                        onClick={(data) => setFilterGender(data.name)}
-                                        style={{ cursor: 'pointer' }}
-                                    >
-                                        {stats.genderData.map((_, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip content={<CustomTooltip />} />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="mt-1 flex flex-wrap justify-center gap-x-1.5 gap-y-0.5">
-                            {stats.genderData.map((g, idx) => (
-                                <button 
-                                    key={idx} 
-                                    onClick={() => setFilterGender(g.name)}
-                                    className={cn(
-                                        "flex items-center gap-1 px-1 py-0.5 rounded-lg transition-all",
-                                        filterGender === g.name ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200" : "hover:bg-gray-50 dark:hover:bg-gray-700"
-                                    )}
-                                >
-                                    <div className="w-1 h-1 rounded-full" style={{ background: COLORS[idx % COLORS.length] }}></div>
-                                    <span className="text-[6px] font-black uppercase text-gray-500">{g.name} {g.percentage.toFixed(0)}%</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Material Distribution Chart */}
-                    <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
-                        <div className="flex justify-between items-center mb-1">
-                            <h3 className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Material Status</h3>
-                            <Download className="w-3 h-3 text-amber-500" />
-                        </div>
-                        <div className="flex-grow h-[280px] relative">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                                    <Pie
-                                        data={stats.materialData}
-                                        innerRadius={0}
-                                        outerRadius={65}
-                                        dataKey="value"
-                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                        labelLine={{ stroke: '#e5e7eb', strokeWidth: 1 }}
-                                        onClick={(data) => setFilterMaterialStatus(data.name)}
-                                        style={{ cursor: 'pointer' }}
-                                    >
-                                        {stats.materialData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.name === 'Received' ? '#10b981' : '#f43f5e'} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip content={<CustomTooltip />} />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="mt-1 flex flex-wrap justify-center gap-x-1.5 gap-y-0.5">
-                            {stats.materialData.map((m, idx) => (
-                                <button 
-                                    key={idx} 
-                                    onClick={() => setFilterMaterialStatus(m.name)}
-                                    className={cn(
-                                        "flex items-center gap-1 px-1 py-0.5 rounded-lg transition-all",
-                                        filterMaterialStatus === m.name ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200" : "hover:bg-gray-50 dark:hover:bg-gray-700"
-                                    )}
-                                >
-                                    <div className="w-1 h-1 rounded-full" style={{ background: m.name === 'Received' ? '#10b981' : '#f43f5e' }}></div>
-                                    <span className="text-[6px] font-black uppercase text-gray-500">{m.name}: {m.value}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </div>
+            
+            {/* 3. EXECUTIVE DASHBOARD */}
+            <ExecutiveDashboard 
+                stats={stats} 
+                filteredData={filteredData} 
+                targets={targets} 
+                filterCluster={filterCluster} 
+                filterGP={filterGP} 
+                filterVillage={filterVillage} 
+                filterActivity={filterActivity} 
+                filterFinancialYear={filterFinancialYear} 
+            />
 
             {/* 4. DETAILED TABLE */}
             <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
