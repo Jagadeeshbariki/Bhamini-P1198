@@ -788,112 +788,67 @@ const ContributionPage: React.FC = () => {
       activityFarmersMap[d.activity].add(d.farmerId);
     });
 
-    const allClusters = new Set([
-      
-      ...Object.keys(clusterMap),
-      ...targets
+    const clusterShareMap: Record<string, any> = {};
+    Object.keys(clusterMap).forEach(k => {
+        const lower = k.toLowerCase();
+        if (!clusterShareMap[lower]) clusterShareMap[lower] = { label: k, val: 0, target: 0, farmersPaid: 0 };
+        clusterShareMap[lower].val += clusterMap[k];
+    });
+    Object.keys(clusterFarmersMap).forEach(k => {
+        const lower = k.toLowerCase();
+        if (!clusterShareMap[lower]) clusterShareMap[lower] = { label: k, val: 0, target: 0, farmersPaid: 0 };
+        clusterShareMap[lower].farmersPaid += clusterFarmersMap[k].size;
+    });
+    targets
         .filter(t => (selectedActivity === "All" || t.activity.toLowerCase() === selectedActivity.toLowerCase()) && (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear))
-        .map(t => t.cluster)
-    ]);
-    const clusterShare = Array.from(allClusters)
-      .filter((c) => selectedCluster === "All" || c.toLowerCase() === selectedCluster.toLowerCase())
-      .map((label) => {
-        // Find variations with same lower case
-        const targetLabelLower = label.toLowerCase();
-        let val = 0;
-        let farmersPaid = 0;
-        Object.keys(clusterMap).forEach(k => {
-            if (k.toLowerCase() === targetLabelLower) {
-                val += clusterMap[k];
-            }
+        .filter(t => selectedCluster === "All" || t.cluster.toLowerCase() === selectedCluster.toLowerCase())
+        .forEach(t => {
+            const lower = t.cluster.toLowerCase();
+            if (!clusterShareMap[lower]) clusterShareMap[lower] = { label: t.cluster, val: 0, target: 0, farmersPaid: 0 };
+            clusterShareMap[lower].target += t.contributionTarget;
         });
-        Object.keys(clusterFarmersMap).forEach(k => {
-            if (k.toLowerCase() === targetLabelLower) {
-                farmersPaid += clusterFarmersMap[k].size;
-            }
-        });
-        
-        const clusterTargets = targets.filter(
-          (t) =>
-            t.cluster.toLowerCase() === targetLabelLower &&
-            (selectedActivity === "All" || t.activity.toLowerCase() === selectedActivity.toLowerCase()) &&
-            (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear)
-        );
-        const target = clusterTargets.reduce(
-          (acc, t) => acc + t.contributionTarget,
-          0
-        );
-        return {
-          label: label.charAt(0).toUpperCase() + label.slice(1),
-          val,
-          target,
-          farmersPaid,
-          percent: totalAmount > 0 ? (val / totalAmount) * 100 : 0,
-        };
-      })
+
+    const clusterShare = Object.values(clusterShareMap)
+      .map((c: any) => ({
+          label: c.label.charAt(0).toUpperCase() + c.label.slice(1),
+          val: c.val,
+          target: c.target,
+          farmersPaid: c.farmersPaid,
+          percent: totalAmount > 0 ? (c.val / totalAmount) * 100 : 0,
+      }))
+      .filter((c) => selectedCluster === "All" || c.label.toLowerCase() === selectedCluster.toLowerCase())
       .filter((c) => c.val > 0 || c.target > 0)
-      .reduce((acc, curr) => {
-          const existing = acc.find(a => a.label.toLowerCase() === curr.label.toLowerCase());
-          if (existing) {
-              existing.val += curr.val;
-              existing.target += curr.target;
-              existing.farmersPaid += curr.farmersPaid;
-          } else {
-              acc.push(curr);
-          }
-          return acc;
-      }, [])
       .sort((a, b) => b.percent - a.percent)
       .slice(0, 3);
 
-    const allActivities = new Set([
-      ...Object.keys(activityMap),
-      ...targets
+    const activityShareMap: Record<string, any> = {};
+    Object.keys(activityMap).forEach(k => {
+        const lower = k.toLowerCase();
+        if (!activityShareMap[lower]) activityShareMap[lower] = { label: k, val: 0, target: 0, farmersPaid: 0 };
+        activityShareMap[lower].val += activityMap[k];
+    });
+    Object.keys(activityFarmersMap).forEach(k => {
+        const lower = k.toLowerCase();
+        if (!activityShareMap[lower]) activityShareMap[lower] = { label: k, val: 0, target: 0, farmersPaid: 0 };
+        activityShareMap[lower].farmersPaid += activityFarmersMap[k].size;
+    });
+    targets
         .filter(t => (selectedCluster === "All" || t.cluster.toLowerCase() === selectedCluster.toLowerCase()) && (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear))
-        .map(t => t.activity)
-    ]);
-    const activityShare = Array.from(allActivities)
-      .map((label) => {
-        const targetLabelLower = label.toLowerCase();
-        let val = 0;
-        let farmersPaid = 0;
-        Object.keys(activityMap).forEach(k => {
-            if (k.toLowerCase() === targetLabelLower) val += activityMap[k];
-        });
-        Object.keys(activityFarmersMap).forEach(k => {
-            if (k.toLowerCase() === targetLabelLower) farmersPaid += activityFarmersMap[k].size;
+        .forEach(t => {
+            const lower = t.activity.toLowerCase();
+            if (!activityShareMap[lower]) activityShareMap[lower] = { label: t.activity, val: 0, target: 0, farmersPaid: 0 };
+            activityShareMap[lower].target += t.contributionTarget;
         });
 
-        const actTargets = targets.filter(
-          (t) =>
-            t.activity.toLowerCase() === targetLabelLower &&
-            (selectedCluster === "All" || t.cluster.toLowerCase() === selectedCluster.toLowerCase()) &&
-            (selectedFinancialYear === "All" || (t.financialYear || "").trim() === selectedFinancialYear)
-        );
-        const target = actTargets.reduce(
-          (acc, t) => acc + t.contributionTarget,
-          0
-        );
-        return {
-          label: label.toUpperCase(),
-          val,
-          target,
-          farmersPaid,
-          percent: totalAmount > 0 ? (val / totalAmount) * 100 : 0,
-        };
-      })
+    const activityShare = Object.values(activityShareMap)
+      .map((c: any) => ({
+          label: c.label.toUpperCase(),
+          val: c.val,
+          target: c.target,
+          farmersPaid: c.farmersPaid,
+          percent: totalAmount > 0 ? (c.val / totalAmount) * 100 : 0,
+      }))
       .filter((a) => a.val > 0 || a.target > 0)
-      .reduce((acc, curr) => {
-          const existing = acc.find(a => a.label.toLowerCase() === curr.label.toLowerCase());
-          if (existing) {
-              existing.val += curr.val;
-              existing.target += curr.target;
-              existing.farmersPaid += curr.farmersPaid;
-          } else {
-              acc.push(curr);
-          }
-          return acc;
-      }, [])
       .sort((a, b) => b.percent - a.percent);
 
     // Filter targets
@@ -913,10 +868,10 @@ const ContributionPage: React.FC = () => {
     );
 
         // Top Contributors
-    const topContributorsMap = new Map<string, { name: string, cluster: string, amount: number, activities: Set<string> }>();
+    const topContributorsMap = new Map<string, { name: string, cluster: string, amount: number, target: number, activities: Set<string> }>();
     filteredData.forEach(d => {
         if (!topContributorsMap.has(d.farmerId)) {
-            topContributorsMap.set(d.farmerId, { name: d.name, cluster: d.cluster, amount: 0, activities: new Set() });
+            topContributorsMap.set(d.farmerId, { name: d.name, cluster: d.cluster, amount: 0, target: 0, activities: new Set() });
         }
         const entry = topContributorsMap.get(d.farmerId)!;
         entry.amount += d.amount;
@@ -1119,9 +1074,9 @@ const ContributionPage: React.FC = () => {
                <BarChart data={stats.clusterShare} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} />
-                 <YAxis tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} width={50} />
+                 <YAxis tickFormatter={(val: any) => `₹${Number(val) >= 1000 ? (Number(val) / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} width={50} />
                  <RechartsTooltip cursor={{ fill: "#374151", opacity: 0.4 }} contentStyle={{ backgroundColor: "#1e2333", border: "1px solid #374151", borderRadius: "8px" }} formatter={(value) => `₹${Number(value).toLocaleString()}`} />
-                 <Bar dataKey="target" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={12}><LabelList dataKey="target" position="top" fill="#9CA3AF" fontSize={10} formatter={(value) => `₹${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`} /></Bar>
+                 <Bar dataKey="target" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={12}><LabelList dataKey="target" position="top" fill="#9CA3AF" fontSize={10} formatter={(value: any) => `₹${Number(value) >= 1000 ? (Number(value) / 1000).toFixed(0) + 'k' : value}`} /></Bar>
                  <Bar dataKey="val" fill="#10B981" radius={[4, 4, 0, 0]} barSize={12} />
                </BarChart>
              </ResponsiveContainer>
@@ -1141,7 +1096,7 @@ const ContributionPage: React.FC = () => {
              <ResponsiveContainer width="100%" height="100%">
                <BarChart data={stats.activityShare.slice(0, 8)} layout="vertical" margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#374151" />
-                 <XAxis type="number" tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} />
+                 <XAxis type="number" tickFormatter={(val: any) => `₹${Number(val) >= 1000 ? (Number(val) / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} />
                  <YAxis type="category" dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#9CA3AF" }} width={80} />
                  <RechartsTooltip cursor={{ fill: "#374151", opacity: 0.4 }} contentStyle={{ backgroundColor: "#1e2333", border: "1px solid #374151", borderRadius: "8px" }} formatter={(value) => `₹${Number(value).toLocaleString()}`} />
                  <Bar dataKey="target" fill="#F59E0B" radius={[0, 4, 4, 0]} barSize={8} />
@@ -1209,7 +1164,7 @@ const ContributionPage: React.FC = () => {
                <LineChart data={trendYear === "All" ? stats.monthlyTrend : stats.monthlyTrend.filter(t => t.year === trendYear)} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} />
-                 <YAxis tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} width={50} />
+                 <YAxis tickFormatter={(val: any) => `₹${Number(val) >= 1000 ? (Number(val) / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9CA3AF" }} width={50} />
                  <RechartsTooltip cursor={{ fill: "#374151", opacity: 0.4 }} contentStyle={{ backgroundColor: "#1e2333", border: "1px solid #374151", borderRadius: "8px" }} formatter={(value) => `₹${Number(value).toLocaleString()}`} />
                  
                  <Line type="monotone" dataKey="val" stroke="#10B981" strokeWidth={3} dot={{ r: 4, fill: '#1e2333', stroke: '#10B981', strokeWidth: 2 }} activeDot={{ r: 6 }} />
