@@ -126,6 +126,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
                             )}
 
+                            {canAccessAdmin && <NavLink {...navLinkProps} page="odk-dashboard">Data Submission Hub</NavLink>}
                             {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Panel</NavLink>}
                             
                             <div className="h-6 w-px bg-gray-100 dark:bg-gray-800 mx-2"></div>
@@ -191,6 +192,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                         {isTLOrAdmin && (
                             <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
                         )}
+                        {canAccessAdmin && <NavLink {...navLinkProps} page="odk-dashboard">Data Submission Hub</NavLink>}
                         {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Console</NavLink>}
                         {user ? (
                             <button

@@ -6,6 +6,7 @@ import L from 'leaflet';
 import { Maximize, Minimize } from 'lucide-react';
 import PhotoSlider from './PhotoSlider';
 import PhotoGallery from './PhotoGallery';
+
 import MediaUploadModal from './MediaUploadModal';
 import { useAuth } from '../hooks/useAuth';
 import { 
@@ -357,6 +358,8 @@ const HomePage: React.FC = () => {
                     </div>
                 </section>
             )}
+
+
 
             <section className="animate-fade-in mt-12">
                 <div className="text-center mb-6">

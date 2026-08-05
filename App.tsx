@@ -16,18 +16,19 @@ import BeneficiaryExplorer from './components/BeneficiaryExplorer';
 import AssetTrackingDashboard from './components/AssetTrackingDashboard';
 import ActivityDashboards from './components/ActivityDashboards';
 import ODKAssetDistribution from './components/ODKAssetDistribution';
+import ODKDashboardSection from './components/ODKDashboardSection';
 import DashboardsPortal from './components/DashboardsPortal';
 import AutoInstallBanner from './components/AutoInstallBanner';
 import MarkStaffAttendance from './components/MarkStaffAttendance';
 import AttendanceMonitoring from './components/AttendanceMonitoring';
 import { APP_VERSION } from './config';
 
-type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution' | 'staff-attendance' | 'attendance-monitoring';
+type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution' | 'odk-dashboard' | 'staff-attendance' | 'attendance-monitoring';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>(() => {
         const hash = window.location.hash.replace('#', '') as Page;
-        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'staff-attendance', 'attendance-monitoring'];
+        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring'];
         return validPages.includes(hash) ? hash : 'home';
     });
     const { user, logout } = useAuth();
@@ -37,7 +38,7 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         const handleHashChange = () => {
             const hash = window.location.hash.replace('#', '') as Page;
-            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'staff-attendance', 'attendance-monitoring'];
+            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring'];
             if (validPages.includes(hash)) {
                 setPage(hash);
             }
@@ -75,7 +76,7 @@ const AppContent: React.FC = () => {
     }, [user, logout]);
 
     useEffect(() => {
-        const protectedPages: Page[] = ['attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'staff-attendance', 'attendance-monitoring'];
+        const protectedPages: Page[] = ['attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring'];
         
         // Handle unauthenticated access to protected pages
         if (!user && protectedPages.includes(page)) {
@@ -162,6 +163,8 @@ const AppContent: React.FC = () => {
                 return <BeneficiaryExplorer onBack={() => handleNavigate('dashboards')} />;
             case 'asset-tracking':
                 return <AssetTrackingDashboard onBack={() => handleNavigate('dashboards')} />;
+            case 'odk-dashboard':
+                return <ODKDashboardSection />;
             case 'odk-asset-distribution':
                 return <ODKAssetDistribution onBack={() => handleNavigate('dashboards')} />;
             case 'login':
