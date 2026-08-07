@@ -1,102 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Bar, LabelList, LineChart, Line } from 'recharts';
+const fs = require('fs');
+let path = 'components/ODKDashboardSection.tsx';
 
-export const ODKDashboardSection: React.FC = () => {
-    const [data, setData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    const [selectedForm, setSelectedForm] = useState<string>('All');
-    const [selectedUser, setSelectedUser] = useState<string>('All');
-    const [selectedMonth, setSelectedMonth] = useState<string>('All');
-    const [selectedYear, setSelectedYear] = useState<string>('All');
-    const [selectedDate, setSelectedDate] = useState<string>('All');
-
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const res = await fetch('/api/odk/dashboard');
-                if (!res.ok) {
-                    throw new Error(`Failed to fetch data: ${res.status}`);
-                }
-                const result = await res.json();
-                setData(result);
-            } catch (err: any) {
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, []);
-
-    const { filteredForms, filteredUsers, filteredTimeline, aggregatedForms, topUsers } = useMemo(() => {
-        if (!data) return { filteredForms: [], filteredUsers: [], filteredTimeline: [], aggregatedForms: [], topUsers: [] };
-        
-        const { rawSubmissions, forms, users } = data;
-
-        const usersMap = new Map(users.map((u: any) => [u.id, u.name]));
-        const formsMap = new Map(forms.map((f: any) => [f.id, f.name]));
-
-        // Apply filters
-        const filtered = rawSubmissions.filter((sub: any) => {
-            const dateObj = new Date(sub.date);
-            const subMonth = String(dateObj.getMonth() + 1).padStart(2, '0');
-            const subYear = String(dateObj.getFullYear());
-
-            const matchForm = selectedForm === 'All' || sub.formId === selectedForm;
-            const matchUser = selectedUser === 'All' || String(sub.userId) === selectedUser;
-            const matchMonth = selectedMonth === 'All' || subMonth === selectedMonth;
-            const matchYear = selectedYear === 'All' || subYear === selectedYear;
-            const subDateString = sub.date.split('T')[0];
-            const matchDate = selectedDate === 'All' || subDateString === selectedDate;
-            
-            return matchForm && matchUser && matchMonth && matchYear && matchDate;
-        });
-
-        // Aggregation
-        const formStats = new Map<string, { id: string, name: string, total: number, latest: string | null }>();
-        const userStats = new Map<string, { id: string, name: string, total: number }>();
-        const timelineStats = new Map<string, number>();
-
-        filtered.forEach((sub: any) => {
-            // Forms
-            if (!formStats.has(sub.formId)) {
-                formStats.set(sub.formId, { id: sub.formId, name: formsMap.get(sub.formId) || sub.formId, total: 0, latest: null });
-            }
-            const fStat = formStats.get(sub.formId)!;
-            fStat.total += 1;
-            if (!fStat.latest || new Date(sub.date) > new Date(fStat.latest)) {
-                fStat.latest = sub.date;
-            }
-
-            // Users
-            if (!userStats.has(String(sub.userId))) {
-                userStats.set(String(sub.userId), { id: String(sub.userId), name: (usersMap.get(sub.userId) as string) || `User ${sub.userId}`, total: 0 });
-            }
-            const uStat = userStats.get(String(sub.userId))!;
-            uStat.total += 1;
-
-            // Timeline
-            const dateStr = sub.date.split('T')[0];
-            timelineStats.set(dateStr, (timelineStats.get(dateStr) || 0) + 1);
-        });
-
-        const aggregatedFormsArr = Array.from(formStats.values()).sort((a, b) => b.total - a.total);
-        const topUsersArr = Array.from(userStats.values()).sort((a, b) => b.total - a.total);
-        const timelineArr = Array.from(timelineStats.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([date, count]) => ({ date, count }));
-
-        return {
-            filteredForms: forms,
-            filteredUsers: users,
-            filteredTimeline: timelineArr,
-            aggregatedForms: aggregatedFormsArr,
-            topUsers: topUsersArr
-        };
-    }, [data, selectedForm, selectedUser, selectedMonth, selectedYear, selectedDate]);
-
-
-    if (loading) {
+const newJSX = `    if (loading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[300px]">
                 <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -121,7 +26,7 @@ export const ODKDashboardSection: React.FC = () => {
         <div className="lg:h-[calc(100vh-160px)] flex flex-col gap-3 lg:overflow-hidden">
             {/* Filters & Top Cards Row */}
             <div className="flex flex-col lg:flex-row gap-3 shrink-0 lg:h-16">
-                <div className="flex-1 bg-white px-4 py-3 lg:py-2 rounded-xl shadow-sm border border-gray-100 grid grid-cols-2 lg:grid-cols-5 gap-3 items-center">
+                <div className="flex-1 bg-white px-4 py-3 lg:py-2 rounded-xl shadow-sm border border-gray-100 grid grid-cols-2 lg:grid-cols-4 gap-3 items-center">
                     <div className="w-full">
                         <label className="block text-[9px] font-bold uppercase tracking-wider text-gray-500 mb-0.5">Form</label>
                         <select
@@ -167,19 +72,6 @@ export const ODKDashboardSection: React.FC = () => {
                             <option value="All">All Years</option>
                             {Array.from(new Set(data.rawSubmissions.map((s: any) => new Date(s.date).getFullYear().toString()))).sort((a: any, b: any) => b.localeCompare(a)).map((year: any) => (
                                 <option key={year} value={year}>{year}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="w-full">
-                        <label className="block text-[9px] font-bold uppercase tracking-wider text-gray-500 mb-0.5">Date</label>
-                        <select
-                            value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2 lg:p-1.5"
-                        >
-                            <option value="All">All Dates</option>
-                            {Array.from(new Set(data.rawSubmissions.map((s: any) => s.date.split('T')[0]))).sort((a: any, b: any) => b.localeCompare(a)).map((d: any) => (
-                                <option key={d} value={d}>{new Date(d).toLocaleDateString()}</option>
                             ))}
                         </select>
                     </div>
@@ -235,7 +127,7 @@ export const ODKDashboardSection: React.FC = () => {
                 <div className="flex-1 flex flex-col gap-3 min-w-0 lg:min-h-0 h-auto">
                     <div className="flex-1 bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col min-h-[300px] lg:min-h-0">
                         <h3 className="text-xs font-black uppercase tracking-widest text-gray-800 mb-2 shrink-0">Timeline</h3>
-                        <div className="w-full h-[250px] lg:flex-1 lg:h-auto lg:min-h-0">
+                        <div className="flex-1 w-full min-h-0">
                             {filteredTimeline.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart data={filteredTimeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -247,13 +139,13 @@ export const ODKDashboardSection: React.FC = () => {
                                             tick={{ fontSize: 10, fill: "#6B7280" }} 
                                             tickFormatter={(val) => {
                                                 const d = new Date(val);
-                                                return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`;
+                                                return \`\${d.getDate()} \${d.toLocaleString('default', { month: 'short' })}\`;
                                             }}
                                         />
                                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#6B7280" }} />
                                         <RechartsTooltip 
                                             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }}
-                                            formatter={(value: any) => [`${value}`, 'Submissions']}
+                                            formatter={(value: any) => [\`\${value}\`, 'Submissions']}
                                             labelFormatter={(label) => new Date(label).toLocaleDateString()}
                                         />
                                         <Line type="monotone" dataKey="count" stroke="#6366F1" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
@@ -267,7 +159,7 @@ export const ODKDashboardSection: React.FC = () => {
 
                     <div className="flex-1 bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col min-h-[300px] lg:min-h-0">
                         <h3 className="text-xs font-black uppercase tracking-widest text-gray-800 mb-2 shrink-0">Top Users</h3>
-                        <div className="w-full h-[250px] lg:flex-1 lg:h-auto lg:min-h-0">
+                        <div className="flex-1 w-full min-h-0">
                             {top10Users.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={top10Users} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
@@ -330,13 +222,22 @@ export const ODKDashboardSection: React.FC = () => {
                 </div>
             </div>
             
-            <style dangerouslySetInnerHTML={{__html: `
+            <style dangerouslySetInnerHTML={{__html: \`
                 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 4px; }
                 .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #D1D5DB; }
-            `}} />
+            \`}} />
         </div>
     );
 };
 export default ODKDashboardSection;
+`
+
+let content = fs.readFileSync(path, 'utf8');
+
+const insertStart = content.indexOf('    if (loading) {');
+content = content.slice(0, insertStart) + newJSX;
+
+fs.writeFileSync(path, content);
+console.log("Fixed missing blocks");
