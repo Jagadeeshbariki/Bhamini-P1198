@@ -50,6 +50,17 @@ const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
             allowed: isProjectRole
         },
         {
+            id: 'odk-dashboard' as const,
+            title: 'Data Submissions',
+            description: 'ODK Form submissions, FRP-wise reports, and timeline analytics.',
+            icon: Activity,
+            color: 'bg-purple-600',
+            lightColor: 'bg-purple-50',
+            textColor: 'text-purple-600',
+            borderColor: 'border-purple-100',
+            allowed: isProjectRole
+        },
+        {
             id: 'odk-asset-distribution' as const,
             title: 'ODK Distribution',
             description: 'Material distribution status and material tracking from ODK data.',

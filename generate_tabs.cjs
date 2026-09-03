@@ -1,26 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+const fs = require('fs');
+
+const content = `import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Bar, LabelList, LineChart, Line } from 'recharts';
-import { toCanvas } from 'html-to-image';
+import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { Download, Image as ImageIcon, LayoutDashboard, Table } from 'lucide-react';
-
-
-const HDFC_MEMBERS = ['jadeskung', 'mani', 'sampanth', 'praveen', 'sugreevulu', 'lokesh', 'meenaka_ganapathi', 'meenak_ganapthi'];
-const INTERNAL_MEMBERS = ['minna rao', 'govindu rao', 'vinodkumar', 'vinod kumar', 'sugreevulu', 'lokesh', 'meenaka_ganapathi', 'meenak_ganapthi', 'adinarayana', 'santhi'];
-
-const getProjectsForUser = (userName: string) => {
-    if (!userName) return ['HDFC', 'Internal'];
-    const normalized = userName.toLowerCase().trim();
-    const inHDFC = HDFC_MEMBERS.some(m => normalized.includes(m));
-    const inInternal = INTERNAL_MEMBERS.some(m => normalized.includes(m));
-    
-    if (!inHDFC && !inInternal) return ['HDFC', 'Internal'];
-    
-    const projects: string[] = [];
-    if (inHDFC) projects.push('HDFC');
-    if (inInternal) projects.push('Internal');
-    return projects;
-};
 
 export const ODKDashboardSection: React.FC = () => {
     const [data, setData] = useState<any>(null);
@@ -34,7 +18,6 @@ export const ODKDashboardSection: React.FC = () => {
     const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, '0'));
     const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
     const [selectedDate, setSelectedDate] = useState<string>('All');
-    const [selectedProject, setSelectedProject] = useState<string>('All');
 
     const pivotRef = useRef<HTMLDivElement>(null);
     const [isExporting, setIsExporting] = useState(false);
@@ -44,7 +27,7 @@ export const ODKDashboardSection: React.FC = () => {
             try {
                 const res = await fetch('/api/odk/dashboard');
                 if (!res.ok) {
-                    throw new Error(`Failed to fetch data: ${res.status}`);
+                    throw new Error(\`Failed to fetch data: \${res.status}\`);
                 }
                 const result = await res.json();
                 setData(result);
@@ -57,8 +40,8 @@ export const ODKDashboardSection: React.FC = () => {
         fetchData();
     }, []);
 
-    const { filteredForms, filteredUsers, filteredTimeline, aggregatedForms, topUsers, pivotData, frpColumns, frpTotals } = useMemo(() => {
-        if (!data) return { filteredForms: [], filteredUsers: [], filteredTimeline: [], aggregatedForms: [], topUsers: [], pivotData: [], frpColumns: [], frpTotals: {} };
+    const { filteredForms, filteredUsers, filteredTimeline, aggregatedForms, topUsers, pivotData, frpColumns } = useMemo(() => {
+        if (!data) return { filteredForms: [], filteredUsers: [], filteredTimeline: [], aggregatedForms: [], topUsers: [], pivotData: [], frpColumns: [] };
         
         const { rawSubmissions, forms, users } = data;
 
@@ -78,15 +61,8 @@ export const ODKDashboardSection: React.FC = () => {
             const matchDate = selectedDate === 'All' || subDateString === selectedDate;
             const matchMonth = selectedDate !== 'All' ? true : (selectedMonth === 'All' || subMonth === selectedMonth);
             const matchYear = selectedDate !== 'All' ? true : (selectedYear === 'All' || subYear === selectedYear);
-            
-            let matchProject = true;
-            if (selectedProject !== 'All') {
-                const subUserName = usersMap.get(sub.userId) || '';
-                const projects = getProjectsForUser(subUserName);
-                if (!projects.includes(selectedProject)) matchProject = false;
-            }
 
-            return matchForm && matchUser && matchMonth && matchYear && matchDate && matchProject;
+            return matchForm && matchUser && matchMonth && matchYear && matchDate;
         });
 
         // Aggregation
@@ -107,7 +83,7 @@ export const ODKDashboardSection: React.FC = () => {
 
             // Users
             if (!userStats.has(String(sub.userId))) {
-                userStats.set(String(sub.userId), { id: String(sub.userId), name: (usersMap.get(sub.userId) as string) || `User ${sub.userId}`, total: 0 });
+                userStats.set(String(sub.userId), { id: String(sub.userId), name: (usersMap.get(sub.userId) as string) || \`User \${sub.userId}\`, total: 0 });
             }
             const uStat = userStats.get(String(sub.userId))!;
             uStat.total += 1;
@@ -127,7 +103,7 @@ export const ODKDashboardSection: React.FC = () => {
         
         filtered.forEach((sub: any) => {
             const formName = formsMap.get(sub.formId) || sub.formId;
-            const frpName = usersMap.get(sub.userId) || `User ${sub.userId}`;
+            const frpName = usersMap.get(sub.userId) || \`User \${sub.userId}\`;
             
             frpNamesSet.add(frpName);
             
@@ -140,11 +116,6 @@ export const ODKDashboardSection: React.FC = () => {
 
         const frpColumns = Array.from(frpNamesSet).sort((a: any, b: any) => a.localeCompare(b));
         
-        const frpTotals: Record<string, number> = { total: 0 };
-        frpColumns.forEach((frp: any) => {
-            frpTotals[frp] = 0;
-        });
-
         const pivotData = Array.from(pivotMap.keys()).sort().map(formName => {
             const row: any = { formName };
             const fMap = pivotMap.get(formName);
@@ -152,11 +123,9 @@ export const ODKDashboardSection: React.FC = () => {
             frpColumns.forEach((frp: any) => {
                 const count = fMap.get(frp) || 0;
                 row[frp] = count;
-                frpTotals[frp] += count;
                 total += count;
             });
             row.total = total;
-            frpTotals.total += total;
             return row;
         }).sort((a, b) => b.total - a.total);
 
@@ -167,10 +136,9 @@ export const ODKDashboardSection: React.FC = () => {
             aggregatedForms: aggregatedFormsArr,
             topUsers: topUsersArr,
             pivotData,
-            frpColumns,
-            frpTotals
+            frpColumns
         };
-    }, [data, selectedForm, selectedUser, selectedMonth, selectedYear, selectedDate, selectedProject]);
+    }, [data, selectedForm, selectedUser, selectedMonth, selectedYear, selectedDate]);
 
 
     if (loading) {
@@ -198,17 +166,14 @@ export const ODKDashboardSection: React.FC = () => {
         if (!pivotRef.current) return;
         try {
             setIsExporting(true);
-            const canvas = await toCanvas(pivotRef.current, { backgroundColor: '#ffffff', pixelRatio: 2, skipFonts: false });
-            canvas.toBlob((blob) => {
-                if (blob) {
-                    navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-                        .then(() => alert('Image copied to clipboard successfully!'))
-                        .catch((err) => {
-                            console.error('Failed to copy to clipboard:', err);
-                            alert('Failed to copy image. Your browser might not support this feature or requires a secure context (HTTPS).');
-                        });
-                }
-            });
+            const canvas = await html2canvas(pivotRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+            const dataUrl = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = \`FRP_Report_\${new Date().toISOString().split('T')[0]}.png\`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         } catch (err) {
             console.error('Error exporting image:', err);
         } finally {
@@ -220,7 +185,7 @@ export const ODKDashboardSection: React.FC = () => {
         if (!pivotRef.current) return;
         try {
             setIsExporting(true);
-            const canvas = await toCanvas(pivotRef.current, { backgroundColor: '#ffffff', pixelRatio: 2, skipFonts: false });
+            const canvas = await html2canvas(pivotRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
             const imgData = canvas.toDataURL('image/png');
             
             const pdf = new jsPDF('l', 'mm', 'a4');
@@ -228,7 +193,7 @@ export const ODKDashboardSection: React.FC = () => {
             const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
             
             pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save(`FRP_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+            pdf.save(\`FRP_Report_\${new Date().toISOString().split('T')[0]}.pdf\`);
         } catch (err) {
             console.error('Error exporting PDF:', err);
         } finally {
@@ -242,14 +207,14 @@ export const ODKDashboardSection: React.FC = () => {
             <div className="flex flex-row gap-2 shrink-0">
                 <button 
                     onClick={() => setActiveTab('dashboard')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'}`}
+                    className={\`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors \${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'}\`}
                 >
                     <LayoutDashboard className="w-4 h-4" />
                     Main Dashboard
                 </button>
                 <button 
                     onClick={() => setActiveTab('frp-report')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'frp-report' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'}`}
+                    className={\`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors \${activeTab === 'frp-report' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'}\`}
                 >
                     <Table className="w-4 h-4" />
                     FRP Report
@@ -258,7 +223,7 @@ export const ODKDashboardSection: React.FC = () => {
 
             {/* Filters Row */}
             <div className="flex flex-col lg:flex-row gap-3 shrink-0 lg:h-16">
-                <div className="flex-1 bg-white px-4 py-3 lg:py-2 rounded-xl shadow-sm border border-gray-100 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-center">
+                <div className="flex-1 bg-white px-4 py-3 lg:py-2 rounded-xl shadow-sm border border-gray-100 grid grid-cols-2 lg:grid-cols-5 gap-3 items-center">
                     <div className="w-full">
                         <label className="block text-[9px] font-bold uppercase tracking-wider text-gray-500 mb-0.5">Form</label>
                         <select
@@ -315,18 +280,6 @@ export const ODKDashboardSection: React.FC = () => {
                             onChange={(e) => setSelectedDate(e.target.value || 'All')}
                             className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2 lg:p-[5px]"
                         />
-                    </div>
-                    <div className="w-full">
-                        <label className="block text-[9px] font-bold uppercase tracking-wider text-gray-500 mb-0.5">Project</label>
-                        <select
-                            value={selectedProject}
-                            onChange={(e) => setSelectedProject(e.target.value)}
-                            className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2 lg:p-1.5"
-                        >
-                            <option value="All">All Projects</option>
-                            <option value="HDFC">HDFC</option>
-                            <option value="Internal">Internal</option>
-                        </select>
                     </div>
                     <div className="w-full">
                         <label className="block text-[9px] font-bold uppercase tracking-wider text-gray-500 mb-0.5">User</label>
@@ -393,13 +346,13 @@ export const ODKDashboardSection: React.FC = () => {
                                                 tick={{ fontSize: 10, fill: "#6B7280" }} 
                                                 tickFormatter={(val) => {
                                                     const d = new Date(val);
-                                                    return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`;
+                                                    return \`\${d.getDate()} \${d.toLocaleString('default', { month: 'short' })}\`;
                                                 }}
                                             />
                                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#6B7280" }} />
                                             <RechartsTooltip 
                                                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }}
-                                                formatter={(value: any) => [`${value}`, 'Submissions']}
+                                                formatter={(value: any) => [\`\${value}\`, 'Submissions']}
                                                 labelFormatter={(label) => new Date(label).toLocaleDateString()}
                                             />
                                             <Line type="monotone" dataKey="count" stroke="#6366F1" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
@@ -504,58 +457,43 @@ export const ODKDashboardSection: React.FC = () => {
 
                     <div className="flex-1 overflow-auto custom-scrollbar relative" ref={pivotRef}>
                         {pivotData.length > 0 ? (
-                            <table className="w-full text-left border-collapse whitespace-nowrap bg-white border border-gray-300">
-                                <thead className="sticky top-0 z-20 shadow-[0_2px_0_0_#d1d5db]">
+                            <table className="w-full text-left border-collapse whitespace-nowrap bg-white">
+                                <thead className="sticky top-0 z-20 shadow-[0_2px_0_0_#f3f4f6]">
                                     <tr>
-                                        <th className="py-2 px-3 text-[10px] font-black text-gray-600 uppercase tracking-wider bg-gray-100 sticky left-0 z-30 border-r border-b border-gray-300 min-w-[200px]">Form Name</th>
+                                        <th className="py-2 px-3 text-[10px] font-black text-gray-500 uppercase tracking-wider bg-gray-50 sticky left-0 z-30 shadow-[2px_0_0_0_#f3f4f6] min-w-[200px]">Form Name</th>
+                                        <th className="py-2 px-3 text-[10px] font-black text-gray-500 uppercase tracking-wider text-center border-l border-gray-200 bg-gray-100 sticky left-[200px] z-30 shadow-[2px_0_0_0_#f3f4f6]">Total</th>
                                         {frpColumns.map((frp: any) => (
-                                            <th key={frp} className="py-2 px-3 text-[10px] font-black text-gray-600 uppercase tracking-wider text-center border-r border-b border-gray-300 bg-gray-100 max-w-[120px] truncate" title={frp}>
+                                            <th key={frp} className="py-2 px-3 text-[10px] font-black text-gray-500 uppercase tracking-wider text-center border-l border-gray-200 bg-gray-50 max-w-[120px] truncate" title={frp}>
                                                 {frp}
                                             </th>
                                         ))}
-                                        <th className="py-2 px-3 text-[10px] font-black text-gray-700 uppercase tracking-wider text-center border-b border-gray-300 bg-gray-200 sticky right-0 z-20 shadow-[-2px_0_0_0_#d1d5db]">Grand Total</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody className="divide-y divide-gray-100">
                                     {pivotData.map((row: any, i: number) => (
                                         <tr key={i} className="hover:bg-gray-50 transition-colors bg-white">
-                                            <td className="py-2 px-3 font-bold text-gray-800 text-xs bg-white sticky left-0 z-10 border-r border-b border-gray-300 truncate max-w-[200px]" title={row.formName}>
+                                            <td className="py-2 px-3 font-bold text-gray-800 text-xs bg-white sticky left-0 z-10 shadow-[2px_0_0_0_#f3f4f6] truncate max-w-[200px]" title={row.formName}>
                                                 {row.formName}
                                             </td>
+                                            <td className="py-2 px-3 text-center border-l border-gray-100 bg-gray-50/50 sticky left-[200px] z-10 shadow-[2px_0_0_0_#f3f4f6]">
+                                                <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 rounded-md">
+                                                    {row.total}
+                                                </span>
+                                            </td>
                                             {frpColumns.map((frp: any) => (
-                                                <td key={frp} className="py-2 px-3 text-center border-r border-b border-gray-300">
+                                                <td key={frp} className="py-2 px-3 text-center border-l border-gray-100">
                                                     {row[frp] > 0 ? (
                                                         <span className="inline-flex items-center justify-center min-w-[20px] px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 rounded-md">
                                                             {row[frp]}
                                                         </span>
                                                     ) : (
-                                                        <span className="text-gray-400 font-bold text-[10px]">0</span>
+                                                        <span className="text-gray-300 text-xs">-</span>
                                                     )}
                                                 </td>
                                             ))}
-                                            <td className="py-2 px-3 text-center border-b border-gray-300 bg-gray-50/80 sticky right-0 z-10 shadow-[-2px_0_0_0_#f3f4f6]">
-                                                <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-800 rounded-md">
-                                                    {row.total}
-                                                </span>
-                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
-                                <tfoot className="sticky bottom-0 z-20 shadow-[0_-2px_0_0_#d1d5db]">
-                                    <tr>
-                                        <td className="py-2 px-3 font-black text-gray-900 text-xs bg-gray-100 sticky left-0 z-30 border-r border-t border-gray-300">
-                                            Grand Total
-                                        </td>
-                                        {frpColumns.map((frp: any) => (
-                                            <td key={frp} className="py-2 px-3 text-center font-bold text-gray-800 text-[10px] bg-gray-100 border-r border-t border-gray-300">
-                                                {frpTotals[frp]}
-                                            </td>
-                                        ))}
-                                        <td className="py-2 px-3 text-center font-black text-gray-900 text-[10px] bg-gray-200 border-t border-gray-300 sticky right-0 z-20 shadow-[-2px_0_0_0_#d1d5db]">
-                                            {frpTotals.total}
-                                        </td>
-                                    </tr>
-                                </tfoot>
                             </table>
                         ) : (
                             <div className="py-16 text-center text-gray-400 text-sm">No submissions found for the selected filters.</div>
@@ -564,13 +502,17 @@ export const ODKDashboardSection: React.FC = () => {
                 </div>
             )}
             
-            <style dangerouslySetInnerHTML={{__html: `
+            <style dangerouslySetInnerHTML={{__html: \`
                 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
                 .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #94a3b8; }
-            `}} />
+            \`}} />
         </div>
     );
 };
 export default ODKDashboardSection;
+`;
+
+fs.writeFileSync('components/ODKDashboardSection.tsx', content);
+console.log('done');

@@ -66,7 +66,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
     const [filterFY, setFilterFY] = useState('All');
     const [filterCluster, setFilterCluster] = useState('Globally');
     const [filterActivity, setFilterActivity] = useState('All');
-    const [filterMaterial, setFilterMaterial] = useState('All');
+    const [filterMaterial, setFilterMaterial] = useState<string[]>([]);
     
     // Pagination for table
     const [page, setPage] = useState(1);
@@ -207,12 +207,15 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
             t = t.filter(x => x.Activity === filterActivity);
             d = d.filter(x => x.Activity === filterActivity);
         }
-        return ['All', ...Array.from(new Set([...t.map(x => x.Asset_Name), ...d.map(x => x.Asset_Name)].filter(Boolean))).sort()];
+        return Array.from(new Set([...t.map(x => x.Asset_Name), ...d.map(x => x.Asset_Name)].filter(Boolean))).sort();
     }, [targets, distributions, filterActivity]);
 
     useEffect(() => {
-        if (filterMaterial !== 'All' && !matOptions.includes(filterMaterial)) {
-            setFilterMaterial('All');
+        if (filterMaterial.length > 0) {
+            const valid = filterMaterial.filter(m => matOptions.includes(m));
+            if (valid.length !== filterMaterial.length) {
+                setFilterMaterial(valid);
+            }
         }
     }, [matOptions, filterMaterial]);
 
@@ -222,7 +225,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
             if (filterFY !== 'All' && t.Financial_Year !== filterFY) return false;
             if (filterCluster !== 'Globally' && t.Cluster !== filterCluster && t.Cluster !== 'Globally') return false;
             if (filterActivity !== 'All' && t.Activity !== filterActivity) return false;
-            if (filterMaterial !== 'All' && t.Asset_Name !== filterMaterial) return false;
+            if (filterMaterial.length > 0 && !filterMaterial.includes(t.Asset_Name)) return false;
             return true;
         }).map(t => {
             if (filterCluster !== 'Globally' && t.Cluster === 'Globally') {
@@ -237,7 +240,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
             if (filterFY !== 'All' && d.Financial_Year !== filterFY) return false;
             if (filterCluster !== 'Globally' && d.Cluster !== filterCluster) return false;
             if (filterActivity !== 'All' && d.Activity !== filterActivity) return false;
-            if (filterMaterial !== 'All' && d.Asset_Name !== filterMaterial) return false;
+            if (filterMaterial.length > 0 && !filterMaterial.includes(d.Asset_Name)) return false;
             return true;
         });
     }, [distributions, filterFY, filterCluster, filterActivity, filterMaterial]);
@@ -455,14 +458,15 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
                         </div>
                         <div>
                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Material Name</label>
-                            <select className="w-full bg-gray-50 border border-gray-200 text-gray-700 rounded-md p-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none" value={filterMaterial} onChange={e => setFilterMaterial(e.target.value)}>
+                            <select multiple className="w-full h-32 bg-gray-50 border border-gray-200 text-gray-700 rounded-md p-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none custom-scrollbar" value={filterMaterial} onChange={e => setFilterMaterial(Array.from(e.target.selectedOptions, (option: any) => option.value))}>
                                 {matOptions.map(o => <option key={o} value={o}>{o}</option>)}
                             </select>
+                            <p className="text-[9px] text-gray-400 mt-1">Hold Ctrl/Cmd to select multiple</p>
                         </div>
                         
                         <div className="pt-4 border-t border-gray-100">
                             <button 
-                                onClick={() => { setFilterFY('All'); setFilterCluster('All'); setFilterActivity('All'); setFilterMaterial('All'); }}
+                                onClick={() => { setFilterFY('All'); setFilterCluster('Globally'); setFilterActivity('All'); setFilterMaterial([]); }}
                                 className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-md text-sm font-semibold transition-colors"
                             >
                                 Reset All Filters

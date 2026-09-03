@@ -1,21 +1,9 @@
 const fs = require('fs');
+let content = fs.readFileSync('components/ODKAssetDistribution.tsx', 'utf8');
 
-// Fix ODKDashboardSection
-let path = 'components/ODKDashboardSection.tsx';
-let content = fs.readFileSync(path, 'utf8');
 content = content.replace(
-    "RechartsTooltip, Bar",
-    "Tooltip as RechartsTooltip, Bar"
+    "onChange={e => setFilterMaterial(Array.from(e.target.selectedOptions, option => option.value))}",
+    "onChange={e => setFilterMaterial(Array.from(e.target.selectedOptions, (option: any) => option.value))}"
 );
-fs.writeFileSync(path, content);
 
-// Fix server.ts
-path = 'server.ts';
-content = fs.readFileSync(path, 'utf8');
-content = content.replace(
-    "const usersArray = Object.values(userStats).sort((a, b) => b.total - a.total);",
-    "const usersArray = (Object.values(userStats) as any[]).sort((a, b) => b.total - a.total);"
-);
-fs.writeFileSync(path, content);
-
-console.log("Fixed ts errors");
+fs.writeFileSync('components/ODKAssetDistribution.tsx', content);
