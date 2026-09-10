@@ -57,8 +57,8 @@ export const ODKDashboardSection: React.FC = () => {
         fetchData();
     }, []);
 
-    const { filteredForms, filteredUsers, filteredTimeline, aggregatedForms, topUsers, pivotData, frpColumns, frpTotals } = useMemo(() => {
-        if (!data) return { filteredForms: [], filteredUsers: [], filteredTimeline: [], aggregatedForms: [], topUsers: [], pivotData: [], frpColumns: [], frpTotals: {} };
+    const { filteredSubmissions, filteredForms, filteredUsers, filteredTimeline, aggregatedForms, topUsers, pivotData, frpColumns, frpTotals } = useMemo(() => {
+        if (!data) return { filteredSubmissions: [], filteredForms: [], filteredUsers: [], filteredTimeline: [], aggregatedForms: [], topUsers: [], pivotData: [], frpColumns: [], frpTotals: {} };
         
         const { rawSubmissions, forms, users } = data;
 
@@ -125,10 +125,24 @@ export const ODKDashboardSection: React.FC = () => {
         const pivotMap = new Map(); // Form Name -> Map of FRP Name -> Count
         const frpNamesSet = new Set();
         
+        // Add ALL valid users to frpNamesSet based on current user/project filters
+        users.forEach((u: any) => {
+            const matchUser = selectedUser === 'All' || String(u.id) === selectedUser;
+            let matchProject = true;
+            if (selectedProject !== 'All') {
+                const projects = getProjectsForUser(u.name);
+                if (!projects.includes(selectedProject)) matchProject = false;
+            }
+            if (matchUser && matchProject) {
+                frpNamesSet.add(u.name);
+            }
+        });
+
         filtered.forEach((sub: any) => {
             const formName = formsMap.get(sub.formId) || sub.formId;
             const frpName = usersMap.get(sub.userId) || `User ${sub.userId}`;
             
+            // Just in case a submission has a user not in the users array
             frpNamesSet.add(frpName);
             
             if (!pivotMap.has(formName)) {
@@ -162,6 +176,7 @@ export const ODKDashboardSection: React.FC = () => {
 
         return {
             filteredForms: forms,
+            filteredSubmissions: filtered,
             filteredUsers: users,
             filteredTimeline: timelineArr,
             aggregatedForms: aggregatedFormsArr,
@@ -193,6 +208,78 @@ export const ODKDashboardSection: React.FC = () => {
 
     const top10Users = topUsers.slice(0, 10);
     const totalSubmissions = aggregatedForms.reduce((acc: any, f: any) => acc + f.total, 0);
+
+        const exportToCSV = () => {
+        let csvRows = [];
+        let filename = '';
+
+        if (activeTab === 'frp-report') {
+            if (!pivotData || pivotData.length === 0) {
+                alert('No data to export for the selected filters.');
+                return;
+            }
+            
+            // Header row
+            const headers = ['Form Name', ...frpColumns, 'Grand Total'];
+            csvRows.push(headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(','));
+            
+            // Data rows
+            pivotData.forEach((row: any) => {
+                const csvRow = [
+                    `"${String(row.formName).replace(/"/g, '""')}"`,
+                    ...frpColumns.map((frp: any) => `"${row[frp] || 0}"`),
+                    `"${row.total}"`
+                ];
+                csvRows.push(csvRow.join(','));
+            });
+            
+            // Footer row
+            const footerRow = [
+                '"Grand Total"',
+                ...frpColumns.map((frp: any) => `"${frpTotals[frp] || 0}"`),
+                `"${frpTotals.total}"`
+            ];
+            csvRows.push(footerRow.join(','));
+            filename = `ODK_FRP_Report_${new Date().toISOString().split('T')[0]}.csv`;
+        } else {
+            if (!filteredSubmissions || filteredSubmissions.length === 0) {
+                alert('No data to export for the selected filters.');
+                return;
+            }
+
+            // Get all unique keys from all submissions to use as headers
+            const headersSet = new Set<string>();
+            filteredSubmissions.forEach((sub: any) => {
+                Object.keys(sub).forEach(key => headersSet.add(key));
+            });
+            const headers = Array.from(headersSet);
+
+            // Build CSV content
+            csvRows.push(headers.join(',')); // Header row
+
+            filteredSubmissions.forEach((sub: any) => {
+                const row = headers.map(header => {
+                    let val = sub[header];
+                    if (val === null || val === undefined) val = '';
+                    // Escape quotes and wrap in quotes to handle commas in values
+                    const strVal = String(val).replace(/"/g, '""');
+                    return `"${strVal}"`;
+                });
+                csvRows.push(row.join(','));
+            });
+            filename = `ODK_Filtered_Data_${new Date().toISOString().split('T')[0]}.csv`;
+        }
+
+        const csvString = csvRows.join('\n');
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const exportAsImage = async () => {
         if (!pivotRef.current) return;
@@ -239,20 +326,29 @@ export const ODKDashboardSection: React.FC = () => {
     return (
         <div className="lg:h-[calc(100vh-160px)] flex flex-col gap-3 lg:overflow-hidden">
             {/* Tabs Row */}
-            <div className="flex flex-row gap-2 shrink-0">
+            <div className="flex flex-row justify-between items-center shrink-0">
+                <div className="flex flex-row gap-2">
+                    <button 
+                        onClick={() => setActiveTab('dashboard')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'}`}
+                    >
+                        <LayoutDashboard className="w-4 h-4" />
+                        Main Dashboard
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('frp-report')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'frp-report' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'}`}
+                    >
+                        <Table className="w-4 h-4" />
+                        FRP Report
+                    </button>
+                </div>
                 <button 
-                    onClick={() => setActiveTab('dashboard')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'}`}
+                    onClick={exportToCSV}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors bg-green-50 text-green-700 hover:bg-green-100 border border-green-200"
                 >
-                    <LayoutDashboard className="w-4 h-4" />
-                    Main Dashboard
-                </button>
-                <button 
-                    onClick={() => setActiveTab('frp-report')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'frp-report' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'}`}
-                >
-                    <Table className="w-4 h-4" />
-                    FRP Report
+                    <Download className="w-4 h-4" />
+                    Export Filtered Data
                 </button>
             </div>
 
