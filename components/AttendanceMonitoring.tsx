@@ -90,7 +90,7 @@ const AttendanceMonitoring: React.FC = () => {
         return lines.slice(1).map(line => {
             const values = parseCSVLine(line);
             const obj: any = {};
-            headers.forEach((h, i) => obj[h] = values[i]);
+            headers.forEach((h, i) => { if (!obj.hasOwnProperty(h) && h !== '') obj[h] = values[i]; });
             return {
                 timestamp: obj['Timestamp'] || '',
                 username: obj['Username'] || '',

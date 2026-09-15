@@ -123,7 +123,9 @@ const AssetTrackingDashboard: React.FC<AssetTrackingDashboardProps> = ({ onBack 
             const row = parseLine(line);
             const obj: any = {};
             headers.forEach((h, i) => {
-                obj[cleanHeaders[i]] = row[i] || '';
+                if (!obj.hasOwnProperty(cleanHeaders[i]) && cleanHeaders[i] !== "") {
+                    obj[cleanHeaders[i]] = row[i] || '';
+                }
             });
             return obj;
         });

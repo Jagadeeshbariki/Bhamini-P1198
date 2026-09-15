@@ -71,7 +71,7 @@ const EcoFarmpondPage: React.FC = () => {
             const obj: any = {};
             rawHeaders.forEach((h, i) => {
                 const key = h.trim() || `COL_${i}`;
-                obj[key] = vals[i] || '';
+                if (!obj.hasOwnProperty(key)) obj[key] = vals[i] || '';
             });
             return obj;
         });
