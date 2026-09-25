@@ -6,6 +6,7 @@ import EcoFarmpondPage from './EcoFarmpondPage';
 import BYPPage from './BYPPage';
 import ElevatedGoatShedPage from './ElevatedGoatShedPage';
 import ODKAssetDistribution from './ODKAssetDistribution';
+import CapacityBuildingDashboard from './CapacityBuildingDashboard';
 
 export interface ActivityType {
     id: string;
@@ -20,6 +21,7 @@ const ACTIVITIES: ActivityType[] = [
     { id: 'eco-farmpond', name: 'Eco-farmpond', description: 'Project monitoring and contribution analysis for farmpond beneficiaries.' },
     { id: 'byp-poultry', name: 'BYP Poultry Explorer', description: 'Backyard Poultry project monitoring and tracking.' },
     { id: 'elevated-goat-shed', name: 'Goatery Explorer', description: 'Monitoring and tracking for goatery beneficiaries.' },
+    { id: 'capacity-building', name: 'Capacity Building', description: 'Training monitoring and report management.' },
 ];
 
 const ActivityPage: React.FC = () => {
@@ -49,6 +51,9 @@ const ActivityPage: React.FC = () => {
         }
         if (selectedActivity.id === 'elevated-goat-shed') {
             return <ElevatedGoatShedPage />;
+        }
+        if (selectedActivity.id === 'capacity-building') {
+            return <CapacityBuildingDashboard />;
         }
         return <div className="p-8 text-center text-gray-500">Dashboard content not available.</div>;
     };

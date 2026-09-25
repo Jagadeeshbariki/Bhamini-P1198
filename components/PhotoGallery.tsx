@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 interface GalleryImage {
     url: string;
     description?: string;
+    topic?: string;
+    participants?: number;
 }
 
 interface PhotoGalleryProps {
@@ -78,7 +80,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ images, onDelete, deletingU
                             </span>
                         </div>
 
-                        {/* 2. CLOSE BUTTON: Explicitly positioned below the heading as requested */}
+                        {/* 2. CLOSE BUTTON */}
                         <button 
                             onClick={(e) => { e.stopPropagation(); closeLightbox(); }}
                             className="pointer-events-auto flex items-center gap-3 px-8 py-3 bg-white/10 hover:bg-red-600 border border-white/10 backdrop-blur-xl rounded-full text-white transition-all shadow-2xl active:scale-90 group animate-slide-down-delayed"
@@ -130,13 +132,24 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ images, onDelete, deletingU
 
                     {/* FIXED BOTTOM: Description and mobile controls */}
                     <div className="fixed bottom-10 left-0 right-0 z-[10001] px-6 flex flex-col items-center pointer-events-none">
-                        {images[selectedIndex].description && images[selectedIndex].description.trim() !== "" && (
-                            <div className="max-w-2xl bg-black/50 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 animate-slide-up pointer-events-auto mb-6 shadow-2xl">
-                                <p className="text-white text-xs sm:text-sm font-bold tracking-tight uppercase text-center leading-tight">
+                        <div className="max-w-2xl bg-black/50 backdrop-blur-md px-8 py-6 rounded-[2.5rem] border border-white/10 animate-slide-up pointer-events-auto mb-6 shadow-2xl text-center space-y-2">
+                            {images[selectedIndex].topic && (
+                                <h4 className="text-white text-lg font-black uppercase tracking-tight leading-tight">
+                                    {images[selectedIndex].topic}
+                                </h4>
+                            )}
+                            {images[selectedIndex].participants !== undefined && (
+                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full border border-white/5">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Attended:</span>
+                                    <span className="text-xs font-black text-emerald-400 tabular-nums">{images[selectedIndex].participants}</span>
+                                </div>
+                            )}
+                            {images[selectedIndex].description && images[selectedIndex].description.trim() !== "" && (
+                                <p className="text-white/60 text-[10px] font-bold tracking-widest uppercase">
                                     {images[selectedIndex].description}
                                 </p>
-                            </div>
-                        )}
+                            )}
+                        </div>
 
                         {/* Mobile Navigation Buttons */}
                         <div className="flex md:hidden items-center gap-20 pointer-events-auto">
@@ -201,10 +214,23 @@ const GalleryItem: React.FC<{ image: GalleryImage; index: number; onDelete?: (ur
                 loading="lazy"
                 referrerPolicy="no-referrer"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-3">
-                <p className="text-white text-[9px] font-black uppercase tracking-widest line-clamp-1">
-                    {image.description || "Open Record"}
-                </p>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-4 space-y-1">
+                {image.topic && (
+                    <p className="text-white text-[10px] font-black uppercase tracking-tight line-clamp-1">
+                        {image.topic}
+                    </p>
+                )}
+                {image.participants !== undefined && (
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-white/50 whitespace-nowrap">Attended:</span>
+                        <span className="text-[10px] font-black text-emerald-400 tabular-nums">{image.participants}</span>
+                    </div>
+                )}
+                {image.description && (
+                    <p className="text-white/40 text-[8px] font-bold uppercase tracking-widest line-clamp-1 pt-1">
+                        {image.description}
+                    </p>
+                )}
             </div>
             {onDelete && (
                 <button 

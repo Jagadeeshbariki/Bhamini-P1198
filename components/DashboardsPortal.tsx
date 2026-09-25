@@ -70,6 +70,17 @@ const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
             textColor: 'text-rose-600',
             borderColor: 'border-rose-100',
             allowed: isProjectRole
+        },
+        {
+            id: 'capacity-building' as const,
+            title: 'Capacity Building',
+            description: 'Training session analytics, attendance tracking, and field photo documentation.',
+            icon: Users,
+            color: 'bg-blue-600',
+            lightColor: 'bg-blue-50',
+            textColor: 'text-blue-600',
+            borderColor: 'border-blue-100',
+            allowed: true
         }
     ];
 

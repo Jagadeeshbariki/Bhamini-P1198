@@ -69,7 +69,7 @@ const BYPPage: React.FC = () => {
             const obj: any = {};
             rawHeaders.forEach((h, i) => {
                 const key = h.trim() || `COL_${i}`;
-                if (!obj.hasOwnProperty(key)) obj[key] = vals[i] || '';
+                if (!Object.prototype.hasOwnProperty.call(obj, key)) obj[key] = vals[i] || '';
             });
             return obj;
         });
@@ -193,7 +193,7 @@ const BYPPage: React.FC = () => {
     // Load Google Maps Script
     useEffect(() => {
         const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-        if (!window.google && !document.getElementById('google-maps-script')) {
+        if (!window.google?.maps && !document.getElementById('google-maps-script')) {
             const script = document.createElement('script');
             script.id = 'google-maps-script';
             script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
@@ -201,7 +201,7 @@ const BYPPage: React.FC = () => {
             script.defer = true;
             script.onload = () => setMapLoaded(true);
             document.head.appendChild(script);
-        } else if (window.google) {
+        } else if (window.google?.maps) {
             setMapLoaded(true);
         }
     }, []);
@@ -253,7 +253,7 @@ const BYPPage: React.FC = () => {
     const markerClusterer = useRef<any>(null);
 
     useEffect(() => {
-        if (!mapLoaded || !mapRef.current) return;
+        if (!mapLoaded || !mapRef.current || !window.google?.maps) return;
 
         if (!mapInstance.current) {
             mapInstance.current = new window.google.maps.Map(mapRef.current, {

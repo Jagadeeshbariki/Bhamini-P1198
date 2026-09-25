@@ -48,7 +48,7 @@ const parseCSV = (csv: string) => {
         const values = parseLine(line);
         const obj: any = {};
         headers.forEach((h, i) => {
-            if (!obj.hasOwnProperty(h) && h !== "") {
+            if (!Object.prototype.hasOwnProperty.call(obj, h) && h !== "") {
                 obj[h] = values[i] || '';
             }
         });

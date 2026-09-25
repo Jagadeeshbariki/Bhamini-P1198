@@ -4,7 +4,7 @@ import {
     Search, PieChart as PieChartIcon, 
     TrendingUp, Users, IndianRupee, Globe, Camera, RefreshCw,
     ChevronDown, LayoutDashboard, ExternalLink, Loader2, ArrowLeft,
-    Download, X
+    Download, X, Calendar
 } from 'lucide-react';
 import { 
     ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
@@ -13,6 +13,7 @@ import {
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL, CROPS_MATERIAL_TARGETS_URL, ASSET_DISTRIBUTION_URL, BIO_INPUTS_DATA_URL, HARVEST_DATA_URL, getProxyUrl } from '../config';
 import ActivityPhotoUploadModal from './ActivityPhotoUploadModal';
+import CapacityBuildingDashboard from './CapacityBuildingDashboard';
 
 declare global {
   interface Window {
@@ -131,7 +132,7 @@ const ActivityDashboardContent: React.FC<{
     // Load Google Maps Script
     useEffect(() => {
         const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-        if (!window.google && !document.getElementById('google-maps-script')) {
+        if (!window.google?.maps && !document.getElementById('google-maps-script')) {
             const script = document.createElement('script');
             script.id = 'google-maps-script';
             script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
@@ -139,7 +140,7 @@ const ActivityDashboardContent: React.FC<{
             script.defer = true;
             script.onload = () => setMapLoaded(true);
             document.head.appendChild(script);
-        } else if (window.google) {
+        } else if (window.google?.maps) {
             // Use a small timeout to avoid synchronous setState in effect
             const timer = setTimeout(() => setMapLoaded(true), 0);
             return () => clearTimeout(timer);
@@ -247,7 +248,7 @@ const ActivityDashboardContent: React.FC<{
     const markerClusterer = useRef<any>(null);
 
     useEffect(() => {
-        if (!mapLoaded || !mapRef.current) return;
+        if (!mapLoaded || !mapRef.current || !window.google?.maps) return;
 
         if (!mapInstance.current) {
             mapInstance.current = new window.google.maps.Map(mapRef.current, {
@@ -1414,7 +1415,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
 
     const activities = useMemo(() => {
         const unique = Array.from(new Set(data.map(d => d.activity))).sort();
-        return unique;
+        return [...unique, 'Capacity Building'];
     }, [data]);
 
     if (loading) {
@@ -1482,21 +1483,30 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                                     <div>
                                         <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">{activity}</h2>
                                         <div className="flex items-center gap-4 mt-1">
-                                            <span className="flex items-center gap-1 text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
-                                                <Users className="w-3 h-3" />
-                                                {activityData.length} Beneficiaries
-                                            </span>
-                                            <span className="w-1 h-1 bg-gray-300 rounded-full" />
-                                            {activity.toUpperCase().includes('CROP') ? (
-                                                <span className="flex items-center gap-1 text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">
-                                                    <TrendingUp className="w-3 h-3" />
-                                                    {activityData.reduce((sum, d) => sum + (d.cropDetails?.reduce((s, c) => s + (c.extent || 0), 0) || 0), 0).toFixed(2)} Acres
+                                            {activity === 'Capacity Building' ? (
+                                                <span className="flex items-center gap-1 text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
+                                                    <Calendar className="w-3 h-3" />
+                                                    Training & Reports
                                                 </span>
                                             ) : (
-                                                <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                                                    <IndianRupee className="w-3 h-3" />
-                                                    ₹{activityData.reduce((sum, d) => sum + (d.contribution || 0), 0).toLocaleString()}
-                                                </span>
+                                                <>
+                                                    <span className="flex items-center gap-1 text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
+                                                        <Users className="w-3 h-3" />
+                                                        {activityData.length} Beneficiaries
+                                                    </span>
+                                                    <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                                                    {activity.toUpperCase().includes('CROP') ? (
+                                                        <span className="flex items-center gap-1 text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">
+                                                            <TrendingUp className="w-3 h-3" />
+                                                            {activityData.reduce((sum, d) => sum + (d.cropDetails?.reduce((s, c) => s + (c.extent || 0), 0) || 0), 0).toFixed(2)} Acres
+                                                        </span>
+                                                    ) : (
+                                                        <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
+                                                            <IndianRupee className="w-3 h-3" />
+                                                            ₹{activityData.reduce((sum, d) => sum + (d.contribution || 0), 0).toLocaleString()}
+                                                        </span>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </div>
@@ -1508,10 +1518,14 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
 
                             {isExpanded && (
                                 <div className="border-t border-gray-50 dark:border-gray-800 animate-in slide-in-from-top-4 duration-500">
-                                    <ActivityDashboardContent 
-                                        data={activityData} 
-                                        onRefresh={handleRefresh}
-                                    />
+                                    {activity === 'Capacity Building' ? (
+                                        <CapacityBuildingDashboard />
+                                    ) : (
+                                        <ActivityDashboardContent 
+                                            data={activityData} 
+                                            onRefresh={handleRefresh}
+                                        />
+                                    )}
                                 </div>
                             )}
                         </div>

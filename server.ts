@@ -185,6 +185,41 @@ async function startServer() {
     }
   });
 
+  app.get("/api/odk/odata", async (req, res) => {
+    const { formId, query } = req.query;
+    
+    if (!formId || typeof formId !== 'string') {
+      return res.status(400).send('Missing formId');
+    }
+
+    try {
+      const token = await getOdkToken();
+      let url = `https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(formId)}.svc/Submissions`;
+      
+      if (query && typeof query === 'string') {
+        url += `?${query}`;
+      }
+
+      const response = await fetch(url, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        console.error(`ODK OData Fetch Failed: ${response.status} for ${url}`);
+        return res.status(response.status).send('Failed to fetch OData from ODK');
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error('ODK OData Proxy Error:', error);
+      res.status(500).send(error.message || 'Internal Server Error');
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

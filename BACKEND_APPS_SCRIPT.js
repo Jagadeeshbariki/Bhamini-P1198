@@ -35,6 +35,8 @@ function doPost(e) {
       case "deletePhoto": return handleDeletePhoto(request);
       case "addAchievement": return handleAchievement(request);
       case "addMaintenanceBill": return handleMaintenanceBill(request);
+      case "addTrainingDocument": return handleTrainingDocument(request);
+      case "getTrainingDocuments": return handleGetTrainingDocuments(request);
       case "updateBillStatus": return handleUpdateBillStatus(request);
       case "updateAsset": return handleUpdateAsset(request);
       case "updateBudgetPerformance": return handleBudgetUpdate(request);
@@ -44,6 +46,24 @@ function doPost(e) {
     return createResponse("error", error.toString());
   } finally {
     lock.releaseLock();
+  }
+}
+
+/**
+ * Handle GET requests
+ */
+function doGet(e) {
+  const action = e.parameter.action;
+  
+  if (!action) {
+    return createResponse("error", "No action specified");
+  }
+
+  switch (action) {
+    case "getTrainingDocuments":
+      return handleGetTrainingDocuments(e.parameter);
+    default:
+      return createResponse("error", "Unknown GET action: " + action);
   }
 }
 
@@ -332,4 +352,55 @@ function handleDeletePhoto(data) {
   }
   
   return createResponse("success", "Photo deleted.");
+}
+
+/**
+ * Handle Training Document Upload
+ */
+function handleTrainingDocument(data) {
+  const TRAINING_DOC_FOLDER_ID = "1kd81zYbr5_8qUzi__4fTid_ZjNb7jEJm"; // Provided by user
+  const folder = DriveApp.getFolderById(TRAINING_DOC_FOLDER_ID);
+  
+  const blob = Utilities.newBlob(Utilities.base64Decode(data.fileData), data.mimeType, data.fileName);
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const url = file.getUrl();
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("Training_Documents");
+  if (!sheet) {
+    sheet = ss.insertSheet("Training_Documents");
+    sheet.appendRow(["Timestamp", "Submission ID", "File Name", "File URL", "Uploaded By"]);
+  }
+  
+  sheet.appendRow([
+    new Date(),
+    data.submissionId,
+    data.fileName,
+    url,
+    data.uploadedBy || "Unknown"
+  ]);
+  
+  return createResponse("success", "Document uploaded and linked.", { url: url });
+}
+
+/**
+ * Fetch Training Documents for a specific submission
+ */
+function handleGetTrainingDocuments(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Training_Documents");
+  if (!sheet) return createResponse("success", "No documents found", { files: [] });
+  
+  const rows = sheet.getDataRange().getValues();
+  const submissionId = data.submissionId;
+  
+  const results = rows.slice(1) // Skip header
+    .filter(row => row[1] === submissionId)
+    .map(row => ({
+      name: row[2],
+      url: row[3]
+    }));
+    
+  return createResponse("success", "Documents fetched", { files: results });
 }

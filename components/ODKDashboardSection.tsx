@@ -210,7 +210,7 @@ export const ODKDashboardSection: React.FC = () => {
     const totalSubmissions = aggregatedForms.reduce((acc: any, f: any) => acc + f.total, 0);
 
         const exportToCSV = () => {
-        let csvRows = [];
+        const csvRows = [];
         let filename = '';
 
         if (activeTab === 'frp-report') {

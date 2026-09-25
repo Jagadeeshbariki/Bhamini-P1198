@@ -50,7 +50,7 @@ const AttendanceMonitoring: React.FC = () => {
     // Load Google Maps Script
     useEffect(() => {
         const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-        if (!window.google && !document.getElementById('google-maps-script')) {
+        if (!window.google?.maps && !document.getElementById('google-maps-script')) {
             const script = document.createElement('script');
             script.id = 'google-maps-script';
             script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
@@ -58,7 +58,7 @@ const AttendanceMonitoring: React.FC = () => {
             script.defer = true;
             script.onload = () => setMapLoaded(true);
             document.head.appendChild(script);
-        } else if (window.google) {
+        } else if (window.google?.maps) {
             setMapLoaded(true);
         }
     }, []);
@@ -90,7 +90,7 @@ const AttendanceMonitoring: React.FC = () => {
         return lines.slice(1).map(line => {
             const values = parseCSVLine(line);
             const obj: any = {};
-            headers.forEach((h, i) => { if (!obj.hasOwnProperty(h) && h !== '') obj[h] = values[i]; });
+            headers.forEach((h, i) => { if (!Object.prototype.hasOwnProperty.call(obj, h) && h !== '') obj[h] = values[i]; });
             return {
                 timestamp: obj['Timestamp'] || '',
                 username: obj['Username'] || '',
@@ -190,7 +190,7 @@ const AttendanceMonitoring: React.FC = () => {
     const prevLogsRef = useRef<string>('');
     
     const initMap = useCallback(() => {
-        if (!mapLoaded || !mapRef.current || !window.google) return;
+        if (!mapLoaded || !mapRef.current || !window.google?.maps) return;
 
         if (!googleMap.current) {
             googleMap.current = new window.google.maps.Map(mapRef.current, {
