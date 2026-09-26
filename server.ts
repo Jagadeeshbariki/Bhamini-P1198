@@ -200,34 +200,54 @@ async function startServer() {
 
     try {
       const token = await getOdkToken();
+      // Explicitly try to get JSON and follow redirects
       let url = `https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(formId)}.svc/Submissions`;
       
       if (query && typeof query === 'string') {
-        url += `?${query}`;
+        url += (url.includes('?') ? '&' : '?') + query;
       }
+
+      console.log(`ODK OData Proxy Request: ${url}`);
 
       const response = await fetch(url, {
         headers: { 
           'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
+          'Accept': 'application/json, application/xml' // Accept both to see what we get
+        },
+        redirect: 'follow'
       });
 
+      console.log(`ODK OData Response Status: ${response.status} for ${url}`);
+
+      const contentType = response.headers.get('content-type') || '';
+      const text = await response.text();
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`ODK OData Fetch Failed: ${response.status} for ${url}`);
+        console.error(`ODK OData Error Body (${response.status}):`, text.substring(0, 500));
         return res.status(response.status).json({ 
-          error: 'Failed to fetch OData from ODK', 
+          error: 'ODK OData Request Failed', 
           status: response.status,
-          details: errorText.substring(0, 500)
+          details: text.substring(0, 500),
+          url: url
         });
       }
 
-      const data = await response.json();
-      res.json(data);
+      if (contentType.includes('application/json')) {
+        return res.json(JSON.parse(text));
+      } else if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+        console.error('ODK returned HTML instead of JSON. Body:', text.substring(0, 500));
+        return res.status(500).json({
+          error: 'ODK returned a webpage instead of data. This form might not support OData or the Project ID is incorrect.',
+          details: text.substring(0, 200),
+          url: url
+        });
+      }
+
+      // Fallback
+      res.send(text);
     } catch (error: any) {
-      console.error('ODK OData Proxy Error:', error);
-      res.status(500).json({ error: 'ODK Proxy Error', details: error.message });
+      console.error('ODK OData Proxy Exception:', error);
+      res.status(500).json({ error: 'ODK Proxy Exception', details: error.message });
     }
   });
 

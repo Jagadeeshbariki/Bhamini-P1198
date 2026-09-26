@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import Papa from 'papaparse';
 import { 
     Users, Calendar, Camera, FileText, Upload, 
     Search, RefreshCw, AlertCircle, CheckCircle2,
@@ -97,26 +98,27 @@ const CapacityBuildingDashboard: React.FC = () => {
     const fetchLinkedDocs = async (submissionId: string) => {
         setLoadingDocs(true);
         try {
-            const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=getTrainingDocuments&submissionId=${submissionId}`);
-            if (!res.ok) throw new Error(`Script error: ${res.status}`);
+            const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv';
+            const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(csvUrl)}`);
+            if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
             
             const text = await res.text();
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch (e) {
-                throw new Error('Script returned invalid data format. Please check script deployment.');
-            }
+            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+            
+            const files = (parsed.data as any[])
+                .filter(row => {
+                    const rowId = row['Submission ID'] || row['submissionId'] || Object.values(row)[1];
+                    return String(rowId).trim() === String(submissionId).trim();
+                })
+                .map(row => ({
+                    id: Math.random().toString(),
+                    name: row['File Name'] || row['fileName'] || Object.values(row)[2],
+                    url: row['File URL'] || row['fileUrl'] || Object.values(row)[3]
+                }));
 
-            if (data.status === 'success' || data.success) {
-                setLinkedDocs(data.files.map((f: any) => ({
-                    id: f.id || Math.random().toString(),
-                    name: f.name,
-                    url: f.url
-                })));
-            }
+            setLinkedDocs(files);
         } catch (err: any) {
-            console.error('Error fetching docs:', err);
+            console.error('Error fetching docs from CSV:', err);
         } finally {
             setLoadingDocs(false);
         }
@@ -177,14 +179,20 @@ const CapacityBuildingDashboard: React.FC = () => {
                 json = JSON.parse(odataText);
             } catch (e) {
                 console.error('Non-JSON response from server:', odataText.substring(0, 500));
-                if (odataText.includes('<!DOCTYPE html>') || odataText.includes('<html')) {
-                    throw new Error(`The server returned a webpage instead of data. This usually means the API route was not found or redirected. (Form: ${targetId})`);
+                const isHtml = odataText.includes('<!DOCTYPE html>') || odataText.includes('<html');
+                
+                if (isHtml) {
+                    // Try to extract a useful error from HTML if possible
+                    const bodyMatch = odataText.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+                    const bodyText = bodyMatch ? bodyMatch[1].replace(/<[^>]*>?/gm, '').trim().substring(0, 200) : '';
+                    
+                    throw new Error(`The server returned a webpage instead of data. (Form: ${targetId}). Message from server: ${bodyText || 'Unknown error'}`);
                 }
                 throw new Error(`Invalid response format from server. (Form: ${targetId})`);
             }
 
             if (json.error) {
-                throw new Error(`${json.error}: ${json.details || 'No details provided'}`);
+                throw new Error(`${json.error}: ${json.details || json.message || 'No details provided'}`);
             }
 
             const rawSubmissions = json.value || [];
