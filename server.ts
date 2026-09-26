@@ -62,8 +62,6 @@ async function startServer() {
 
     try {
       const token = await getOdkToken();
-      // ODK central API correctly handles URL encoded forms if the path segment is suitably encoded.
-      // E.g., encodeURIComponent('NF- Activities') -> 'NF-%20Activities'
       const url = `https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(fullSubmissionId)}/attachments/${encodeURIComponent(filename)}`;
 
       const response = await fetch(url, {
@@ -163,91 +161,68 @@ async function startServer() {
       return res.status(400).send('Missing url');
     }
 
-    console.log(`Proxying request to: ${url}`);
-
     try {
-      // Ensure we have a fetch function (Node 18+ has it globally)
-      if (typeof fetch === 'undefined') {
-        throw new Error('Global fetch is not available in this Node version');
-      }
-
       const response = await fetch(url);
-      console.log(`Upstream response status: ${response.status}`);
-      
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`Upstream error (${response.status}): ${errorText.substring(0, 200)}`);
         return res.status(response.status).send(`Upstream returned ${response.status}: ${errorText}`);
       }
-      
       const contentType = response.headers.get('content-type');
       if (contentType) res.setHeader('Content-Type', contentType);
-      
       const text = await response.text();
       res.send(text);
     } catch (error: any) {
-      console.error(`Proxy Exception for ${url}:`, error.message);
       res.status(500).send(`Proxy Error: ${error.message}`);
     }
   });
 
   app.get("/api/odk/odata", async (req, res) => {
-    const { formId, query } = req.query;
+    const { formId } = req.query;
     
     if (!formId || typeof formId !== 'string') {
-      return res.status(400).json({ error: 'Missing formId' });
+      return res.status(400).json({ error: 'Missing formId parameter' });
     }
 
     try {
       const token = await getOdkToken();
-      // Explicitly try to get JSON and follow redirects
-      let url = `https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(formId)}.svc/Submissions`;
+      const url = `https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(formId)}.svc/Submissions`;
       
-      if (query && typeof query === 'string') {
-        url += (url.includes('?') ? '&' : '?') + query;
-      }
-
-      console.log(`ODK OData Proxy Request: ${url}`);
+      console.log(`[ODK PROXY] Calling: ${url}`);
 
       const response = await fetch(url, {
         headers: { 
           'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json, application/xml' // Accept both to see what we get
+          'Accept': 'application/json'
         },
-        redirect: 'follow'
+        cache: 'no-store'
       });
-
-      console.log(`ODK OData Response Status: ${response.status} for ${url}`);
 
       const contentType = response.headers.get('content-type') || '';
       const text = await response.text();
 
       if (!response.ok) {
-        console.error(`ODK OData Error Body (${response.status}):`, text.substring(0, 500));
         return res.status(response.status).json({ 
-          error: 'ODK OData Request Failed', 
-          status: response.status,
-          details: text.substring(0, 500),
-          url: url
+          error: `ODK Central Error (${response.status})`, 
+          details: text.substring(0, 500)
         });
       }
 
-      if (contentType.includes('application/json')) {
-        return res.json(JSON.parse(text));
-      } else if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-        console.error('ODK returned HTML instead of JSON. Body:', text.substring(0, 500));
+      if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
         return res.status(500).json({
-          error: 'ODK returned a webpage instead of data. This form might not support OData or the Project ID is incorrect.',
-          details: text.substring(0, 200),
-          url: url
+          error: 'ODK Central returned an HTML page instead of data.',
+          details: 'This usually means the Form ID is incorrect or OData is not enabled for this form.',
+          formId: formId
         });
       }
 
-      // Fallback
-      res.send(text);
+      try {
+        const data = JSON.parse(text);
+        res.json(data);
+      } catch (parseError) {
+        res.status(500).json({ error: 'Invalid JSON from ODK', details: text.substring(0, 200) });
+      }
     } catch (error: any) {
-      console.error('ODK OData Proxy Exception:', error);
-      res.status(500).json({ error: 'ODK Proxy Exception', details: error.message });
+      res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
     }
   });
 

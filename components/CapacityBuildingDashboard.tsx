@@ -169,9 +169,8 @@ const CapacityBuildingDashboard: React.FC = () => {
             setFormId(targetId);
             setAllForms(availableForms);
 
-            // 2. Fetch OData Submissions
-            const res = await fetch(`/api/odk/odata?formId=${encodeURIComponent(targetId)}`);
-            if (!res.ok) throw new Error(`Failed to fetch data for ${targetId}. Status: ${res.status}`);
+            // 2. Fetch OData Submissions with cache buster
+            const res = await fetch(`/api/odk/odata?formId=${encodeURIComponent(targetId)}&_=${Date.now()}`);
             
             const odataText = await res.text();
             let json;
@@ -179,20 +178,16 @@ const CapacityBuildingDashboard: React.FC = () => {
                 json = JSON.parse(odataText);
             } catch (e) {
                 console.error('Non-JSON response from server:', odataText.substring(0, 500));
-                const isHtml = odataText.includes('<!DOCTYPE html>') || odataText.includes('<html');
                 
-                if (isHtml) {
-                    // Try to extract a useful error from HTML if possible
-                    const bodyMatch = odataText.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-                    const bodyText = bodyMatch ? bodyMatch[1].replace(/<[^>]*>?/gm, '').trim().substring(0, 200) : '';
-                    
-                    throw new Error(`The server returned a webpage instead of data. (Form: ${targetId}). Message from server: ${bodyText || 'Unknown error'}`);
+                // If it's HTML, it's usually a login redirect or a 404 from ODK
+                if (odataText.includes('<!DOCTYPE') || odataText.includes('<html')) {
+                    throw new Error(`The server returned a webpage instead of data. This usually means the Form ID "${targetId}" is incorrect or OData is disabled for this form.`);
                 }
-                throw new Error(`Invalid response format from server. (Form: ${targetId})`);
+                throw new Error(`Failed to parse ODK data for "${targetId}". The response was not valid JSON.`);
             }
 
-            if (json.error) {
-                throw new Error(`${json.error}: ${json.details || json.message || 'No details provided'}`);
+            if (!res.ok) {
+                throw new Error(json.error || json.message || `Failed to fetch data (${res.status})`);
             }
 
             const rawSubmissions = json.value || [];
