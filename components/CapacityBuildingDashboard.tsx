@@ -156,8 +156,8 @@ const CapacityBuildingDashboard: React.FC = () => {
                 }
             }
 
-            // 2. Fetch OData Submissions with cache buster
-            const res = await fetch(`/api/odk/odata?formId=${encodeURIComponent(targetId)}&_=${Date.now()}`);
+            // 2. Fetch OData Submissions
+            const res = await fetch(`/api/odk/data?projectId=3&formId=${encodeURIComponent(targetId)}`);
             
             const odataText = await res.text();
             let json;
@@ -508,7 +508,7 @@ const CapacityBuildingDashboard: React.FC = () => {
                             <div className="space-y-1">
                                 <p className="text-rose-800 dark:text-rose-400 font-bold">Diagnostic Info:</p>
                                 <p className="opacity-70">App Version: {APP_VERSION}</p>
-                                <p className="opacity-70">Endpoint: /api/odk/odata</p>
+                                <p className="opacity-70">Endpoint: /api/odk/data</p>
                                 <p className="opacity-70">Resolved Form: {formId}</p>
                             </div>
                             

@@ -209,6 +209,50 @@ export async function createApp() {
     }
   });
 
+  app.get("/api/odk/data", async (req, res) => {
+    const { projectId: queryProjectId, formId } = req.query;
+    
+    if (!formId || typeof formId !== 'string') {
+      return res.status(400).json({ error: 'Missing formId parameter' });
+    }
+
+    try {
+      const token = await getOdkToken();
+      const projectId = queryProjectId || process.env.ODK_PROJECT_ID || '3';
+      
+      // Default to OData Submissions if not specified otherwise
+      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc/Submissions`;
+      
+      console.log(`[ODK DATA] Project: ${projectId}, Form: ${formId}`);
+      
+      const response = await fetch(url, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
+        cache: 'no-store'
+      });
+
+      const text = await response.text();
+      
+      if (!response.ok) {
+        return res.status(response.status).json({ 
+          error: `ODK Central Error (${response.status})`, 
+          details: text.substring(0, 1000)
+        });
+      }
+
+      try {
+        const data = JSON.parse(text);
+        res.json(data);
+      } catch (e) {
+        res.status(500).json({ error: 'Failed to parse ODK response as JSON' });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
+    }
+  });
+
   app.get("/api/odk/odata", async (req, res) => {
     const { formId, query } = req.query;
     
