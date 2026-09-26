@@ -17,6 +17,7 @@ import AssetTrackingDashboard from './components/AssetTrackingDashboard';
 import ActivityDashboards from './components/ActivityDashboards';
 import ODKAssetDistribution from './components/ODKAssetDistribution';
 import ODKDashboardSection from './components/ODKDashboardSection';
+import CapacityBuildingDashboard from './components/CapacityBuildingDashboard';
 import DashboardsPortal from './components/DashboardsPortal';
 import AutoInstallBanner from './components/AutoInstallBanner';
 import MarkStaffAttendance from './components/MarkStaffAttendance';

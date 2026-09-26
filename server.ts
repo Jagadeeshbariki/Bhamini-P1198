@@ -262,7 +262,7 @@ export async function createApp() {
 
     try {
       const token = await getOdkToken();
-      const projectId = process.env.ODK_PROJECT_ID || '3';
+      const projectId = (req.query.projectId as string) || process.env.ODK_PROJECT_ID || '3';
       
       // ODK Central OData normally exposes root submissions through {formId}.svc/Submissions
       const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
