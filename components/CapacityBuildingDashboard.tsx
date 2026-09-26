@@ -47,6 +47,7 @@ const CapacityBuildingDashboard: React.FC = () => {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [debugMode, setDebugMode] = useState(false);
     const [rawSample, setRawSample] = useState<any>(null);
+    const [formId, setFormId] = useState<string>('Capacity_building');
 
     const handleUpload = async (submissionId?: string) => {
         if (!selectedFile) {
@@ -133,10 +134,29 @@ const CapacityBuildingDashboard: React.FC = () => {
         setLoading(true);
         setError(null);
         setRawSample(null);
-        const targetId = 'Capacity_building';
-
+        
         try {
-            // Fetch OData Submissions with cache buster
+            // 1. Resolve the correct Form ID by searching for "NF- Activities" or "Capacity Building"
+            const dashRes = await fetch('/api/odk/dashboard');
+            let targetId = 'Capacity_building'; // Default fallback
+            
+            if (dashRes.ok) {
+                const dashData = await dashRes.json();
+                const forms = dashData.forms || [];
+                const matchedForm = forms.find((f: any) => 
+                    f.name === 'NF- Activities' || 
+                    f.id === 'Capacity_building' ||
+                    f.name.toLowerCase().includes('capacity building') ||
+                    f.name.toLowerCase().includes('training')
+                );
+                if (matchedForm) {
+                    targetId = matchedForm.id;
+                    setFormId(targetId);
+                    console.log(`[Dashboard] Resolved form "${matchedForm.name}" to ID: ${targetId}`);
+                }
+            }
+
+            // 2. Fetch OData Submissions with cache buster
             const res = await fetch(`/api/odk/odata?formId=${encodeURIComponent(targetId)}&_=${Date.now()}`);
             
             const odataText = await res.text();
@@ -147,7 +167,7 @@ const CapacityBuildingDashboard: React.FC = () => {
                 console.error('Non-JSON response from server:', odataText.substring(0, 500));
                 
                 if (odataText.includes('<!DOCTYPE') || odataText.includes('<html')) {
-                    throw new Error(`The server returned a webpage instead of data. This usually means the API route was not found or redirected. (Form: ${targetId})`);
+                    throw new Error(`The server returned a webpage instead of data. This usually means the API route was not found or redirected. (Resolved ID: ${targetId})`);
                 }
                 throw new Error(`Failed to parse ODK data for "${targetId}". The response was not valid JSON. Status: ${res.status}`);
             }
@@ -155,9 +175,15 @@ const CapacityBuildingDashboard: React.FC = () => {
             if (!res.ok) {
                 const details = json.details || json.message || 'No details provided';
                 const errorMsg = json.error || `Failed to fetch data (${res.status})`;
+                
+                if (res.status === 500 && (details.includes('Auth') || details.includes('credentials'))) {
+                     throw new Error(`Authentication Error: Please ensure ODK_EMAIL and ODK_PASSWORD are configured in your Vercel Project Settings.`);
+                }
+                
                 throw new Error(`${errorMsg}: ${details}`);
             }
 
+            // OData returns submissions in the "value" field
             const rawSubmissions = json.value || [];
             
             if (rawSubmissions.length > 0) {
@@ -168,7 +194,7 @@ const CapacityBuildingDashboard: React.FC = () => {
             const getVal = (obj: any, paths: string[]): any => {
                 for (const path of paths) {
                     if (obj[path] !== undefined && obj[path] !== null && obj[path] !== '') return obj[path];
-                    const parts = path.split(/[\/\.]/);
+                    const parts = path.split(/[./]/);
                     let current = obj;
                     for (const part of parts) {
                         current = current?.[part];
@@ -469,8 +495,33 @@ const CapacityBuildingDashboard: React.FC = () => {
                             <p className="text-xs font-black uppercase tracking-widest opacity-60">Connection Error</p>
                             <p className="text-sm font-bold">{error}</p>
                         </div>
-                        <button onClick={() => fetchData()} className="px-6 py-3 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Retry</button>
+                        <div className="flex flex-col gap-2">
+                             <button onClick={() => fetchData()} className="px-6 py-3 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Retry</button>
+                             <button onClick={() => setDebugMode(!debugMode)} className="px-4 py-2 border border-rose-200 text-rose-400 rounded-lg text-[8px] font-black uppercase tracking-widest">
+                                {debugMode ? 'Hide Diagnostic' : 'Show Diagnostic'}
+                             </button>
+                        </div>
                     </div>
+
+                    {debugMode && (
+                        <div className="mt-4 p-4 bg-black/5 dark:bg-black/40 rounded-xl font-mono text-[10px] overflow-auto max-h-60 space-y-4">
+                            <div className="space-y-1">
+                                <p className="text-rose-800 dark:text-rose-400 font-bold">Diagnostic Info:</p>
+                                <p className="opacity-70">App Version: {APP_VERSION}</p>
+                                <p className="opacity-70">Endpoint: /api/odk/odata</p>
+                                <p className="opacity-70">Resolved Form: {formId}</p>
+                            </div>
+                            
+                            {rawSample && (
+                                <div className="space-y-1 pt-2 border-t border-rose-200/30">
+                                    <p className="text-rose-800 dark:text-rose-400 font-bold">Raw Response Sample:</p>
+                                    <pre className="p-2 bg-white/50 dark:bg-black/20 rounded overflow-auto whitespace-pre-wrap">
+                                        {JSON.stringify(rawSample, null, 2)}
+                                    </pre>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 

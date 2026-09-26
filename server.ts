@@ -10,6 +10,13 @@ export async function createApp() {
     res.json({ status: "ok" });
   });
 
+  // Check credentials early
+  const odkEmail = (process.env.ODK_EMAIL || '').trim();
+  const odkPassword = (process.env.ODK_PASSWORD || '').trim();
+  if (!odkEmail || !odkPassword) {
+    console.warn('[SERVER] ODK_EMAIL or ODK_PASSWORD environment variables are missing!');
+  }
+
   // ODK Image Proxy
   let odkSessionToken: string | null = null;
   let tokenExpiresAt: number = 0;
@@ -214,12 +221,11 @@ export async function createApp() {
       const projectId = process.env.ODK_PROJECT_ID || '3';
       
       // ODK Central OData normally exposes root submissions through {formId}.svc/Submissions
-      // We will try this by default, but we'll be very descriptive if it fails.
       const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
       const url = `${baseUrl}/Submissions${query ? `?${query}` : ''}`;
       
       console.log(`[ODK PROXY] Project: ${projectId}, Form: ${formId}`);
-      console.log(`[ODK PROXY] Full URL: ${url}`);
+      console.log(`[ODK PROXY] Attempting OData URL: ${url}`);
 
       const response = await fetch(url, {
         headers: { 
@@ -289,6 +295,15 @@ export async function createApp() {
       console.error('[ODK PROXY] Exception:', error.message);
       res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
     }
+  });
+
+  // API 404 Handler (prevent falling through to HTML)
+  app.all(/^\/api\/.*/, (req, res) => {
+    res.status(404).json({ 
+      error: "API route not found", 
+      path: req.path,
+      method: req.method 
+    });
   });
 
   // Vite middleware for development
