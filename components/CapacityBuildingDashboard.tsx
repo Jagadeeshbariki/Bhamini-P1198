@@ -43,6 +43,7 @@ const CapacityBuildingDashboard: React.FC = () => {
     const [uploadingToId, setUploadingToId] = useState<string | null>(null);
     const [linkedDocs, setLinkedDocs] = useState<{ id: string; name: string; url: string }[]>([]);
     const [loadingDocs, setLoadingDocs] = useState(false);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [allForms, setAllForms] = useState<any[]>([]);
     const [formId, setFormId] = useState<string>('');
     const [debugMode, setDebugMode] = useState(false);
@@ -97,8 +98,16 @@ const CapacityBuildingDashboard: React.FC = () => {
         setLoadingDocs(true);
         try {
             const res = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=getTrainingDocuments&submissionId=${submissionId}`);
-            if (!res.ok) throw new Error('Failed to fetch docs');
-            const data = await res.json();
+            if (!res.ok) throw new Error(`Script error: ${res.status}`);
+            
+            const text = await res.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                throw new Error('Script returned invalid data format. Please check script deployment.');
+            }
+
             if (data.status === 'success' || data.success) {
                 setLinkedDocs(data.files.map((f: any) => ({
                     id: f.id || Math.random().toString(),
@@ -106,7 +115,7 @@ const CapacityBuildingDashboard: React.FC = () => {
                     url: f.url
                 })));
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error fetching docs:', err);
         } finally {
             setLoadingDocs(false);
@@ -131,8 +140,13 @@ const CapacityBuildingDashboard: React.FC = () => {
             let targetId = overrideFormId || formId;
             
             if (dashRes.ok) {
-                const dashData = await dashRes.json();
-                availableForms = dashData.forms || [];
+                const dashText = await dashRes.text();
+                try {
+                    const dashData = JSON.parse(dashText);
+                    availableForms = dashData.forms || [];
+                } catch (e) {
+                    throw new Error('Server returned invalid dashboard data. Please try again.');
+                }
                 
                 if (!targetId) {
                     // Look for common patterns
@@ -146,6 +160,8 @@ const CapacityBuildingDashboard: React.FC = () => {
                     );
                     targetId = matchedForm ? matchedForm.id : (availableForms.find(f => f.name.toLowerCase().includes('training'))?.id || availableForms[0]?.id || 'Capacity_building');
                 }
+            } else {
+                throw new Error(`Failed to connect to ODK service (${dashRes.status})`);
             }
 
             setFormId(targetId);
@@ -154,7 +170,15 @@ const CapacityBuildingDashboard: React.FC = () => {
             // 2. Fetch OData Submissions
             const res = await fetch(`/api/odk/odata?formId=${encodeURIComponent(targetId)}`);
             if (!res.ok) throw new Error(`Failed to fetch data for ${targetId}. Status: ${res.status}`);
-            const json = await res.json();
+            
+            const odataText = await res.text();
+            let json;
+            try {
+                json = JSON.parse(odataText);
+            } catch (e) {
+                throw new Error(`Server returned HTML instead of data for ${targetId}. The form might be empty or misconfigured.`);
+            }
+
             const rawSubmissions = json.value || [];
             
             if (rawSubmissions.length > 0) {
@@ -759,21 +783,23 @@ const CapacityBuildingDashboard: React.FC = () => {
                                     ) : linkedDocs.length > 0 ? (
                                         <div className="space-y-2">
                                             {linkedDocs.map(doc => (
-                                                <a 
-                                                    key={doc.id}
-                                                    href={doc.url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-indigo-200 transition-all group"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-white dark:bg-gray-900 rounded-lg shadow-sm">
-                                                            <FileText size={14} className="text-gray-400 group-hover:text-indigo-600" />
+                                                <div key={doc.id} className="group relative">
+                                                    <button 
+                                                        onClick={() => setPreviewUrl(doc.url)}
+                                                        className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-indigo-200 transition-all text-left"
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 bg-white dark:bg-gray-900 rounded-lg shadow-sm">
+                                                                <FileText size={14} className="text-gray-400 group-hover:text-indigo-600" />
+                                                            </div>
+                                                            <span className="text-xs font-bold text-gray-700 dark:text-gray-300 truncate max-w-[200px]">{doc.name}</span>
                                                         </div>
-                                                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300 truncate max-w-[200px]">{doc.name}</span>
-                                                    </div>
-                                                    <ExternalLink size={12} className="text-gray-300 group-hover:text-indigo-600" />
-                                                </a>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[8px] font-black text-indigo-500 uppercase opacity-0 group-hover:opacity-100 transition-opacity">Preview</span>
+                                                            <ExternalLink size={12} className="text-gray-300 group-hover:text-indigo-600" />
+                                                        </div>
+                                                    </button>
+                                                </div>
                                             ))}
                                         </div>
                                     ) : (
@@ -820,6 +846,63 @@ const CapacityBuildingDashboard: React.FC = () => {
                                     {uploading ? 'Uploading...' : 'Upload & Link'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Preview Modal */}
+            {previewUrl && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+                    <div className="bg-white dark:bg-gray-900 w-full max-w-5xl h-[85vh] rounded-[2.5rem] overflow-hidden shadow-2xl relative animate-in fade-in zoom-in duration-300 flex flex-col">
+                        <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-800">
+                            <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
+                                <FileText className="text-indigo-600" size={16} />
+                                Document Preview
+                            </h3>
+                            <div className="flex items-center gap-4">
+                                <a 
+                                    href={previewUrl} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2"
+                                >
+                                    Open Original <ExternalLink size={12} />
+                                </a>
+                                <button onClick={() => setPreviewUrl(null)} className="p-2 text-gray-400 hover:text-rose-600 transition-colors">
+                                    <X size={24} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-1 bg-gray-50 dark:bg-gray-950 relative overflow-hidden">
+                            {previewUrl.includes('drive.google.com') ? (
+                                <iframe 
+                                    src={previewUrl.replace('/view', '/preview')} 
+                                    className="w-full h-full border-none"
+                                    title="Document Preview"
+                                />
+                            ) : previewUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                                <div className="w-full h-full p-8 flex items-center justify-center">
+                                    <img src={previewUrl} alt="Preview" className="max-w-full max-h-full object-contain rounded-2xl shadow-xl" />
+                                </div>
+                            ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 p-8 text-center space-y-4">
+                                    <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
+                                        <AlertCircle size={40} />
+                                    </div>
+                                    <h4 className="text-sm font-black uppercase tracking-widest text-gray-900 dark:text-white">Cannot Preview Directly</h4>
+                                    <p className="text-xs font-medium max-w-xs">
+                                        This file type doesn't support in-app previewing. Please use the button above to open it in a new tab.
+                                    </p>
+                                    <a 
+                                        href={previewUrl} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700"
+                                    >
+                                        Open in New Tab
+                                    </a>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

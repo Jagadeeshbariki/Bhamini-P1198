@@ -66,7 +66,7 @@ async function startServer() {
 
       if (!response.ok) {
         console.error(`ODK Fetch Failed: ${response.status} for ${url}`);
-        return res.status(response.status).send('Failed to fetch image from ODK');
+        return res.status(response.status).json({ error: 'Failed to fetch image from ODK', status: response.status });
       }
 
       const contentType = response.headers.get('content-type');
@@ -143,9 +143,9 @@ async function startServer() {
        dashboardCacheTime = Date.now();
 
        res.json(dashboardCache);
-    } catch(e) {
+    } catch(e: any) {
        console.error("Error fetching ODK dashboard:", e);
-       res.status(500).send("Error fetching ODK dashboard data");
+       res.status(500).json({ error: "Error fetching ODK dashboard data", details: e.message });
     }
   });
 
@@ -209,7 +209,7 @@ async function startServer() {
 
       if (!response.ok) {
         console.error(`ODK OData Fetch Failed: ${response.status} for ${url}`);
-        return res.status(response.status).send('Failed to fetch OData from ODK');
+        return res.status(response.status).json({ error: 'Failed to fetch OData from ODK', status: response.status });
       }
 
       const data = await response.json();
