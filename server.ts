@@ -2,9 +2,8 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 
-async function startServer() {
+export async function createApp() {
   const app = express();
-  const PORT = 3000;
 
   // API routes FIRST
   app.get("/api/health", (req, res) => {
@@ -56,7 +55,6 @@ async function startServer() {
       return res.status(400).send('Missing or invalid params');
     }
 
-    // Ensure submissionId has uuid: prefix
     const fullSubmissionId = submissionId.startsWith('uuid:') ? submissionId : `uuid:${submissionId}`;
     const formId = form && typeof form === 'string' ? form : 'Material_distribution';
 
@@ -90,8 +88,36 @@ async function startServer() {
     }
   });
 
-  
-  let dashboardCache = null;
+  app.get("/api/odk/submissions", async (req, res) => {
+    const { formId } = req.query;
+    if (!formId || typeof formId !== 'string') {
+      return res.status(400).json({ error: 'Missing formId parameter' });
+    }
+
+    try {
+      const token = await getOdkToken();
+      const projectId = process.env.ODK_PROJECT_ID || '3';
+      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}/submissions`;
+      
+      console.log(`[ODK PROXY] Fetching Standard Submissions: ${url}`);
+
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        return res.status(response.status).json({ error: 'ODK Submissions API Failed', details: text });
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
+    }
+  });
+
+  let dashboardCache: any = null;
   let dashboardCacheTime = 0;
 
   app.get("/api/odk/dashboard", async (req, res) => {
@@ -112,10 +138,10 @@ async function startServer() {
          headers: { 'Authorization': `Bearer ${token}` }
        });
        const appUsers = await appUsersRes.json();
-       const usersMap = {};
-       appUsers.forEach(u => usersMap[u.id] = u.displayName);
+       const usersMap: Record<string, string> = {};
+       appUsers.forEach((u: any) => usersMap[u.id] = u.displayName);
 
-       const submissionsData = await Promise.all(forms.map(async (form) => {
+       const submissionsData = await Promise.all(forms.map(async (form: any) => {
            const subRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(form.xmlFormId)}/submissions`, {
              headers: { 'Authorization': `Bearer ${token}` }
            });
@@ -123,14 +149,14 @@ async function startServer() {
            return { formId: form.xmlFormId, formName: form.name, submissions: subs };
        }));
 
-       const rawSubmissions = [];
-       const formsList = [];
+       const rawSubmissions: any[] = [];
+       const formsList: any[] = [];
 
        submissionsData.forEach(formItem => {
            const formSubs = Array.isArray(formItem.submissions) ? formItem.submissions : [];
            formsList.push({ id: formItem.formId, name: formItem.formName });
            
-           formSubs.forEach(sub => {
+           formSubs.forEach((sub: any) => {
                rawSubmissions.push({
                    formId: formItem.formId,
                    userId: sub.submitterId,
@@ -155,11 +181,9 @@ async function startServer() {
     }
   });
 
-  // Generic Proxy Route (for Sheets CSVs, etc.)
   app.get("/api/sheet-proxy", async (req, res) => {
     const { url } = req.query;
     if (!url || typeof url !== 'string') {
-      console.error('Proxy Error: Missing or invalid url parameter');
       return res.status(400).send('Missing url');
     }
 
@@ -175,36 +199,6 @@ async function startServer() {
       res.send(text);
     } catch (error: any) {
       res.status(500).send(`Proxy Error: ${error.message}`);
-    }
-  });
-
-  app.get("/api/odk/submissions", async (req, res) => {
-    const { formId } = req.query;
-    if (!formId || typeof formId !== 'string') {
-      return res.status(400).json({ error: 'Missing formId parameter' });
-    }
-
-    try {
-      const token = await getOdkToken();
-      const projectId = process.env.ODK_PROJECT_ID || '3';
-      // Standard Submissions API
-      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}/submissions`;
-      
-      console.log(`[ODK PROXY] Fetching Standard Submissions: ${url}`);
-
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        return res.status(response.status).json({ error: 'ODK Submissions API Failed', details: text });
-      }
-
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
     }
   });
 
@@ -274,9 +268,15 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  return app;
 }
 
-startServer();
+// Start server if this file is run directly
+if (process.argv[1]?.includes('server.ts') || process.argv[1]?.includes('server.cjs')) {
+  createApp().then(app => {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  });
+}

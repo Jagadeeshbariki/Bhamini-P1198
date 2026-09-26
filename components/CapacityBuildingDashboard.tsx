@@ -147,10 +147,10 @@ const CapacityBuildingDashboard: React.FC = () => {
                     const dashData = JSON.parse(dashText);
                     availableForms = dashData.forms || [];
                 } catch (e) {
-                    throw new Error('Server returned invalid dashboard data. Please try again.');
+                    throw new Error('Server returned invalid dashboard data. This usually means the backend environment variables (ODK_EMAIL/ODK_PASSWORD) are missing on the live link.');
                 }
                 
-                if (!targetId) {
+                if (!targetId && availableForms.length > 0) {
                     // Look for common patterns
                     const matchedForm = availableForms.find((f: any) => 
                         f.id.toLowerCase() === 'capacity_building' ||
@@ -163,6 +163,10 @@ const CapacityBuildingDashboard: React.FC = () => {
                     targetId = matchedForm ? matchedForm.id : (availableForms.find(f => f.name.toLowerCase().includes('training'))?.id || availableForms[0]?.id || 'Capacity_building');
                 }
             } else {
+                const errorText = await dashRes.text();
+                if (errorText.includes('<!DOCTYPE') || errorText.includes('<html')) {
+                    throw new Error(`Failed to fetch ODK project info. The server returned a webpage instead of data. This usually means the backend routes are not working correctly on the live link.`);
+                }
                 throw new Error(`Failed to connect to ODK service (${dashRes.status})`);
             }
 
@@ -181,7 +185,7 @@ const CapacityBuildingDashboard: React.FC = () => {
                 
                 // If it's HTML, it's usually a login redirect or a 404 from ODK
                 if (odataText.includes('<!DOCTYPE') || odataText.includes('<html')) {
-                    throw new Error(`The server returned a webpage instead of data. This usually means the Form ID "${targetId}" is incorrect or OData is disabled for this form.`);
+                    throw new Error(`The ODK Central server returned a webpage instead of data for form "${targetId}". This usually means OData is disabled for this form in ODK Central or the Form ID is incorrect.`);
                 }
                 throw new Error(`Failed to parse ODK data for "${targetId}". The response was not valid JSON.`);
             }
