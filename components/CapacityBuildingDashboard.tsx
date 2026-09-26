@@ -505,13 +505,38 @@ const CapacityBuildingDashboard: React.FC = () => {
 
             {/* Error Message */}
             {error && (
-                <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 p-6 rounded-3xl flex items-center gap-4 text-rose-600">
-                    <AlertCircle size={24} />
-                    <div className="flex-1">
-                        <p className="text-xs font-black uppercase tracking-widest">Connection Error</p>
-                        <p className="text-sm font-medium">{error}</p>
+                <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 p-8 rounded-3xl space-y-6 text-rose-600">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-rose-600 text-white rounded-2xl shadow-lg">
+                            <AlertCircle size={24} />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-xs font-black uppercase tracking-widest opacity-60">Connection Error</p>
+                            <p className="text-sm font-bold">{error}</p>
+                        </div>
+                        <button onClick={() => fetchData()} className="px-6 py-3 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Retry</button>
                     </div>
-                    <button onClick={() => fetchData()} className="px-4 py-2 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Retry</button>
+
+                    {allForms.length > 0 && (
+                        <div className="pt-6 border-t border-rose-200 dark:border-rose-800/50 space-y-4">
+                            <div className="space-y-1">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-rose-800 dark:text-rose-400">Troubleshooting: Available Forms</h4>
+                                <p className="text-[10px] font-medium opacity-70">The app found these forms in Project 3. Please select the correct one:</p>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {allForms.map(f => (
+                                    <button 
+                                        key={f.id}
+                                        onClick={() => fetchData(f.id)}
+                                        className={`p-4 rounded-2xl border text-left transition-all ${formId === f.id ? 'bg-rose-600 text-white border-rose-600 shadow-lg' : 'bg-white dark:bg-gray-950 border-rose-200 dark:border-rose-800 hover:border-rose-400'}`}
+                                    >
+                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-60">ID: {f.id}</p>
+                                        <p className="text-xs font-bold truncate">{f.name}</p>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

@@ -62,7 +62,8 @@ async function startServer() {
 
     try {
       const token = await getOdkToken();
-      const url = `https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(fullSubmissionId)}/attachments/${encodeURIComponent(filename)}`;
+      const projectId = process.env.ODK_PROJECT_ID || '3';
+      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(fullSubmissionId)}/attachments/${encodeURIComponent(filename)}`;
 
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -100,13 +101,14 @@ async function startServer() {
 
     try {
        const token = await getOdkToken();
+       const projectId = process.env.ODK_PROJECT_ID || '3';
        
-       const formRes = await fetch('https://central.wassan.org/v1/projects/3/forms', {
+       const formRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/forms`, {
          headers: { 'Authorization': `Bearer ${token}` }
        });
        const forms = await formRes.json();
 
-       const appUsersRes = await fetch('https://central.wassan.org/v1/projects/3/app-users', {
+       const appUsersRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/app-users`, {
          headers: { 'Authorization': `Bearer ${token}` }
        });
        const appUsers = await appUsersRes.json();
@@ -114,7 +116,7 @@ async function startServer() {
        appUsers.forEach(u => usersMap[u.id] = u.displayName);
 
        const submissionsData = await Promise.all(forms.map(async (form) => {
-           const subRes = await fetch(`https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(form.xmlFormId)}/submissions`, {
+           const subRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(form.xmlFormId)}/submissions`, {
              headers: { 'Authorization': `Bearer ${token}` }
            });
            const subs = await subRes.json();
@@ -176,6 +178,36 @@ async function startServer() {
     }
   });
 
+  app.get("/api/odk/submissions", async (req, res) => {
+    const { formId } = req.query;
+    if (!formId || typeof formId !== 'string') {
+      return res.status(400).json({ error: 'Missing formId parameter' });
+    }
+
+    try {
+      const token = await getOdkToken();
+      const projectId = process.env.ODK_PROJECT_ID || '3';
+      // Standard Submissions API
+      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}/submissions`;
+      
+      console.log(`[ODK PROXY] Fetching Standard Submissions: ${url}`);
+
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        return res.status(response.status).json({ error: 'ODK Submissions API Failed', details: text });
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
+    }
+  });
+
   app.get("/api/odk/odata", async (req, res) => {
     const { formId } = req.query;
     
@@ -185,9 +217,10 @@ async function startServer() {
 
     try {
       const token = await getOdkToken();
-      const url = `https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(formId)}.svc/Submissions`;
+      const projectId = process.env.ODK_PROJECT_ID || '3';
+      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc/Submissions`;
       
-      console.log(`[ODK PROXY] Calling: ${url}`);
+      console.log(`[ODK PROXY] Project: ${projectId}, Form: ${formId}, Calling: ${url}`);
 
       const response = await fetch(url, {
         headers: { 
