@@ -1069,7 +1069,7 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             const fetchSafe = async (url: string) => {
                 if (!url) return { ok: true, text: async () => '' };
                 try {
-                    return await fetch(getProxyUrl(`${url}&cb=${Date.now()}`));
+                    return await fetch(getProxyUrl(url));
                 } catch {
                     return { ok: false, text: async () => '' };
                 }

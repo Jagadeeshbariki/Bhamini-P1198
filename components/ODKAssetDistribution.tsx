@@ -84,7 +84,7 @@ const ODKAssetDistribution: React.FC<Props> = ({ onBack }) => {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                const fetchSafe = (url: string) => fetch(getProxyUrl(`${url}&t=${Date.now()}`)).catch(() => null);
+                const fetchSafe = (url: string) => fetch(getProxyUrl(url)).catch(() => null);
                 
                 const [targetRes, distRes] = await Promise.all([
                     fetchSafe(ASSETS_DATA_URL),

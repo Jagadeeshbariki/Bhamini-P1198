@@ -510,6 +510,7 @@ const CapacityBuildingDashboard: React.FC = () => {
                                 <p className="opacity-70">App Version: {APP_VERSION}</p>
                                 <p className="opacity-70">Endpoint: /api/odk/data</p>
                                 <p className="opacity-70">Resolved Form: {formId}</p>
+                                <p className="opacity-70 text-[10px] break-all">ODK Source: https://central.wassan.org/v1/projects/3/forms/{formId}.svc/Submissions</p>
                             </div>
                             
                             {rawSample && (

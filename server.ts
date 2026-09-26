@@ -29,6 +29,8 @@ export async function createApp() {
       throw new Error('ODK credentials not configured (ODK_EMAIL/ODK_PASSWORD missing)');
     }
 
+    console.log(`[ODK AUTH] Attempting login for: ${email.substring(0, 3)}...${email.split('@')[1] || ''}`);
+
     if (odkSessionToken && Date.now() < tokenExpiresAt - 300000) {
       return odkSessionToken;
     }
@@ -223,7 +225,8 @@ export async function createApp() {
       // Default to OData Submissions if not specified otherwise
       const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc/Submissions`;
       
-      console.log(`[ODK DATA] Project: ${projectId}, Form: ${formId}`);
+      console.log(`[ODK DATA] Attempting: ${url}`);
+      res.setHeader('X-ODK-Target-URL', url);
       
       const response = await fetch(url, {
         headers: { 
@@ -341,6 +344,45 @@ export async function createApp() {
     }
   });
 
+  app.get("/api/odk/debug", async (req, res) => {
+    try {
+      const email = (process.env.ODK_EMAIL || '').trim();
+      const hasEmail = !!email;
+      const hasPass = !!(process.env.ODK_PASSWORD || '').trim();
+      
+      if (!hasEmail || !hasPass) {
+        return res.json({ 
+          status: 'error', 
+          message: 'Missing ODK credentials in environment',
+          env: { hasEmail, hasPass, projectId: process.env.ODK_PROJECT_ID } 
+        });
+      }
+
+      const token = await getOdkToken();
+      const projectId = process.env.ODK_PROJECT_ID || '3';
+      
+      const projectsRes = await fetch(`https://central.wassan.org/v1/projects`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      const projects = await projectsRes.json();
+      
+      res.json({
+        status: 'ok',
+        message: 'Successfully connected to ODK Central',
+        projectId,
+        availableProjects: Array.isArray(projects) ? projects.map((p: any) => ({ id: p.id, name: p.name })) : 'failed to list',
+        auth: 'verified'
+      });
+    } catch (error: any) {
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message,
+        details: 'Failed to verify ODK connectivity'
+      });
+    }
+  });
+
   // API 404 Handler (prevent falling through to HTML)
   app.all(/^\/api\/.*/, (req, res) => {
     res.status(404).json({ 
@@ -368,12 +410,15 @@ export async function createApp() {
   return app;
 }
 
-// Start server if this file is run directly
-if (process.argv[1]?.includes('server.ts') || process.argv[1]?.includes('server.cjs')) {
-  createApp().then(app => {
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
+// Start server
+const isDev = process.env.NODE_ENV !== "production";
+
+createApp().then(app => {
+  const PORT = Number(process.env.PORT) || 3000;
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[SERVER] Ready on http://0.0.0.0:${PORT} (Mode: ${process.env.NODE_ENV || 'development'})`);
   });
-}
+}).catch(err => {
+  console.error("[SERVER] Fatal Error during startup:", err);
+  process.exit(1);
+});
