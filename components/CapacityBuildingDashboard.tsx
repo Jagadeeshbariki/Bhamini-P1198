@@ -176,7 +176,15 @@ const CapacityBuildingDashboard: React.FC = () => {
             try {
                 json = JSON.parse(odataText);
             } catch (e) {
-                throw new Error(`Server returned HTML instead of data for ${targetId}. The form might be empty or misconfigured.`);
+                console.error('Non-JSON response from server:', odataText.substring(0, 500));
+                if (odataText.includes('<!DOCTYPE html>') || odataText.includes('<html')) {
+                    throw new Error(`The server returned a webpage instead of data. This usually means the API route was not found or redirected. (Form: ${targetId})`);
+                }
+                throw new Error(`Invalid response format from server. (Form: ${targetId})`);
+            }
+
+            if (json.error) {
+                throw new Error(`${json.error}: ${json.details || 'No details provided'}`);
             }
 
             const rawSubmissions = json.value || [];

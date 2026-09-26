@@ -16,31 +16,37 @@ async function startServer() {
   let tokenExpiresAt: number = 0;
 
   async function getOdkToken() {
-    const email = process.env.ODK_EMAIL?.trim();
-    const password = process.env.ODK_PASSWORD?.trim();
+    const email = (process.env.ODK_EMAIL || '').trim();
+    const password = (process.env.ODK_PASSWORD || '').trim();
 
     if (!email || !password) {
-      throw new Error('ODK credentials not configured');
+      throw new Error('ODK credentials not configured (ODK_EMAIL/ODK_PASSWORD missing)');
     }
 
     if (odkSessionToken && Date.now() < tokenExpiresAt - 300000) {
       return odkSessionToken;
     }
 
-    const res = await fetch('https://central.wassan.org/v1/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
+    try {
+      const res = await fetch('https://central.wassan.org/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
 
-    if (!res.ok) {
-      throw new Error(`401`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`ODK Auth Failed (${res.status}): ${errorText}`);
+      }
+
+      const data: any = await res.json();
+      odkSessionToken = data.token;
+      tokenExpiresAt = new Date(data.expiresAt).getTime();
+      return odkSessionToken;
+    } catch (e: any) {
+      console.error('ODK Token Exception:', e.message);
+      throw e;
     }
-
-    const data: any = await res.json();
-    odkSessionToken = data.token;
-    tokenExpiresAt = new Date(data.expiresAt).getTime();
-    return odkSessionToken;
   }
 
   app.get("/api/odk/image", async (req, res) => {
@@ -189,7 +195,7 @@ async function startServer() {
     const { formId, query } = req.query;
     
     if (!formId || typeof formId !== 'string') {
-      return res.status(400).send('Missing formId');
+      return res.status(400).json({ error: 'Missing formId' });
     }
 
     try {
@@ -208,15 +214,20 @@ async function startServer() {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
         console.error(`ODK OData Fetch Failed: ${response.status} for ${url}`);
-        return res.status(response.status).json({ error: 'Failed to fetch OData from ODK', status: response.status });
+        return res.status(response.status).json({ 
+          error: 'Failed to fetch OData from ODK', 
+          status: response.status,
+          details: errorText.substring(0, 500)
+        });
       }
 
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
       console.error('ODK OData Proxy Error:', error);
-      res.status(500).send(error.message || 'Internal Server Error');
+      res.status(500).json({ error: 'ODK Proxy Error', details: error.message });
     }
   });
 
@@ -230,7 +241,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
+    app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
