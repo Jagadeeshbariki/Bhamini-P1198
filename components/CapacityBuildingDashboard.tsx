@@ -135,13 +135,14 @@ const CapacityBuildingDashboard: React.FC = () => {
                 availableForms = dashData.forms || [];
                 
                 if (!targetId) {
-                    // Look for common patterns, including exact matches if known
+                    // Look for common patterns
                     const matchedForm = availableForms.find((f: any) => 
-                        f.id === 'Capacity_building' ||
-                        f.id === 'capacity_building' ||
+                        f.id.toLowerCase() === 'capacity_building' ||
+                        f.id.toLowerCase().includes('capacity_building') ||
                         f.name.toLowerCase().includes('capacity building') || 
                         f.name.toLowerCase().includes('training report') ||
-                        f.name.toLowerCase().includes('cb documentation')
+                        f.name.toLowerCase().includes('cb documentation') ||
+                        f.name.toLowerCase().includes('training documentation')
                     );
                     targetId = matchedForm ? matchedForm.id : (availableForms.find(f => f.name.toLowerCase().includes('training'))?.id || availableForms[0]?.id || 'Capacity_building');
                 }
@@ -467,6 +468,18 @@ const CapacityBuildingDashboard: React.FC = () => {
                 </div>
             )}
 
+            {/* Error Message */}
+            {error && (
+                <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 p-6 rounded-3xl flex items-center gap-4 text-rose-600">
+                    <AlertCircle size={24} />
+                    <div className="flex-1">
+                        <p className="text-xs font-black uppercase tracking-widest">Connection Error</p>
+                        <p className="text-sm font-medium">{error}</p>
+                    </div>
+                    <button onClick={() => fetchData()} className="px-4 py-2 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Retry</button>
+                </div>
+            )}
+
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center gap-6 group hover:border-indigo-200 transition-all">
@@ -540,12 +553,37 @@ const CapacityBuildingDashboard: React.FC = () => {
 
             {/* Content Area */}
             {data.length === 0 ? (
-                <div className="bg-white dark:bg-gray-800 p-16 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 text-center space-y-4">
+                <div className="bg-white dark:bg-gray-800 p-16 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 text-center space-y-6">
                     <div className="w-20 h-20 bg-gray-50 dark:bg-gray-900 rounded-full flex items-center justify-center mx-auto text-gray-300">
                         <FileText className="w-10 h-10" />
                     </div>
-                    <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">No Training Data Found</h3>
-                    <p className="text-sm font-medium text-gray-500 max-w-xs mx-auto">Please ensure training data has been submitted via ODK.</p>
+                    <div className="space-y-2">
+                        <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">No Training Data Found</h3>
+                        <p className="text-sm font-medium text-gray-500 max-w-xs mx-auto">
+                            Querying ODK Form: <span className="text-indigo-600 font-bold">{formId}</span>
+                        </p>
+                    </div>
+
+                    {allForms.length > 0 && (
+                        <div className="max-w-xs mx-auto space-y-3">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Select another form:</p>
+                            <select 
+                                value={formId}
+                                onChange={(e) => fetchData(e.target.value)}
+                                className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                            >
+                                {allForms.map(f => (
+                                    <option key={f.id} value={f.id}>{f.name}</option>
+                                ))}
+                            </select>
+                            <button 
+                                onClick={() => fetchData()}
+                                className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all"
+                            >
+                                Retry Connection
+                            </button>
+                        </div>
+                    )}
                 </div>
             ) : viewMode === 'gallery' ? (
                 <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
