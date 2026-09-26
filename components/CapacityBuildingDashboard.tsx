@@ -45,8 +45,6 @@ const CapacityBuildingDashboard: React.FC = () => {
     const [linkedDocs, setLinkedDocs] = useState<{ id: string; name: string; url: string }[]>([]);
     const [loadingDocs, setLoadingDocs] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    const [allForms, setAllForms] = useState<any[]>([]);
-    const [formId, setFormId] = useState<string>('');
     const [debugMode, setDebugMode] = useState(false);
     const [rawSample, setRawSample] = useState<any>(null);
 
@@ -131,49 +129,14 @@ const CapacityBuildingDashboard: React.FC = () => {
         }
     }, [selectedRecord]);
 
-    const fetchData = async (overrideFormId?: string) => {
+    const fetchData = async () => {
         setLoading(true);
         setError(null);
         setRawSample(null);
+        const targetId = 'Capacity_building';
+
         try {
-            // 1. Resolve Form ID
-            const dashRes = await fetch('/api/odk/dashboard');
-            let availableForms: any[] = [];
-            let targetId = overrideFormId || formId;
-            
-            if (dashRes.ok) {
-                const dashText = await dashRes.text();
-                try {
-                    const dashData = JSON.parse(dashText);
-                    availableForms = dashData.forms || [];
-                } catch (e) {
-                    throw new Error('Server returned invalid dashboard data. This usually means the backend environment variables (ODK_EMAIL/ODK_PASSWORD) are missing on the live link.');
-                }
-                
-                if (!targetId && availableForms.length > 0) {
-                    // Look for common patterns
-                    const matchedForm = availableForms.find((f: any) => 
-                        f.id.toLowerCase() === 'capacity_building' ||
-                        f.id.toLowerCase().includes('capacity_building') ||
-                        f.name.toLowerCase().includes('capacity building') || 
-                        f.name.toLowerCase().includes('training report') ||
-                        f.name.toLowerCase().includes('cb documentation') ||
-                        f.name.toLowerCase().includes('training documentation')
-                    );
-                    targetId = matchedForm ? matchedForm.id : (availableForms.find(f => f.name.toLowerCase().includes('training'))?.id || availableForms[0]?.id || 'Capacity_building');
-                }
-            } else {
-                const errorText = await dashRes.text();
-                if (errorText.includes('<!DOCTYPE') || errorText.includes('<html')) {
-                    throw new Error(`Failed to fetch ODK project info. The server returned a webpage instead of data. This usually means the backend routes are not working correctly on the live link.`);
-                }
-                throw new Error(`Failed to connect to ODK service (${dashRes.status})`);
-            }
-
-            setFormId(targetId);
-            setAllForms(availableForms);
-
-            // 2. Fetch OData Submissions with cache buster
+            // Fetch OData Submissions with cache buster
             const res = await fetch(`/api/odk/odata?formId=${encodeURIComponent(targetId)}&_=${Date.now()}`);
             
             const odataText = await res.text();
@@ -183,15 +146,16 @@ const CapacityBuildingDashboard: React.FC = () => {
             } catch (e) {
                 console.error('Non-JSON response from server:', odataText.substring(0, 500));
                 
-                // If it's HTML, it's usually a login redirect or a 404 from ODK
                 if (odataText.includes('<!DOCTYPE') || odataText.includes('<html')) {
-                    throw new Error(`The ODK Central server returned a webpage instead of data for form "${targetId}". This usually means OData is disabled for this form in ODK Central or the Form ID is incorrect.`);
+                    throw new Error(`The server returned a webpage instead of data. This usually means the API route was not found or redirected. (Form: ${targetId})`);
                 }
-                throw new Error(`Failed to parse ODK data for "${targetId}". The response was not valid JSON.`);
+                throw new Error(`Failed to parse ODK data for "${targetId}". The response was not valid JSON. Status: ${res.status}`);
             }
 
             if (!res.ok) {
-                throw new Error(json.error || json.message || `Failed to fetch data (${res.status})`);
+                const details = json.details || json.message || 'No details provided';
+                const errorMsg = json.error || `Failed to fetch data (${res.status})`;
+                throw new Error(`${errorMsg}: ${details}`);
             }
 
             const rawSubmissions = json.value || [];
@@ -438,19 +402,6 @@ const CapacityBuildingDashboard: React.FC = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-4">
-                            <div className="space-y-2">
-                                <p className="text-[10px] font-bold text-gray-500">Active Form ID:</p>
-                                <select 
-                                    value={formId}
-                                    onChange={(e) => fetchData(e.target.value)}
-                                    className="w-full bg-white dark:bg-gray-800 border-none rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none shadow-sm"
-                                >
-                                    {allForms.map(f => (
-                                        <option key={f.id} value={f.id}>{f.name} ({f.id})</option>
-                                    ))}
-                                </select>
-                            </div>
-
                             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-indigo-100 dark:border-indigo-900/50 space-y-3">
                                 <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Schema Verification</p>
                                 <div className="space-y-2">
@@ -520,27 +471,6 @@ const CapacityBuildingDashboard: React.FC = () => {
                         </div>
                         <button onClick={() => fetchData()} className="px-6 py-3 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Retry</button>
                     </div>
-
-                    {allForms.length > 0 && (
-                        <div className="pt-6 border-t border-rose-200 dark:border-rose-800/50 space-y-4">
-                            <div className="space-y-1">
-                                <h4 className="text-[10px] font-black uppercase tracking-widest text-rose-800 dark:text-rose-400">Troubleshooting: Available Forms</h4>
-                                <p className="text-[10px] font-medium opacity-70">The app found these forms in Project 3. Please select the correct one:</p>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {allForms.map(f => (
-                                    <button 
-                                        key={f.id}
-                                        onClick={() => fetchData(f.id)}
-                                        className={`p-4 rounded-2xl border text-left transition-all ${formId === f.id ? 'bg-rose-600 text-white border-rose-600 shadow-lg' : 'bg-white dark:bg-gray-950 border-rose-200 dark:border-rose-800 hover:border-rose-400'}`}
-                                    >
-                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-60">ID: {f.id}</p>
-                                        <p className="text-xs font-bold truncate">{f.name}</p>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
                 </div>
             )}
 
@@ -624,30 +554,9 @@ const CapacityBuildingDashboard: React.FC = () => {
                     <div className="space-y-2">
                         <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">No Training Data Found</h3>
                         <p className="text-sm font-medium text-gray-500 max-w-xs mx-auto">
-                            Querying ODK Form: <span className="text-indigo-600 font-bold">{formId}</span>
+                            The Capacity Building form appears to be empty or inaccessible.
                         </p>
                     </div>
-
-                    {allForms.length > 0 && (
-                        <div className="max-w-xs mx-auto space-y-3">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Select another form:</p>
-                            <select 
-                                value={formId}
-                                onChange={(e) => fetchData(e.target.value)}
-                                className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                            >
-                                {allForms.map(f => (
-                                    <option key={f.id} value={f.id}>{f.name}</option>
-                                ))}
-                            </select>
-                            <button 
-                                onClick={() => fetchData()}
-                                className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all"
-                            >
-                                Retry Connection
-                            </button>
-                        </div>
-                    )}
                 </div>
             ) : viewMode === 'gallery' ? (
                 <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">

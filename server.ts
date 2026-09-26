@@ -203,7 +203,7 @@ export async function createApp() {
   });
 
   app.get("/api/odk/odata", async (req, res) => {
-    const { formId } = req.query;
+    const { formId, query } = req.query;
     
     if (!formId || typeof formId !== 'string') {
       return res.status(400).json({ error: 'Missing formId parameter' });
@@ -212,9 +212,14 @@ export async function createApp() {
     try {
       const token = await getOdkToken();
       const projectId = process.env.ODK_PROJECT_ID || '3';
-      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc/Submissions`;
       
-      console.log(`[ODK PROXY] Project: ${projectId}, Form: ${formId}, Calling: ${url}`);
+      // ODK Central OData normally exposes root submissions through {formId}.svc/Submissions
+      // We will try this by default, but we'll be very descriptive if it fails.
+      const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
+      const url = `${baseUrl}/Submissions${query ? `?${query}` : ''}`;
+      
+      console.log(`[ODK PROXY] Project: ${projectId}, Form: ${formId}`);
+      console.log(`[ODK PROXY] Full URL: ${url}`);
 
       const response = await fetch(url, {
         headers: { 
@@ -225,30 +230,63 @@ export async function createApp() {
       });
 
       const contentType = response.headers.get('content-type') || '';
+      const status = response.status;
       const text = await response.text();
 
+      console.log(`[ODK PROXY] Status: ${status}`);
+      console.log(`[ODK PROXY] Content-Type: ${contentType}`);
+      
       if (!response.ok) {
-        return res.status(response.status).json({ 
-          error: `ODK Central Error (${response.status})`, 
-          details: text.substring(0, 500)
+        console.error(`[ODK PROXY] Fetch failed with status ${status}`);
+        console.error(`[ODK PROXY] Error Body: ${text.substring(0, 1000)}`);
+        
+        // If 404, maybe "Submissions" is not the right EntitySet?
+        if (status === 404) {
+          return res.status(404).json({
+            error: `OData endpoint not found (404).`,
+            details: `The URL '${url}' returned a 404. This might mean the Form ID '${formId}' is incorrect or the OData service does not have a 'Submissions' entity set.`,
+            odkResponse: text.substring(0, 500),
+            suggestedUrl: baseUrl
+          });
+        }
+
+        return res.status(status).json({ 
+          error: `ODK Central Error (${status})`, 
+          details: text.substring(0, 1000),
+          url: url
         });
       }
 
-      if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error(`[ODK PROXY] Response is not JSON. Content-Type: ${contentType}`);
+        
+        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+          return res.status(500).json({
+            error: 'ODK Central returned an HTML page instead of JSON data.',
+            details: 'This usually happens if there is a redirection, a login requirement, or a server-side error that returned an HTML page.',
+            htmlSnippet: text.substring(0, 500)
+          });
+        }
+
         return res.status(500).json({
-          error: 'ODK Central returned an HTML page instead of data.',
-          details: 'This usually means the Form ID is incorrect or OData is not enabled for this form.',
-          formId: formId
+          error: `ODK response is not JSON. Content-Type: ${contentType}`,
+          details: text.substring(0, 500)
         });
       }
 
       try {
         const data = JSON.parse(text);
         res.json(data);
-      } catch (parseError) {
-        res.status(500).json({ error: 'Invalid JSON from ODK', details: text.substring(0, 200) });
+      } catch (parseError: any) {
+        console.error(`[ODK PROXY] JSON Parse Error: ${parseError.message}`);
+        res.status(500).json({ 
+          error: 'Failed to parse ODK response as JSON', 
+          details: text.substring(0, 1000),
+          parseErrorMessage: parseError.message
+        });
       }
     } catch (error: any) {
+      console.error('[ODK PROXY] Exception:', error.message);
       res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
     }
   });
