@@ -498,7 +498,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 beneficiaryMap.set(key, {
                     hhId: hhId,
                     hhHeadName: getVal(row, ['location-farmer_name', 'location-show_farmer_name', 'HH Head Name', 'farmer_name']),
-                    activity: getVal(row, ['activity', 'activity_registration-activity', 'Activity']).replace(/^(BYP-|BFE-|AFT-)/, ''),
+                    activity: getVal(row, ['activity', 'activity_registration-activity', 'Activity']).replace(/^(BYP|BFE|AFT)[-\s]*/i, ''),
                     beneficiaryName: getVal(row, ['Name', 'Beneficiary name', 'bnf_section_-bnf_name_', 'bnf_section-bnf_name', 'bnf_name']),
                     beneficiaryId: bId,
                     age: parseInt(getVal(row, ['age', 'Age', 'bnf_section_-age_', 'bnf_section-age'])) || 0,
@@ -572,18 +572,19 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
 
                 const getContribActivityColumn = (activityName: string) => {
                     if (!activityName) return '';
-                    const l = activityName.toLowerCase().replace(/_/g, ' ');
-                    if (l === 'ns' || l === 'byp-ns') return 'BYP-NS';
-                    if (l === 'bfe' || l === 'byp-bfe') return 'BYP-BFE';
-                    if (l.includes('fisheries')) return 'Fisheries';
-                    if (l === 'crops' || l.includes('crop models')) return 'Crop Models';
-                    if (l === 'eco-farmpond' || l === 'eco farmpond') return 'Eco-Farmpond';
-                    if (l === 'processing hubs' || l.includes('processing')) return 'Processing Hubs';
-                    if (l === 'asc') return 'ASC';
-                    if (l === 'goatery' || l.includes('goat shed') || l === 'goat') return 'goatery';
-                    if (l === 'mobile irrigation') return 'Mobile Irrigation';
-                    if (l === 'fixed irrigation' || l.includes('fixed')) return 'Fixed Irrigation';
-                    if (l.includes('irrigation')) return 'Mobile Irrigation';
+                    const clean = activityName.toUpperCase().replace(/^(BYP|BFE|AFT)[-\s]*/, '').replace(/[\s_-]/g, '');
+                    
+                    if (clean === 'NS') return 'BYP-NS';
+                    if (clean === 'BFE') return 'BYP-BFE';
+                    if (clean.includes('FISHERIES')) return 'Fisheries';
+                    if (clean === 'CROPS' || clean.includes('CROPMODELS')) return 'Crop Models';
+                    if (clean === 'ECOFARMPOND') return 'Eco-Farmpond';
+                    if (clean === 'PROCESSINGHUBS' || clean.includes('PROCESSING')) return 'Processing Hubs';
+                    if (clean === 'ASC') return 'ASC';
+                    if (clean === 'GOATERY' || clean.includes('GOATSHED') || clean === 'GOAT') return 'goatery';
+                    if (clean === 'MOBILEIRRIGATION') return 'Mobile Irrigation';
+                    if (clean === 'FIXEDIRRIGATION' || clean.includes('FIXED')) return 'Fixed Irrigation';
+                    if (clean.includes('IRRIGATION')) return 'Mobile Irrigation';
                     return activityName;
                 };
 
@@ -649,39 +650,24 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 // Merge distribution data
                 distData.forEach(b => {
                     const key = b.beneficiaryId;
-                    const hhId = b.hhId;
+                    if (key && mergedMap.has(key)) {
+                        const existing = mergedMap.get(key)!;
+                        
+                        b.assets.forEach(a => {
+                            a.targetContribution = assetContributionMap.get(a.materialId.trim().toLowerCase()) 
+                                || assetContributionMap.get(a.code.trim().toLowerCase()) 
+                                || 0;
+                        });
 
-                    b.assets.forEach(a => {
-                        a.targetContribution = assetContributionMap.get(a.materialId.trim().toLowerCase()) 
-                            || assetContributionMap.get(a.code.trim().toLowerCase()) 
-                            || 0;
-                    });
-
-                    if (key) {
-                        if (mergedMap.has(key)) {
-                            const existing = mergedMap.get(key)!;
-                            // Add assets from distribution list
-                            if (b.assets.length > 0) {
-                                // Avoid duplicates if any
-                                b.assets.forEach(newAsset => {
-                                    const isDuplicate = existing.assets.some(a => 
-                                        a.label === newAsset.label && a.date === newAsset.date
-                                    );
-                                    if (!isDuplicate) existing.assets.push(newAsset);
-                                });
-                            }
-                        } else {
-                            // If not in master, add as new (though usually they should be in master)
-                            const cRow = hhId ? contribMap.get(hhId.toString().trim()) : undefined;
-                            let contrib = 0;
-                            if (cRow) {
-                                const colName = getContribActivityColumn(b.activity);
-                                if (colName && cRow[colName]) {
-                                    contrib = parseFloat(cRow[colName]) || 0;
-                                }
-                            }
-                            b.contribution = contrib;
-                            mergedMap.set(key, b);
+                        // Add assets from distribution list
+                        if (b.assets.length > 0) {
+                            // Avoid duplicates
+                            b.assets.forEach(newAsset => {
+                                const isDuplicate = existing.assets.some(a => 
+                                    a.label === newAsset.label && a.date === newAsset.date
+                                );
+                                if (!isDuplicate) existing.assets.push(newAsset);
+                            });
                         }
                     }
                 });
