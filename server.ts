@@ -356,7 +356,7 @@ export async function createApp() {
       
       // 5. Call ODK Central with timeout
       const controller = new AbortController();
-      const timeoutMs = 9000; // Lowered to 9s to stay under Vercel's 10s limit
+      const timeoutMs = 20000; // Increased to 20s to handle "massing" data
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
@@ -578,17 +578,22 @@ export async function createApp() {
   app.get("/api/odk/status", async (req, res) => {
     try {
       const email = (process.env.ODK_EMAIL || '').trim();
-      if (!email) return res.json({ status: 'error', message: 'ODK_EMAIL not configured' });
+      if (!email) return res.status(200).json({ status: 'error', message: 'ODK_EMAIL not configured' });
       
       const token = await getOdkToken();
       const projectId = await getProjectId();
       
       const projectRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: AbortSignal.timeout(5000)
       });
       
       if (!projectRes.ok) {
-        return res.json({ status: 'error', message: `ODK Central connection failed: ${projectRes.status}` });
+        return res.status(200).json({ 
+          status: 'error', 
+          message: `ODK Central connection failed: ${projectRes.status}`,
+          projectId 
+        });
       }
       
       const projectData = await projectRes.json();
@@ -596,10 +601,14 @@ export async function createApp() {
         status: 'ok', 
         project: projectData.name, 
         projectId: projectData.id,
-        email: email.split('@')[0] + '@...' // Mask email
+        email: email.split('@')[0] + '@...' 
       });
     } catch (e: any) {
-      res.json({ status: 'error', message: e.message });
+      console.error("[STATUS API ERROR]", e);
+      res.status(200).json({ 
+        status: 'error', 
+        message: e.name === 'AbortError' ? 'ODK status check timed out' : e.message 
+      });
     }
   });
 
@@ -644,12 +653,15 @@ export async function createApp() {
 }
 
 // Start server
-const PORT = Number(process.env.PORT) || 3000;
-createApp().then(app => {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Listening on port ${PORT} (Mode: ${process.env.NODE_ENV || 'production'})`);
+const isVercel = !!process.env.VERCEL;
+if (!isVercel) {
+  const PORT = Number(process.env.PORT) || 3000;
+  createApp().then(app => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[SERVER] Listening on port ${PORT} (Mode: ${process.env.NODE_ENV || 'production'})`);
+    });
+  }).catch(err => {
+    console.error("[SERVER] Fatal Error during startup:", err);
+    process.exit(1);
   });
-}).catch(err => {
-  console.error("[SERVER] Fatal Error during startup:", err);
-  process.exit(1);
-});
+}
