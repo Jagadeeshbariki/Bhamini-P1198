@@ -5,7 +5,8 @@ import {
     GOOGLE_SHEET_CSV_URL, 
     GOOGLE_APPS_SCRIPT_URL, 
     GOOGLE_SHEET_PHOTOS_URL,
-    getProxyUrl
+    getProxyUrl,
+    APP_VERSION
 } from '../config';
 import { generateCalendarDays } from '../utils/calendar';
 
@@ -297,8 +298,13 @@ const AdminPage: React.FC = () => {
     return (
         <div className="space-y-8 w-full mx-auto px-4 md:px-0">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                <div>
-                    <h1 className="text-3xl font-black text-gray-900 dark:text-white uppercase">Admin Console</h1>
+                <div className="flex flex-col">
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-3xl font-black text-gray-900 dark:text-white uppercase">Admin Console</h1>
+                        <span className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 text-[10px] font-black rounded-lg border border-indigo-100 dark:border-indigo-800">
+                            v{APP_VERSION}
+                        </span>
+                    </div>
                     <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mt-1">Project Management Hub</p>
                 </div>
                 <div className="flex bg-gray-100 dark:bg-gray-800 p-1.5 rounded-2xl shadow-inner border border-gray-200 dark:border-gray-700 overflow-x-auto no-scrollbar">
