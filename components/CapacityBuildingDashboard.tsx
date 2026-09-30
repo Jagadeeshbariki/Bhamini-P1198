@@ -150,29 +150,12 @@ const CapacityBuildingDashboard: React.FC = () => {
         checkOdkStatus();
         
         try {
-            // 1. Resolve the correct Form ID by searching for "Capacity Building" specifically
-            let targetId = 'Capacity_building'; // Default hardcoded ID
-            try {
-                const dashRes = await fetch('/api/odk/dashboard');
-                if (dashRes.ok) {
-                    const dashData = await dashRes.json();
-                    const forms = dashData.forms || [];
-                    const matchedForm = forms.find((f: any) => 
-                        f.id === 'Capacity_building' ||
-                        f.name.toLowerCase().includes('capacity building')
-                    );
-                    if (matchedForm) {
-                        targetId = matchedForm.id;
-                        setFormId(targetId);
-                        console.log(`[Dashboard] Resolved Capacity Building form to ID: ${targetId}`);
-                    }
-                }
-            } catch (dashErr) {
-                console.warn("[Dashboard] Could not fetch ODK dashboard for auto-discovery:", dashErr);
-            }
-
-            // 2. Fetch OData Submissions
-            const res = await fetch(`/api/odk/data?formId=${encodeURIComponent(targetId)}`);
+            // Use the specific Form ID requested by the user
+            const targetId = 'Capacity_building';
+            setFormId(targetId);
+            
+            // Fetch OData Submissions using the robust proxy
+            const res = await fetch(`/api/odk/data?formId=${encodeURIComponent(targetId)}&projectId=3`);
             
             const odataText = await res.text();
             let json;
