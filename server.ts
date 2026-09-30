@@ -84,52 +84,20 @@ export async function createApp() {
       const projects = await res.json();
       
       if (Array.isArray(projects) && projects.length > 0) {
-        // PRIORITIZE Project 3 as per user image and previous successful config
+        // Prioritize Project 3 as per user request
         const project3 = projects.find(p => String(p.id) === '3');
         if (project3) {
           resolvedProjectId = '3';
-          console.log(`[ODK CONFIG] Prioritized Project ID 3 as requested`);
           return '3';
         }
-
-        console.log(`[ODK CONFIG] Found ${projects.length} projects. Probing for correct project...`);
-        
-        // Try to find the project that actually contains our target forms
-        for (const p of projects) {
-          try {
-            const pid = String(p.id);
-            const formsRes = await fetch(`https://central.wassan.org/v1/projects/${pid}/forms`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (formsRes.ok) {
-              const forms = await formsRes.json();
-              const hasTargetForm = forms.some((f: any) => 
-                f.xmlFormId === 'Capacity_building' || 
-                f.xmlFormId === 'Material_distribution' ||
-                f.xmlFormId === 'NF- Activities' ||
-                f.name.toLowerCase().includes('capacity building') ||
-                f.name.toLowerCase().includes('activities')
-              );
-              if (hasTargetForm) {
-                resolvedProjectId = pid;
-                console.log(`[ODK CONFIG] Auto-resolved Project ID to: ${resolvedProjectId} (Target forms found)`);
-                return resolvedProjectId;
-              }
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-
         resolvedProjectId = String(projects[0].id);
-        console.log(`[ODK CONFIG] No form match, defaulting to first available Project: ${resolvedProjectId}`);
         return resolvedProjectId;
       }
       
-      resolvedProjectId = '3'; // Last resort fallback
+      resolvedProjectId = '3'; // Fallback
       return resolvedProjectId;
-    } catch (e) {
-      console.warn('[ODK CONFIG] Project resolution failed, defaulting to 3:', e);
+    } catch (e: any) {
+      console.warn('[ODK CONFIG] Project resolution failed:', e.message);
       return '3';
     }
   }
@@ -335,35 +303,28 @@ export async function createApp() {
   });
 
   app.get("/api/odk/data", async (req, res) => {
-    const { projectId: queryProjectId, formId, limit } = req.query;
-    
-    // 1. Validate formId
-    if (!formId || typeof formId !== 'string') {
-      return res.status(400).json({ error: 'Missing formId parameter' });
-    }
-
-    // 2. Log received formId
-    console.log(`[DIAGNOSTIC] Received formId: ${formId}`);
-
     try {
-      const token = await getOdkToken();
-      // Use query param if provided, otherwise resolve
-      const projectId = queryProjectId || await getProjectId();
+      const { projectId: queryProjectId, formId, limit } = req.query;
       
-      // 3. Construct the exact ODK URL
-      // OData Submissions endpoint
-      let url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId as string)}.svc/Submissions`;
-      
-      // Support for test query (limit translated to $top)
-      if (limit) {
-        url += `?$top=${limit}`;
+      if (!formId || typeof formId !== 'string') {
+        return res.status(400).json({ error: 'Missing formId parameter' });
       }
 
-      // 5. Log final requested URL WITHOUT credentials
-      console.log(`[DIAGNOSTIC] Final ODK URL: ${url}`);
-      res.setHeader('X-ODK-Target-URL', url);
+      const token = await getOdkToken();
+      const projectId = queryProjectId || await getProjectId();
       
-      // 4. Make authenticated request
+      // Construct OData Submissions URL
+      const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
+      let url = `${baseUrl}/Submissions`;
+      if (limit) url += `?$top=${limit}`;
+      
+      // Safe diagnostic logging
+      console.log("ODK DATA REQUEST", {
+        projectId,
+        formId,
+        urlWithoutCredentials: url
+      });
+
       const response = await fetch(url, {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -372,51 +333,45 @@ export async function createApp() {
         cache: 'no-store'
       });
 
-      // 5. Log HTTP status, statusText, content-type
-      const status = response.status;
-      const statusText = response.statusText;
-      const contentType = response.headers.get('content-type') || 'unknown';
-      
-      console.log(`[DIAGNOSTIC] ODK Response Status: ${status}`);
-      console.log(`[DIAGNOSTIC] ODK Response StatusText: ${statusText}`);
-      console.log(`[DIAGNOSTIC] ODK Content-Type: ${contentType}`);
-
-      // 6. Read as TEXT first
       const text = await response.text();
+
+      console.log("ODK RESPONSE", {
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers.get("content-type"),
+        bodyPreview: text.substring(0, 1000)
+      });
       
-      // 7. Handle non-2xx response
       if (!response.ok) {
-        console.error(`[DIAGNOSTIC] ODK Request Failed`);
-        return res.status(status).json({ 
-          error: "ODK request failed",
-          odkStatus: status,
-          odkStatusText: statusText,
-          odkResponse: text.substring(0, 1000),
+        return res.status(response.status).json({ 
+          error: "ODK Request Failed",
+          status: response.status,
+          statusText: response.statusText,
+          details: text.substring(0, 1000),
           requestedUrl: url
         });
       }
 
-      // 8. Safely parse JSON
       try {
         const data = JSON.parse(text);
-        // 9. Return OData response
         res.json(data);
       } catch (parseError: any) {
-        console.error(`[DIAGNOSTIC] JSON Parse Error: ${parseError.message}`);
+        console.error("ODK DATA JSON PARSE ERROR:", parseError);
         res.status(500).json({ 
-          error: 'Failed to parse ODK response as JSON',
+          error: 'Failed to parse ODK response',
           details: parseError.message,
-          rawResponse: text.substring(0, 1000)
+          rawResponse: text.substring(0, 500)
         });
       }
     } catch (error: any) {
-      // 5. Log failure if it occurs before receiving response
-      console.error(`[DIAGNOSTIC] Failure before/during request: ${error.message}`);
-      const status = error.status || 500;
-      res.status(status).json({ 
-        error: error.message || 'Internal Proxy Error', 
-        details: error.details || error.message,
-        source: 'ODK_DATA_DIAGNOSTIC'
+      console.error("ODK DATA API ERROR:", error);
+
+      return res.status(500).json({
+        error: "ODK data API failed",
+        message: error instanceof Error ? error.message : String(error),
+        stack: process.env.NODE_ENV === "development"
+           ? (error instanceof Error ? error.stack : undefined)
+           : undefined
       });
     }
   });

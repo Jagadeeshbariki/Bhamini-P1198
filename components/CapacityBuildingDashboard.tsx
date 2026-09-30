@@ -144,9 +144,9 @@ const CapacityBuildingDashboard: React.FC = () => {
                 const dashData = await dashRes.json();
                 const forms = dashData.forms || [];
                 const matchedForm = forms.find((f: any) => 
+                    f.id === 'Capacity_building' ||
                     f.id === 'NF- Activities' ||
                     f.name === 'NF- Activities' || 
-                    f.id === 'Capacity_building' ||
                     f.name.toLowerCase().includes('capacity building') ||
                     f.name.toLowerCase().includes('training')
                 );
