@@ -47,7 +47,19 @@ export async function createApp() {
 
       if (!res.ok) {
         const errorText = await res.text();
-        throw new Error(`ODK Auth Failed (${res.status}): ${errorText}`);
+        const status = res.status;
+        
+        let message = `ODK Auth Failed (${status})`;
+        if (status === 401) {
+          message = "Invalid ODK Central credentials. Please check your ODK_EMAIL and ODK_PASSWORD.";
+        } else if (status === 403) {
+          message = "Access forbidden. Your ODK user might not have sufficient permissions.";
+        }
+        
+        const err = new Error(message) as any;
+        err.status = status;
+        err.details = errorText;
+        throw err;
       }
 
       const data: any = await res.json();
@@ -55,7 +67,7 @@ export async function createApp() {
       tokenExpiresAt = new Date(data.expiresAt).getTime();
       return odkSessionToken;
     } catch (e: any) {
-      console.error('ODK Token Exception:', e.message);
+      console.error('[ODK AUTH] Error:', e.message);
       throw e;
     }
   }
@@ -125,7 +137,12 @@ export async function createApp() {
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
-      res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
+      const status = error.status || 500;
+      res.status(status).json({ 
+        error: error.message || 'Internal Proxy Error', 
+        details: error.details || error.message,
+        source: 'ODK_SUBMISSIONS'
+      });
     }
   });
 
@@ -189,7 +206,12 @@ export async function createApp() {
        res.json(dashboardCache);
     } catch(e: any) {
        console.error("Error fetching ODK dashboard:", e);
-       res.status(500).json({ error: "Error fetching ODK dashboard data", details: e.message });
+       const status = e.status || 500;
+       res.status(status).json({ 
+         error: e.message || "Error fetching ODK dashboard data", 
+         details: e.details || e.message,
+         source: 'ODK_DASHBOARD'
+       });
     }
   });
 
@@ -255,7 +277,12 @@ export async function createApp() {
         res.status(500).json({ error: 'Failed to parse ODK response as JSON' });
       }
     } catch (error: any) {
-      res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
+      const status = error.status || 500;
+      res.status(status).json({ 
+        error: error.message || 'Internal Proxy Error', 
+        details: error.details || error.message,
+        source: 'ODK_DATA'
+      });
     }
   });
 
@@ -342,9 +369,29 @@ export async function createApp() {
         });
       }
     } catch (error: any) {
-      console.error('[ODK PROXY] Exception:', error.message);
-      res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
+      const status = error.status || 500;
+      res.status(status).json({ 
+        error: error.message || 'Internal Proxy Error', 
+        details: error.details || error.message,
+        source: 'ODK_ODATA'
+      });
     }
+  });
+
+  app.get("/api/odk-status", (req, res) => {
+    const email = (process.env.ODK_EMAIL || '').trim();
+    const password = (process.env.ODK_PASSWORD || '').trim();
+    
+    res.json({
+      status: "online",
+      email_configured: !!email,
+      password_configured: !!password,
+      odk_configured: !!(email && password),
+      google_configured: false, // Not using Google Sheets for this specifically
+      env: process.env.NODE_ENV || "development",
+      is_vercel: !!process.env.VERCEL,
+      timestamp: new Date().toISOString()
+    });
   });
 
   app.get("/api/odk/debug", async (req, res) => {

@@ -159,7 +159,13 @@ const CapacityBuildingDashboard: React.FC = () => {
             // 2. Fetch OData Submissions
             const res = await fetch(`/api/odk/data?projectId=3&formId=${encodeURIComponent(targetId)}`);
             
-            const odataText = await res.text();
+            let odataText = '';
+            try {
+                odataText = await res.text();
+            } catch (e) {
+                throw new Error(`Failed to read response from server. Status: ${res.status}`);
+            }
+
             let json;
             try {
                 json = JSON.parse(odataText);
@@ -167,7 +173,7 @@ const CapacityBuildingDashboard: React.FC = () => {
                 console.error('Non-JSON response from server:', odataText.substring(0, 500));
                 
                 if (odataText.includes('<!DOCTYPE') || odataText.includes('<html')) {
-                    throw new Error(`The server returned a webpage instead of data. This usually means the API route was not found or redirected. (Resolved ID: ${targetId})`);
+                    throw new Error(`The server returned a webpage instead of data. This usually means the API route was not found or redirected. (Status: ${res.status})`);
                 }
                 throw new Error(`Failed to parse ODK data for "${targetId}". The response was not valid JSON. Status: ${res.status}`);
             }
@@ -176,8 +182,9 @@ const CapacityBuildingDashboard: React.FC = () => {
                 const details = json.details || json.message || 'No details provided';
                 const errorMsg = json.error || `Failed to fetch data (${res.status})`;
                 
-                if (res.status === 500 && (details.includes('Auth') || details.includes('credentials'))) {
-                     throw new Error(`Authentication Error: Please ensure ODK_EMAIL and ODK_PASSWORD are configured in your Vercel Project Settings.`);
+                // Check for explicit auth errors
+                if (res.status === 401 || details.includes('credentials') || details.includes('Auth')) {
+                     throw new Error(`Invalid ODK Credentials: Please verify your ODK_EMAIL and ODK_PASSWORD in Vercel settings.`);
                 }
                 
                 throw new Error(`${errorMsg}: ${details}`);
