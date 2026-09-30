@@ -612,7 +612,9 @@ export async function createApp() {
     });
   });
 
-  // Vite middleware for development
+  // Serve static files and SPA fallback
+  const distPath = path.join(process.cwd(), 'dist');
+  
   if (process.env.NODE_ENV !== "production") {
     console.log("[SERVER] Initializing Vite...");
     try {
@@ -625,19 +627,15 @@ export async function createApp() {
       console.log("[SERVER] Vite initialized");
     } catch (e: any) {
       console.error("[SERVER] Failed to initialize Vite:", e.message);
-      // In production environment where devDeps might be missing but NODE_ENV is not set
-      console.warn("[SERVER] Falling back to static mode despite non-production NODE_ENV");
-      const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
-      app.get('(.*)', (req, res) => {
+      app.get('*', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }
   } else {
-    console.log("[SERVER] Production mode: Serving static files from /dist");
-    const distPath = path.join(process.cwd(), 'dist');
+    console.log(`[SERVER] Production mode: Serving from ${distPath}`);
     app.use(express.static(distPath));
-    app.get('(.*)', (req, res) => {
+    app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
@@ -645,12 +643,13 @@ export async function createApp() {
   return app;
 }
 
-// Start server if not imported as a function
-if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+// Start server
+const isVercel = !!process.env.VERCEL;
+if (!isVercel) {
   createApp().then(app => {
     const PORT = Number(process.env.PORT) || 3000;
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`[SERVER] Ready on http://0.0.0.0:${PORT} (Mode: ${process.env.NODE_ENV || 'development'})`);
+      console.log(`[SERVER] Listening on port ${PORT} (Mode: ${process.env.NODE_ENV || 'development'})`);
     });
   }).catch(err => {
     console.error("[SERVER] Fatal Error during startup:", err);
