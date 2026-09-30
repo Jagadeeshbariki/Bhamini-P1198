@@ -251,11 +251,11 @@ const CapacityBuildingDashboard: React.FC = () => {
                     return null;
                 };
 
-                const topicKeywords = ['Event_name', 'topic', 'training_topic', 'activity', 'training_name', 'Subject', 'Activity', 'Title', 'Training', 'Name'];
-                const dateKeywords = ['from_date', 'date', 'today', 'reporting_date', 'training_date', 'Time'];
-                const participantKeywords = ['total_members', 'participants', 'no_of_participants', 'attendees', 'attendance', 'total', 'count', 'Number', 'Impact'];
-                const trainerKeywords = ['Data_sub_by', 'trainer', 'resource_person', 'facilitator', 'name_of_trainer', 'Resource'];
-                const photoKeywords = ['photo', 'image', 'picture', 'pic', 'attachment', 'Documentation'];
+                const topicKeywords = ['Event_name', 'topic', 'training_topic', 'activity', 'training_name', 'Subject', 'Activity', 'Title', 'Training', 'Name', 'Event'];
+                const dateKeywords = ['from_date', 'date', 'today', 'reporting_date', 'training_date', 'Time', 'Event_Date'];
+                const participantKeywords = ['total_members', 'participants', 'no_of_participants', 'attendees', 'attendance', 'total', 'count', 'Number', 'Impact', 'Members'];
+                const trainerKeywords = ['Data_sub_by', 'trainer', 'resource_person', 'facilitator', 'name_of_trainer', 'Resource', 'Staff_Name'];
+                const photoKeywords = ['photo', 'image', 'picture', 'pic', 'attachment', 'Documentation', 'Photo'];
 
                 let topic = findInFlat(topicKeywords);
                 if (!topic || typeof topic !== 'string') {
@@ -517,7 +517,7 @@ const CapacityBuildingDashboard: React.FC = () => {
                                 <p className="opacity-70">App Version: {APP_VERSION}</p>
                                 <p className="opacity-70">Endpoint: /api/odk/data</p>
                                 <p className="opacity-70">Resolved Form: {formId}</p>
-                                <p className="opacity-70 text-[10px] break-all">ODK Source: https://central.wassan.org/v1/projects/3/forms/{formId}.svc/Submissions</p>
+                                <p className="opacity-70 text-[10px] break-all italic">The system is using your ODK account credentials to fetch data for form "{formId}".</p>
                             </div>
                             
                             {rawSample && (
