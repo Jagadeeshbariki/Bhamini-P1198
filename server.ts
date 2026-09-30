@@ -701,14 +701,14 @@ export async function createApp() {
     } catch (e: any) {
       console.error("[SERVER] Failed to initialize Vite:", e.message);
       app.use(express.static(distPath));
-      app.get('*', (req, res) => {
+      app.get('(.*)', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }
   } else {
     console.log(`[SERVER] Production mode: Serving from ${distPath}`);
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('(.*)', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
