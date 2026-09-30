@@ -1,38 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { odkFetch } from '../_lib/odk';
 
-let odkSessionToken: string | null = null;
-let tokenExpiresAt: number = 0;
+export const runtime = 'nodejs';
 
 let dashboardCache: any = null;
 let dashboardCacheTime: number = 0;
-
-async function getOdkToken() {
-    const email = process.env.ODK_EMAIL?.trim();
-    const password = process.env.ODK_PASSWORD?.trim();
-
-    if (!email || !password) {
-        throw new Error('ODK credentials not configured');
-    }
-
-    if (odkSessionToken && Date.now() < tokenExpiresAt - 300000) {
-        return odkSessionToken;
-    }
-
-    const res = await fetch('https://central.wassan.org/v1/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-    });
-
-    if (!res.ok) {
-        throw new Error(`401`);
-    }
-
-    const data = await res.json();
-    odkSessionToken = data.token;
-    tokenExpiresAt = new Date(data.expiresAt).getTime();
-    return odkSessionToken;
-}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (dashboardCache && Date.now() - dashboardCacheTime < 300000) {
@@ -40,26 +12,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-       const token = await getOdkToken();
+       const projectId = process.env.ODK_PROJECT_ID || '3';
        
-       const formRes = await fetch('https://central.wassan.org/v1/projects/3/forms', {
-         headers: { 'Authorization': `Bearer ${token}` }
-       });
-       const forms = await formRes.json();
+       // 1. Fetch Forms
+       const forms = await odkFetch(`https://central.wassan.org/v1/projects/${projectId}/forms`);
 
-       const appUsersRes = await fetch('https://central.wassan.org/v1/projects/3/app-users', {
-         headers: { 'Authorization': `Bearer ${token}` }
-       });
-       const appUsers = await appUsersRes.json();
+       // 2. Fetch App Users
+       const appUsers = await odkFetch(`https://central.wassan.org/v1/projects/${projectId}/app-users`);
+       
        const usersMap: Record<string, string> = {};
-       appUsers.forEach((u: any) => usersMap[u.id] = u.displayName);
+       if (Array.isArray(appUsers)) {
+         appUsers.forEach((u: any) => usersMap[u.id] = u.displayName);
+       }
 
+       // 3. Fetch Submissions for all forms
        const submissionsData = await Promise.all(forms.map(async (form: any) => {
-           const subRes = await fetch(`https://central.wassan.org/v1/projects/3/forms/${encodeURIComponent(form.xmlFormId)}/submissions`, {
-             headers: { 'Authorization': `Bearer ${token}` }
-           });
-           const subs = await subRes.json();
-           return { formId: form.xmlFormId, formName: form.name, submissions: subs };
+           try {
+             const subs = await odkFetch(`https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(form.xmlFormId)}/submissions`);
+             return { formId: form.xmlFormId, formName: form.name, submissions: subs };
+           } catch (err) {
+             console.error(`Failed to fetch submissions for form ${form.xmlFormId}:`, err);
+             return { formId: form.xmlFormId, formName: form.name, submissions: [] };
+           }
        }));
 
        const rawSubmissions: any[] = [];
@@ -69,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
            const formSubs = Array.isArray(formItem.submissions) ? formItem.submissions : [];
            formsList.push({ id: formItem.formId, name: formItem.formName });
            
-           formSubs.forEach(sub => {
+           formSubs.forEach((sub: any) => {
                rawSubmissions.push({
                    formId: formItem.formId,
                    userId: sub.submitterId,
@@ -92,9 +66,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        res.json(dashboardCache);
     } catch(e: any) {
        console.error("Error fetching ODK dashboard:", e);
-       if (e.message === '401') {
-           return res.status(401).send('ODK Authentication Failed');
-       }
-       res.status(500).send("Error fetching ODK dashboard data");
+       res.status(500).json({
+         error: "Error fetching ODK dashboard data",
+         message: e.message
+       });
     }
 }
