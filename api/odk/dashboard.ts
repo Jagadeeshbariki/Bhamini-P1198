@@ -46,16 +46,17 @@ async function getOdkToken() {
   }
 }
 
-async function odkFetch(url: string) {
+async function odkFetch(url: string, timeout = 12000) {
   const token = await getOdkToken();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
     const res = await fetch(url, {
       headers: { 
         'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'User-Agent': 'Bhamini-P1198/1.0'
       },
       signal: controller.signal
     });
@@ -80,26 +81,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        const projectId = process.env.ODK_PROJECT_ID || '3';
        
        // 1. Fetch Forms
-       const forms = await odkFetch(`https://central.wassan.org/v1/projects/${projectId}/forms`);
+       const forms = await odkFetch(`https://central.wassan.org/v1/projects/${projectId}/forms`, 8000);
 
        // 2. Fetch App Users
-       const appUsers = await odkFetch(`https://central.wassan.org/v1/projects/${projectId}/app-users`);
+       const appUsers = await odkFetch(`https://central.wassan.org/v1/projects/${projectId}/app-users`, 8000);
        
        const usersMap: Record<string, string> = {};
        if (Array.isArray(appUsers)) {
          appUsers.forEach((u: any) => usersMap[u.id] = u.displayName);
        }
 
-       // 3. Fetch Submissions for all forms
-       const submissionsData = await Promise.all(forms.map(async (form: any) => {
+       // 3. Fetch Submissions for forms - Sequential or limited parallel to avoid Vercel timeout
+       // We only fetch submissions for the first 15 forms to keep it within Vercel's 10s limit
+       const formsToFetch = Array.isArray(forms) ? forms.slice(0, 15) : [];
+       
+       const submissionsData = [];
+       for (const form of formsToFetch) {
            try {
-             const subs = await odkFetch(`https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(form.xmlFormId)}/submissions`);
-             return { formId: form.xmlFormId, formName: form.name, submissions: subs };
+             // Shorter timeout per form
+             const subs = await odkFetch(`https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(form.xmlFormId)}/submissions`, 3000);
+             submissionsData.push({ formId: form.xmlFormId, formName: form.name, submissions: subs });
            } catch (err) {
              console.error(`Failed to fetch submissions for form ${form.xmlFormId}:`, err);
-             return { formId: form.xmlFormId, formName: form.name, submissions: [] };
+             submissionsData.push({ formId: form.xmlFormId, formName: form.name, submissions: [] });
            }
-       }));
+       }
 
        const rawSubmissions: any[] = [];
        const formsList: any[] = [];

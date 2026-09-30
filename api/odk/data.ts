@@ -41,7 +41,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!formId) return res.status(400).json({ error: 'Missing formId' });
 
+    console.log(`[ODK DATA] Request for Project: ${projectId}, Form: ${formId}, Limit: ${limit || 'None'}`);
+
     const token = await getOdkToken();
+    // OData Submissions URL
     const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
     let url = `${baseUrl}/Submissions`;
     
@@ -50,27 +53,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     params.append('$count', 'true');
     url += `?${params.toString()}`;
 
+    console.log(`[ODK DATA] Fetching: ${url}`);
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s for data
 
     try {
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+        headers: { 
+          'Authorization': `Bearer ${token}`, 
+          'Accept': 'application/json',
+          'User-Agent': 'Bhamini-P1198/1.0'
+        },
         signal: controller.signal
       });
       clearTimeout(timeoutId);
       const text = await response.text();
 
+      console.log(`[ODK DATA] Status: ${response.status}, Length: ${text.length}`);
+
       if (!response.ok) {
-        return res.status(response.status).json({ error: "ODK request failed", details: text.substring(0, 500) });
+        return res.status(response.status).json({ 
+          error: "ODK request failed", 
+          odkStatus: response.status,
+          details: text.substring(0, 500) 
+        });
       }
 
-      return res.json(JSON.parse(text));
-    } catch (err) {
+      const data = JSON.parse(text);
+      return res.json(data);
+    } catch (err: any) {
       clearTimeout(timeoutId);
+      console.error("[ODK DATA] Fetch Error:", err.message);
       throw err;
     }
   } catch (fatalErr: any) {
+    console.error("[ODK DATA] Fatal Error:", fatalErr.message);
     res.status(500).json({ error: "ODK data API failed", message: fatalErr.message });
   }
 }

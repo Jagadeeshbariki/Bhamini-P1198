@@ -32,8 +32,8 @@ export const ODKDashboardSection: React.FC = () => {
 
     const [selectedForm, setSelectedForm] = useState<string>('All');
     const [selectedUser, setSelectedUser] = useState<string>('All');
-    const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, '0'));
-    const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
+    const [selectedMonth, setSelectedMonth] = useState<string>('All');
+    const [selectedYear, setSelectedYear] = useState<string>('All');
     const [selectedDate, setSelectedDate] = useState<string>('All');
     const [selectedProject, setSelectedProject] = useState<string>('All');
 

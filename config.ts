@@ -1,6 +1,6 @@
 
 // Central configuration for the Bhamini-P1198 Application
-export const APP_VERSION = '2.4.6';
+export const APP_VERSION = '2.4.7';
 
 /**
  * PROJECT MASTER SPREADSHEET SETUP
