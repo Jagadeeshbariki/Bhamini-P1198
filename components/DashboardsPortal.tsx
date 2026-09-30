@@ -3,7 +3,7 @@ import React from 'react';
 import { 
     LayoutDashboard, Users, Database, Package, 
     ChevronRight, Info, TrendingUp,
-    Activity, Globe, Search, Filter
+    Activity, Globe, Search, Filter, Landmark
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -80,6 +80,17 @@ const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
             lightColor: 'bg-blue-50',
             textColor: 'text-blue-600',
             borderColor: 'border-blue-100',
+            allowed: true
+        },
+        {
+            id: 'institution-dashboard' as const,
+            title: 'Groups & Institutions',
+            description: 'Group formation analytics, SHG/FPO monitoring, and institutional membership tracking.',
+            icon: Landmark,
+            color: 'bg-teal-600',
+            lightColor: 'bg-teal-50',
+            textColor: 'text-teal-600',
+            borderColor: 'border-teal-100',
             allowed: true
         }
     ];
