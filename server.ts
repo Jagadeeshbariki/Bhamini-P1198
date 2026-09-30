@@ -39,7 +39,7 @@ export async function createApp() {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout for auth
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout for auth
       
       const res = await fetch('https://central.wassan.org/v1/sessions', {
         method: 'POST',
@@ -356,7 +356,7 @@ export async function createApp() {
       
       // 5. Call ODK Central with timeout
       const controller = new AbortController();
-      const timeoutMs = 25000; 
+      const timeoutMs = 9000; // Lowered to 9s to stay under Vercel's 10s limit
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
@@ -644,15 +644,12 @@ export async function createApp() {
 }
 
 // Start server
-const isVercel = !!process.env.VERCEL;
-if (!isVercel) {
-  createApp().then(app => {
-    const PORT = Number(process.env.PORT) || 3000;
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`[SERVER] Listening on port ${PORT} (Mode: ${process.env.NODE_ENV || 'development'})`);
-    });
-  }).catch(err => {
-    console.error("[SERVER] Fatal Error during startup:", err);
-    process.exit(1);
+const PORT = Number(process.env.PORT) || 3000;
+createApp().then(app => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[SERVER] Listening on port ${PORT} (Mode: ${process.env.NODE_ENV || 'production'})`);
   });
-}
+}).catch(err => {
+  console.error("[SERVER] Fatal Error during startup:", err);
+  process.exit(1);
+});
