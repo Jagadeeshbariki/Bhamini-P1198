@@ -23,7 +23,6 @@ export async function createApp() {
   // ODK Image Proxy
   let odkSessionToken: string | null = null;
   let tokenExpiresAt: number = 0;
-  let resolvedProjectId: string | null = null;
 
   async function getOdkToken() {
     const email = (process.env.ODK_EMAIL || '').trim();
@@ -81,41 +80,7 @@ export async function createApp() {
   }
 
   async function getProjectId() {
-    if (process.env.ODK_PROJECT_ID) return process.env.ODK_PROJECT_ID;
-    if (resolvedProjectId) return resolvedProjectId;
-
-    try {
-      const token = await getOdkToken();
-      console.log('[ODK CONFIG] Fetching projects from central.wassan.org...');
-      const res = await fetch('https://central.wassan.org/v1/projects', {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'User-Agent': 'Wassan-App/1.0'
-        }
-      });
-      if (!res.ok) throw new Error(`Failed to list projects: ${res.status}`);
-      const projects = await res.json();
-      
-      if (Array.isArray(projects) && projects.length > 0) {
-        // Prioritize Project 3 as per user request
-        const project3 = projects.find(p => String(p.id) === '3' || p.name?.toLowerCase().includes('3'));
-        if (project3) {
-          console.log(`[ODK CONFIG] Resolved to Project 3: ${project3.name}`);
-          resolvedProjectId = '3';
-          return '3';
-        }
-        resolvedProjectId = String(projects[0].id);
-        console.log(`[ODK CONFIG] Resolved to first available project: ${resolvedProjectId}`);
-        return resolvedProjectId;
-      }
-      
-      console.warn('[ODK CONFIG] No projects found, defaulting to Project 3');
-      resolvedProjectId = '3';
-      return resolvedProjectId;
-    } catch (e: any) {
-      console.error('[ODK CONFIG] Project resolution failed:', e.message);
-      return '3';
-    }
+    return (process.env.ODK_PROJECT_ID || '3').trim();
   }
 
   app.get("/api/odk/entities", async (req, res) => {
@@ -198,26 +163,40 @@ export async function createApp() {
       const projectId = await getProjectId();
       const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(fullSubmissionId)}/attachments/${encodeURIComponent(filename)}`;
 
-      const response = await fetch(url, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'User-Agent': 'Wassan-App/1.0'
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      try {
+        const response = await fetch(url, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'User-Agent': 'Wassan-App/1.0'
+          },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          console.error(`ODK Fetch Failed: ${response.status} for ${url}`);
+          return res.status(response.status).json({ error: 'Failed to fetch image from ODK', status: response.status });
         }
-      });
 
-      if (!response.ok) {
-        console.error(`ODK Fetch Failed: ${response.status} for ${url}`);
-        return res.status(response.status).json({ error: 'Failed to fetch image from ODK', status: response.status });
+        const contentType = response.headers.get('content-type');
+        if (contentType) res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
+
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        res.send(buffer);
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId);
+        throw fetchErr;
       }
-
-      const contentType = response.headers.get('content-type');
-      if (contentType) res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
-
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      res.send(buffer);
     } catch (error: any) {
+      if (error.name === 'AbortError') {
+        return res.status(504).send('ODK Image request timed out (12s)');
+      }
       if (error.message === '401') {
          return res.status(401).send('ODK Authentication Failed');
       }
@@ -239,21 +218,36 @@ export async function createApp() {
       
       console.log(`[ODK PROXY] Fetching Standard Submissions: ${url}`);
 
-      const response = await fetch(url, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'User-Agent': 'Wassan-App/1.0'
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      try {
+        const response = await fetch(url, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'User-Agent': 'Wassan-App/1.0',
+            'Accept': 'application/json'
+          },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const text = await response.text();
+          return res.status(response.status).json({ error: 'ODK Submissions API Failed', details: text });
         }
-      });
 
-      if (!response.ok) {
-        const text = await response.text();
-        return res.status(response.status).json({ error: 'ODK Submissions API Failed', details: text });
+        const data = await response.json();
+        res.json(data);
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId);
+        throw fetchErr;
       }
-
-      const data = await response.json();
-      res.json(data);
     } catch (error: any) {
+      if (error.name === 'AbortError') {
+        return res.status(504).json({ error: 'ODK Submissions request timed out (12s)' });
+      }
       const status = error.status || 500;
       res.status(status).json({ 
         error: error.message || 'Internal Proxy Error', 
@@ -275,61 +269,76 @@ export async function createApp() {
        const token = await getOdkToken();
        const projectId = await getProjectId();
        
-       const formRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/forms`, {
-         headers: { 
-           'Authorization': `Bearer ${token}`,
-           'User-Agent': 'Wassan-App/1.0'
-         }
-       });
-       const forms = await formRes.json();
+       const controller = new AbortController();
+       const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-       const appUsersRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/app-users`, {
-         headers: { 
-           'Authorization': `Bearer ${token}`,
-           'User-Agent': 'Wassan-App/1.0'
-         }
-       });
-       const appUsers = await appUsersRes.json();
-       const usersMap: Record<string, string> = {};
-       appUsers.forEach((u: any) => usersMap[u.id] = u.displayName);
+       try {
+         const formRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/forms`, {
+           headers: { 
+             'Authorization': `Bearer ${token}`,
+             'User-Agent': 'Wassan-App/1.0',
+             'Accept': 'application/json'
+           },
+           signal: controller.signal
+         });
+         const forms = await formRes.json();
 
-       const submissionsData = await Promise.all(forms.map(async (form: any) => {
-           const subRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(form.xmlFormId)}/submissions`, {
-             headers: { 
-               'Authorization': `Bearer ${token}`,
-               'User-Agent': 'Wassan-App/1.0'
-             }
-           });
-           const subs = await subRes.json();
-           return { formId: form.xmlFormId, formName: form.name, submissions: subs };
-       }));
+         const appUsersRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/app-users`, {
+           headers: { 
+             'Authorization': `Bearer ${token}`,
+             'User-Agent': 'Wassan-App/1.0',
+             'Accept': 'application/json'
+           },
+           signal: controller.signal
+         });
+         const appUsers = await appUsersRes.json();
+         const usersMap: Record<string, string> = {};
+         appUsers.forEach((u: any) => usersMap[u.id] = u.displayName);
 
-       const rawSubmissions: any[] = [];
-       const formsList: any[] = [];
+         const submissionsData = await Promise.all(forms.map(async (form: any) => {
+             const subRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(form.xmlFormId)}/submissions`, {
+               headers: { 
+                 'Authorization': `Bearer ${token}`,
+                 'User-Agent': 'Wassan-App/1.0',
+                 'Accept': 'application/json'
+               },
+               signal: controller.signal
+             });
+             const subs = await subRes.json();
+             return { formId: form.xmlFormId, formName: form.name, submissions: subs };
+         }));
 
-       submissionsData.forEach(formItem => {
-           const formSubs = Array.isArray(formItem.submissions) ? formItem.submissions : [];
-           formsList.push({ id: formItem.formId, name: formItem.formName });
-           
-           formSubs.forEach((sub: any) => {
-               rawSubmissions.push({
-                   formId: formItem.formId,
-                   userId: sub.submitterId,
-                   date: sub.createdAt
-               });
-           });
-       });
+         const rawSubmissions: any[] = [];
+         const formsList: any[] = [];
 
-       const usersList = Object.keys(usersMap).map(id => ({ id: Number(id), name: usersMap[id] }));
+         submissionsData.forEach(formItem => {
+             const formSubs = Array.isArray(formItem.submissions) ? formItem.submissions : [];
+             formsList.push({ id: formItem.formId, name: formItem.formName });
+             
+             formSubs.forEach((sub: any) => {
+                 rawSubmissions.push({
+                     formId: formItem.formId,
+                     userId: sub.submitterId,
+                     date: sub.createdAt
+                 });
+             });
+         });
 
-       dashboardCache = {
-           rawSubmissions,
-           forms: formsList,
-           users: usersList
-       };
-       dashboardCacheTime = Date.now();
+         const usersList = Object.keys(usersMap).map(id => ({ id: Number(id), name: usersMap[id] }));
 
-       res.json(dashboardCache);
+         dashboardCache = {
+             rawSubmissions,
+             forms: formsList,
+             users: usersList
+         };
+         dashboardCacheTime = Date.now();
+
+         res.json(dashboardCache);
+         clearTimeout(timeoutId);
+       } catch (innerErr: any) {
+         clearTimeout(timeoutId);
+         throw innerErr;
+       }
     } catch(e: any) {
        console.error("Error fetching ODK dashboard:", e);
        const status = e.status || 500;
@@ -708,15 +717,12 @@ export async function createApp() {
 }
 
 // Start server
-const isVercel = !!process.env.VERCEL;
-if (!isVercel) {
-  const PORT = Number(process.env.PORT) || 3000;
-  createApp().then(app => {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`[SERVER] Listening on port ${PORT} (Mode: ${process.env.NODE_ENV || 'production'})`);
-    });
-  }).catch(err => {
-    console.error("[SERVER] Fatal Error during startup:", err);
-    process.exit(1);
+const PORT = Number(process.env.PORT) || 3000;
+createApp().then(app => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[SERVER] Listening on port ${PORT} (Mode: ${process.env.NODE_ENV || 'production'})`);
   });
-}
+}).catch(err => {
+  console.error("[SERVER] Fatal Error during startup:", err);
+  process.exit(1);
+});
