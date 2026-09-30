@@ -95,14 +95,35 @@ const InstitutionDashboard: React.FC = () => {
                     return null;
                 };
 
+                const nameKeywords = ['group_name', 'name_of_group', 'name', 'GroupName', 'InstitutionName', 'institution_name', 'shg_name', 'fpo_name', 'entity_name', 'Organization', 'Title'];
+                const typeKeywords = ['group_type', 'type_of_group', 'type', 'GroupType', 'InstitutionType', 'category', 'institution_type', 'Class', 'Type'];
+                const villageKeywords = ['village', 'village_name', 'VillageName', 'location', 'habitation', 'Place', 'Area', 'Address'];
+                const memberKeywords = ['members_count', 'no_of_members', 'members', 'total_members', 'count_members', 'Count', 'Strength', 'Enrollment'];
+                const dateKeywords = ['formation_date', 'date_of_formation', 'date', 'FormationDate', 'CreatedDate', 'Today', 'Date'];
+                const photoKeywords = ['photo', 'image', 'picture', 'pic', 'attachment', 'Logo', 'Photo', 'Group_Photo'];
+
+                const nameValue = findInFlat(nameKeywords) || 'Unnamed Group';
+                const typeValue = findInFlat(typeKeywords) || 'Group';
+                const villageValue = findInFlat(villageKeywords) || 'Unknown';
+                const membersValue = findInFlat(memberKeywords);
+                const dateValue = findInFlat(dateKeywords) || sub.__system?.submissionDate || '';
+                
+                const foundPhotoKey = Object.keys(flatData).find(k => 
+                    photoKeywords.some(pk => k.toLowerCase().includes(pk)) && 
+                    typeof flatData[k] === 'string' &&
+                    flatData[k].length > 4 &&
+                    flatData[k].includes('.')
+                );
+                const photoValue = foundPhotoKey ? flatData[foundPhotoKey] : null;
+
                 return {
-                    id: sub.__id || sub.instanceID || Math.random().toString(36).substr(2, 9),
-                    date: findInFlat(['formation_date', 'date', 'FormationDate', 'CreatedDate']) || sub.__system?.submissionDate || '',
-                    name: findInFlat(['group_name', 'name', 'GroupName', 'InstitutionName', 'institution_name']) || 'Unnamed Group',
-                    type: findInFlat(['group_type', 'type', 'GroupType', 'InstitutionType', 'category']) || 'Group',
-                    village: findInFlat(['village', 'village_name', 'VillageName', 'location']) || 'Unknown',
-                    members: parseInt(findInFlat(['members_count', 'no_of_members', 'members', 'total_members']) || '0'),
-                    photo: findInFlat(['photo', 'image', 'picture', 'group_photo']),
+                    id: sub.__id || sub.instanceID || sub.uuid || Math.random().toString(36).substr(2, 9),
+                    date: dateValue,
+                    name: String(nameValue),
+                    type: String(typeValue),
+                    village: String(villageValue),
+                    members: typeof membersValue === 'number' ? membersValue : parseInt(String(membersValue || '0')),
+                    photo: photoValue,
                     raw: sub
                 };
             });

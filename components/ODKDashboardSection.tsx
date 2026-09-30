@@ -28,6 +28,7 @@ export const ODKDashboardSection: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     const [activeTab, setActiveTab] = useState<'dashboard' | 'frp-report'>('dashboard');
+    const [odkStatus, setOdkStatus] = useState<{status: string, project?: string, message?: string} | null>(null);
 
     const [selectedForm, setSelectedForm] = useState<string>('All');
     const [selectedUser, setSelectedUser] = useState<string>('All');
@@ -40,6 +41,19 @@ export const ODKDashboardSection: React.FC = () => {
     const [isExporting, setIsExporting] = useState(false);
 
     useEffect(() => {
+        const checkStatus = async () => {
+            try {
+                const res = await fetch('/api/odk/status');
+                if (res.ok) {
+                    const status = await res.json();
+                    setOdkStatus(status);
+                }
+            } catch (e) {
+                console.error("Failed to check ODK status:", e);
+            }
+        };
+        checkStatus();
+        
         const fetchData = async () => {
             try {
                 const res = await fetch('/api/odk/dashboard');
@@ -325,6 +339,24 @@ export const ODKDashboardSection: React.FC = () => {
 
     return (
         <div className="lg:h-[calc(100vh-160px)] flex flex-col gap-3 lg:overflow-hidden">
+            {/* ODK Status Indicator */}
+            {odkStatus && (
+                <div className={`shrink-0 px-4 py-2 rounded-xl border flex items-center justify-between transition-all duration-500 ${odkStatus.status === 'ok' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full animate-pulse ${odkStatus.status === 'ok' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">
+                            ODK Central: {odkStatus.status === 'ok' ? `CONNECTED (${odkStatus.project})` : 'DISCONNECTED'}
+                        </span>
+                    </div>
+                    {odkStatus.status !== 'ok' && (
+                        <p className="text-[9px] font-bold opacity-80">{odkStatus.message}</p>
+                    )}
+                    {odkStatus.status === 'ok' && odkStatus.email && (
+                        <span className="text-[9px] font-bold opacity-60">Session: {odkStatus.email}</span>
+                    )}
+                </div>
+            )}
+
             {/* Tabs Row */}
             <div className="flex flex-row justify-between items-center shrink-0">
                 <div className="flex flex-row gap-2">

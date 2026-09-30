@@ -38,11 +38,17 @@ export async function createApp() {
     }
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout for auth
+      
       const res = await fetch('https://central.wassan.org/v1/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errorText = await res.text();
@@ -77,6 +83,7 @@ export async function createApp() {
 
     try {
       const token = await getOdkToken();
+      console.log('[ODK CONFIG] Fetching projects from central.wassan.org...');
       const res = await fetch('https://central.wassan.org/v1/projects', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -85,19 +92,22 @@ export async function createApp() {
       
       if (Array.isArray(projects) && projects.length > 0) {
         // Prioritize Project 3 as per user request
-        const project3 = projects.find(p => String(p.id) === '3');
+        const project3 = projects.find(p => String(p.id) === '3' || p.name?.toLowerCase().includes('3'));
         if (project3) {
+          console.log(`[ODK CONFIG] Resolved to Project 3: ${project3.name}`);
           resolvedProjectId = '3';
           return '3';
         }
         resolvedProjectId = String(projects[0].id);
+        console.log(`[ODK CONFIG] Resolved to first available project: ${resolvedProjectId}`);
         return resolvedProjectId;
       }
       
-      resolvedProjectId = '3'; // Fallback
+      console.warn('[ODK CONFIG] No projects found, defaulting to Project 3');
+      resolvedProjectId = '3';
       return resolvedProjectId;
     } catch (e: any) {
-      console.warn('[ODK CONFIG] Project resolution failed:', e.message);
+      console.error('[ODK CONFIG] Project resolution failed:', e.message);
       return '3';
     }
   }
@@ -304,7 +314,7 @@ export async function createApp() {
 
   app.get("/api/odk/data", async (req, res) => {
     try {
-      const { projectId: queryProjectId, formId, limit } = req.query;
+      const { projectId: queryProjectId, formId, limit, odata } = req.query;
       
       if (!formId || typeof formId !== 'string') {
         return res.status(400).json({ error: 'Missing formId parameter' });
@@ -324,19 +334,27 @@ export async function createApp() {
       }
 
       // 2. Resolve Project ID
-      const projectId = queryProjectId || process.env.ODK_PROJECT_ID || '3';
+      const projectId = queryProjectId || await getProjectId() || '3';
       
       // 3. Construct URL
-      // We use the OData endpoint as requested
-      const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
-      let url = `${baseUrl}/Submissions`;
+      // Use standard JSON endpoint if odata=false is passed, otherwise default to OData .svc
+      let url = "";
+      if (odata === 'false') {
+        url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}/submissions`;
+        console.log(`[ODK DATA] Requesting Standard JSON: ${url}`);
+      } else {
+        // OData collection is usually "Submissions" for the main form
+        const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
+        url = `${baseUrl}/Submissions`;
+        
+        const queryParams = [];
+        if (limit) queryParams.push(`$top=${limit}`);
+        // Add count for easier pagination debugging
+        queryParams.push('$count=true');
+        if (queryParams.length > 0) url += `?${queryParams.join('&')}`;
+        console.log(`[ODK DATA] Requesting OData: ${url}`);
+      }
       
-      const queryParams = [];
-      if (limit) queryParams.push(`$top=${limit}`);
-      if (queryParams.length > 0) url += `?${queryParams.join('&')}`;
-      
-      console.log(`[ODK DATA] Requesting: ${url}`);
-
       // 4. Fetch Data with timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
@@ -549,6 +567,34 @@ export async function createApp() {
     }
   });
 
+  app.get("/api/odk/status", async (req, res) => {
+    try {
+      const email = (process.env.ODK_EMAIL || '').trim();
+      if (!email) return res.json({ status: 'error', message: 'ODK_EMAIL not configured' });
+      
+      const token = await getOdkToken();
+      const projectId = await getProjectId();
+      
+      const projectRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!projectRes.ok) {
+        return res.json({ status: 'error', message: `ODK Central connection failed: ${projectRes.status}` });
+      }
+      
+      const projectData = await projectRes.json();
+      res.json({ 
+        status: 'ok', 
+        project: projectData.name, 
+        projectId: projectData.id,
+        email: email.split('@')[0] + '@...' // Mask email
+      });
+    } catch (e: any) {
+      res.json({ status: 'error', message: e.message });
+    }
+  });
+
   // API 404 Handler (prevent falling through to HTML)
   app.all(/^\/api\/.*/, (req, res) => {
     res.status(404).json({ 
@@ -575,7 +621,7 @@ export async function createApp() {
       console.warn("[SERVER] Falling back to static mode despite non-production NODE_ENV");
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
-      app.get('*', (req, res) => {
+      app.get('(.*)', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }
@@ -583,7 +629,7 @@ export async function createApp() {
     console.log("[SERVER] Production mode: Serving static files from /dist");
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('(.*)', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
@@ -592,8 +638,6 @@ export async function createApp() {
 }
 
 // Start server
-const isDev = process.env.NODE_ENV !== "production";
-
 createApp().then(app => {
   const PORT = Number(process.env.PORT) || 3000;
   app.listen(PORT, '0.0.0.0', () => {
