@@ -136,24 +136,21 @@ const CapacityBuildingDashboard: React.FC = () => {
         setRawSample(null);
         
         try {
-            // 1. Resolve the correct Form ID by searching for "NF- Activities" or "Capacity Building"
+            // 1. Resolve the correct Form ID by searching for "Capacity Building" specifically
             const dashRes = await fetch('/api/odk/dashboard');
-            let targetId = 'Capacity_building'; // Default fallback
+            let targetId = 'Capacity_building'; // Default hardcoded ID
             
             if (dashRes.ok) {
                 const dashData = await dashRes.json();
                 const forms = dashData.forms || [];
                 const matchedForm = forms.find((f: any) => 
                     f.id === 'Capacity_building' ||
-                    f.id === 'NF- Activities' ||
-                    f.name === 'NF- Activities' || 
-                    f.name.toLowerCase().includes('capacity building') ||
-                    f.name.toLowerCase().includes('training')
+                    f.name.toLowerCase().includes('capacity building')
                 );
                 if (matchedForm) {
                     targetId = matchedForm.id;
                     setFormId(targetId);
-                    console.log(`[Dashboard] Resolved form "${matchedForm.name}" to ID: ${targetId}`);
+                    console.log(`[Dashboard] Resolved Capacity Building form to ID: ${targetId}`);
                 }
             }
 
