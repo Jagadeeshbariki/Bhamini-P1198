@@ -257,6 +257,106 @@ export async function createApp() {
     }
   });
 
+  // Group Formation Data Cache
+  let groupCache: any = null;
+  let groupCacheTime: number = 0;
+
+  app.get("/api/odk/group-formation", async (req, res) => {
+    // 5-minute cache
+    if (groupCache && Date.now() - groupCacheTime < 300000) {
+      console.log("[GROUP FORMATION] Serving from cache");
+      return res.json(groupCache);
+    }
+
+    try {
+      const projectId = await getProjectId();
+      const formId = 'Group Formation';
+      const token = await getOdkToken();
+      const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
+
+      console.log(`[GROUP FORMATION] Starting data refresh for form: ${formId}`);
+
+      const fetchAllOdataSequential = async (url: string, label: string) => {
+        let allData: any[] = [];
+        let nextLink = url;
+        let pages = 0;
+
+        while (nextLink) {
+          pages++;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+          
+          try {
+            console.log(`[ODK FETCH] ${label} - Page ${pages}: ${nextLink}`);
+            const resp = await fetch(nextLink, {
+              headers: { 
+                'Authorization': `Bearer ${token}`, 
+                'Accept': 'application/json',
+                'User-Agent': 'Bhamini-P1198/1.0'
+              },
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (!resp.ok) {
+              const errText = await resp.text();
+              throw new Error(`ODK ${label} fetch failed (${resp.status}): ${errText.substring(0, 200)}`);
+            }
+            
+            const data = await resp.json();
+            allData = [...allData, ...(data.value || [])];
+            nextLink = data['@odata.nextLink'] || null;
+            if (allData.length > 5000 || pages > 20) break; 
+          } catch (err) {
+            clearTimeout(timeoutId);
+            throw err;
+          }
+        }
+        return allData;
+      };
+
+      // Fetch Parent and Repeat data sequentially to avoid heavy load
+      const parents = await fetchAllOdataSequential(`${baseUrl}/Submissions`, 'Parents');
+      const members = await fetchAllOdataSequential(`${baseUrl}/Submissions.grp_members_info`, 'Members');
+
+      console.log(`[GROUP FORMATION] Processing ${parents.length} groups and ${members.length} members`);
+
+      // Group members by their parent ID
+      const membersByParent: Record<string, any[]> = {};
+      members.forEach(member => {
+        const parentId = member['__Submissions-id'];
+        if (!membersByParent[parentId]) membersByParent[parentId] = [];
+        membersByParent[parentId].push({
+          id: member['__id'],
+          name: member.grp_members_all?.member_name || 'Unknown',
+          age: parseInt(member.grp_members_all?.member_age) || null,
+          gender: member.grp_members_all?.member_gender || 'Unknown',
+          phone: member.grp_members_all?.member_phone || 'N/A',
+          beneficiaryId: member.grp_members_all?.member_ben_id || 'N/A',
+          hhId: member.grp_members_all?.member_HH_id || 'N/A'
+        });
+      });
+
+      // Merge parent info with members
+      const result = parents.map(p => ({
+        submissionId: p.__id,
+        cluster: p.location_info?.cluster || 'Unknown',
+        gp: p.location_info?.gp || 'Unknown',
+        village: p.location_info?.village || 'Unknown',
+        groupName: p.group_info?.group_name || 'Unnamed Group',
+        formationDate: p.group_info?.group_formation_date || p.__system?.submissionDate,
+        members: membersByParent[p.__id] || []
+      }));
+
+      groupCache = result;
+      groupCacheTime = Date.now();
+      res.json(result);
+    } catch (err: any) {
+      console.error("[GROUP FORMATION ERROR]", err.message);
+      res.status(500).json({ error: "Failed to fetch group formation data", message: err.message });
+    }
+  });
+
   let dashboardCache: any = null;
   let dashboardCacheTime = 0;
 

@@ -370,24 +370,6 @@ const CapacityBuildingDashboard: React.FC = () => {
 
     return (
         <div className="space-y-8 pb-10">
-            {/* ODK Status Indicator */}
-            {odkStatus && (
-                <div className={`shrink-0 px-4 py-2 rounded-xl border flex items-center justify-between transition-all duration-500 ${odkStatus.status === 'ok' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
-                    <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full animate-pulse ${odkStatus.status === 'ok' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">
-                            ODK Central: {odkStatus.status === 'ok' ? `CONNECTED (${odkStatus.project})` : 'DISCONNECTED'}
-                        </span>
-                    </div>
-                    {odkStatus.status !== 'ok' && (
-                        <p className="text-[9px] font-bold opacity-80">{odkStatus.message}</p>
-                    )}
-                    {odkStatus.status === 'ok' && odkStatus.email && (
-                        <span className="text-[9px] font-bold opacity-60">Session: {odkStatus.email}</span>
-                    )}
-                </div>
-            )}
-
             {/* Header section */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div className="space-y-2">

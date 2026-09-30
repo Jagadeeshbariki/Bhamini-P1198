@@ -32,8 +32,8 @@ export const ODKDashboardSection: React.FC = () => {
 
     const [selectedForm, setSelectedForm] = useState<string>('All');
     const [selectedUser, setSelectedUser] = useState<string>('All');
-    const [selectedMonth, setSelectedMonth] = useState<string>('All');
-    const [selectedYear, setSelectedYear] = useState<string>('All');
+    const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, '0'));
+    const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
     const [selectedDate, setSelectedDate] = useState<string>('All');
     const [selectedProject, setSelectedProject] = useState<string>('All');
 
@@ -339,24 +339,6 @@ export const ODKDashboardSection: React.FC = () => {
 
     return (
         <div className="lg:h-[calc(100vh-160px)] flex flex-col gap-3 lg:overflow-hidden">
-            {/* ODK Status Indicator */}
-            {odkStatus && (
-                <div className={`shrink-0 px-4 py-2 rounded-xl border flex items-center justify-between transition-all duration-500 ${odkStatus.status === 'ok' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
-                    <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full animate-pulse ${odkStatus.status === 'ok' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">
-                            ODK Central: {odkStatus.status === 'ok' ? `CONNECTED (${odkStatus.project})` : 'DISCONNECTED'}
-                        </span>
-                    </div>
-                    {odkStatus.status !== 'ok' && (
-                        <p className="text-[9px] font-bold opacity-80">{odkStatus.message}</p>
-                    )}
-                    {odkStatus.status === 'ok' && odkStatus.email && (
-                        <span className="text-[9px] font-bold opacity-60">Session: {odkStatus.email}</span>
-                    )}
-                </div>
-            )}
-
             {/* Tabs Row */}
             <div className="flex flex-row justify-between items-center shrink-0">
                 <div className="flex flex-row gap-2">
