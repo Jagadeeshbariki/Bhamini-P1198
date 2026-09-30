@@ -292,24 +292,35 @@ export async function createApp() {
   });
 
   app.get("/api/odk/data", async (req, res) => {
-    const { projectId: queryProjectId, formId } = req.query;
+    const { projectId: queryProjectId, formId, limit } = req.query;
     
+    // 1. Validate formId
     if (!formId || typeof formId !== 'string') {
       return res.status(400).json({ error: 'Missing formId parameter' });
     }
+
+    // 2. Log received formId
+    console.log(`[DIAGNOSTIC] Received formId: ${formId}`);
 
     try {
       const token = await getOdkToken();
       // Use query param if provided, otherwise resolve
       const projectId = queryProjectId || await getProjectId();
       
-      // Default to OData Submissions if not specified otherwise
-      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId as string)}.svc/Submissions`;
+      // 3. Construct the exact ODK URL
+      // OData Submissions endpoint
+      let url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId as string)}.svc/Submissions`;
       
-      console.log(`[ODK DATA] Resolved Project: ${projectId}, Form: ${formId}`);
-      console.log(`[ODK DATA] URL: ${url}`);
+      // Support for test query (limit translated to $top)
+      if (limit) {
+        url += `?$top=${limit}`;
+      }
+
+      // 5. Log final requested URL WITHOUT credentials
+      console.log(`[DIAGNOSTIC] Final ODK URL: ${url}`);
       res.setHeader('X-ODK-Target-URL', url);
       
+      // 4. Make authenticated request
       const response = await fetch(url, {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -318,45 +329,51 @@ export async function createApp() {
         cache: 'no-store'
       });
 
-      const text = await response.text();
-      console.log(`[ODK DATA] Status: ${response.status}`);
+      // 5. Log HTTP status, statusText, content-type
+      const status = response.status;
+      const statusText = response.statusText;
+      const contentType = response.headers.get('content-type') || 'unknown';
       
+      console.log(`[DIAGNOSTIC] ODK Response Status: ${status}`);
+      console.log(`[DIAGNOSTIC] ODK Response StatusText: ${statusText}`);
+      console.log(`[DIAGNOSTIC] ODK Content-Type: ${contentType}`);
+
+      // 6. Read as TEXT first
+      const text = await response.text();
+      
+      // 7. Handle non-2xx response
       if (!response.ok) {
-        console.error(`[ODK DATA] Error Body: ${text.substring(0, 500)}`);
-        return res.status(response.status).json({ 
-          error: `ODK Central Error (${response.status})`, 
-          details: text.substring(0, 1000),
-          url: url // Helping debug which URL failed
+        console.error(`[DIAGNOSTIC] ODK Request Failed`);
+        return res.status(status).json({ 
+          error: "ODK request failed",
+          odkStatus: status,
+          odkStatusText: statusText,
+          odkResponse: text.substring(0, 1000),
+          requestedUrl: url
         });
       }
 
+      // 8. Safely parse JSON
       try {
         const data = JSON.parse(text);
+        // 9. Return OData response
         res.json(data);
-      } catch (e: any) {
-        console.error(`[ODK DATA] JSON Parse Error: ${e.message}`);
-        console.error(`[ODK DATA] Raw Response Start: ${text.substring(0, 200)}`);
-        
-        if (text.includes('<!DOCTYPE') || text.includes('<html')) {
-            return res.status(500).json({ 
-              error: 'ODK Central returned HTML instead of JSON. Check your permissions.', 
-              details: 'The account might not have Project Viewer permissions for this project.',
-              htmlSnippet: text.substring(0, 500)
-            });
-        }
-        
+      } catch (parseError: any) {
+        console.error(`[DIAGNOSTIC] JSON Parse Error: ${parseError.message}`);
         res.status(500).json({ 
           error: 'Failed to parse ODK response as JSON',
-          details: e.message,
-          rawResponse: text.substring(0, 500)
+          details: parseError.message,
+          rawResponse: text.substring(0, 1000)
         });
       }
     } catch (error: any) {
+      // 5. Log failure if it occurs before receiving response
+      console.error(`[DIAGNOSTIC] Failure before/during request: ${error.message}`);
       const status = error.status || 500;
       res.status(status).json({ 
         error: error.message || 'Internal Proxy Error', 
         details: error.details || error.message,
-        source: 'ODK_DATA'
+        source: 'ODK_DATA_DIAGNOSTIC'
       });
     }
   });
