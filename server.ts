@@ -314,50 +314,50 @@ export async function createApp() {
 
   app.get("/api/odk/data", async (req, res) => {
     try {
-      const { projectId: queryProjectId, formId, limit, odata } = req.query;
+      // 1. Read and Validate projectId/formId
+      const projectId = (req.query.projectId as string) || await getProjectId() || '3';
+      const formId = req.query.formId as string;
+      const limit = req.query.limit as string;
       
-      if (!formId || typeof formId !== 'string') {
+      if (!formId) {
         return res.status(400).json({ error: 'Missing formId parameter' });
       }
+      // 7. Log safe diagnostics (No secrets)
+      console.log(`[ODK PROXY] Data Request - Project: ${projectId}, Form: ${formId}`);
 
-      console.log(`[ODK PROXY] Request for Form: ${formId}, OData: ${odata !== 'false'}`);
+      // 13. Check environment variables
+      const email = (process.env.ODK_EMAIL || '').trim();
+      if (!email || !(process.env.ODK_PASSWORD || '').trim()) {
+        return res.status(500).json({ 
+          error: "ODK data API failed", 
+          message: "ODK credentials are not configured in environment variables." 
+        });
+      }
 
-      // 1. Get Token
+      // 4. Authenticate
       let token;
       try {
         token = await getOdkToken();
       } catch (authErr: any) {
-        console.error("[ODK PROXY] AUTH ERROR:", authErr.message);
         return res.status(401).json({ 
-          error: "ODK Authentication Failed", 
-          message: authErr.message,
-          hint: "Check ODK_EMAIL and ODK_PASSWORD environment variables"
+          error: "ODK data API failed", 
+          message: `Authentication failed: ${authErr.message}` 
         });
       }
 
-      // 2. Resolve Project ID
-      const projectId = queryProjectId || await getProjectId() || '3';
-      
       // 3. Construct URL
-      // Use standard JSON endpoint if odata=false is passed, otherwise default to OData .svc
-      let url = "";
-      if (odata === 'false') {
-        url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}/submissions`;
-      } else {
-        const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
-        url = `${baseUrl}/Submissions`;
-        
-        const queryParams = [];
-        if (limit) queryParams.push(`$top=${limit}`);
-        queryParams.push('$count=true');
-        if (queryParams.length > 0) url += `?${queryParams.join('&')}`;
-      }
+      const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
+      let url = `${baseUrl}/Submissions`;
       
-      console.log(`[ODK PROXY] Fetching: ${url}`);
-
-      // 4. Fetch Data with timeout
+      const queryParams = [];
+      if (limit) queryParams.push(`$top=${limit}`);
+      queryParams.push('$count=true');
+      if (queryParams.length > 0) url += `?${queryParams.join('&')}`;
+      
+      // 5. Call ODK Central with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+      const timeoutMs = 25000; 
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
         const response = await fetch(url, {
@@ -371,55 +371,55 @@ export async function createApp() {
 
         clearTimeout(timeoutId);
 
+        // 6. Read ODK response using response.text() FIRST
         const contentType = response.headers.get("content-type") || "";
         const text = await response.text();
 
+        // 7. Log safe diagnostics
+        console.log(`[ODK PROXY] Response Status: ${response.status}, Content-Type: ${contentType}`);
+
+        // 8. Handle non-2xx
         if (!response.ok) {
-          console.error(`[ODK PROXY] ODK Central Error: ${response.status} for ${url}`);
-          return res.status(response.status).json({ 
-            error: "ODK Central returned an error",
-            status: response.status,
-            statusText: response.statusText,
-            details: text.substring(0, 500),
-            requestedUrl: url
+          return res.status(response.status).json({
+            error: "ODK request failed",
+            odkStatus: response.status,
+            odkStatusText: response.statusText,
+            details: text.substring(0, 1000)
           });
         }
 
-        // 5. Safe JSON Parse
+        // 9. Parse JSON safely
         try {
           const data = JSON.parse(text);
+          if (Array.isArray(data)) {
+            return res.json({ value: data });
+          }
           res.json(data);
         } catch (parseError: any) {
-          console.error(`[ODK PROXY] JSON Parse Error: ${parseError.message}`);
-          
-          if (text.includes('<!DOCTYPE') || text.includes('<html')) {
-             return res.status(500).json({
-               error: 'ODK Central returned HTML instead of JSON',
-               details: 'This often happens if the form ID is incorrect or if there is a server-side redirect.',
-               preview: text.substring(0, 200)
-             });
-          }
-
-          res.status(500).json({ 
-            error: 'ODK response was not valid JSON',
-            details: parseError.message,
-            preview: text.substring(0, 500),
-            contentType
+          return res.status(500).json({
+            error: "ODK request failed",
+            odkStatus: response.status,
+            odkStatusText: "Invalid JSON response",
+            details: text.substring(0, 1000)
           });
         }
+
       } catch (fetchErr: any) {
         clearTimeout(timeoutId);
         if (fetchErr.name === 'AbortError') {
-          return res.status(504).json({ error: "ODK Central request timed out after 45 seconds" });
+          return res.status(504).json({ 
+            error: "ODK data API failed", 
+            message: `Request to ODK Central timed out after ${timeoutMs/1000}s` 
+          });
         }
         throw fetchErr;
       }
     } catch (error: any) {
-      console.error("[ODK PROXY] FATAL CRASH:", error);
+      // 11/12. Catch everything and return useful JSON
+      console.error("[ODK PROXY] FATAL EXCEPTION:", error);
       res.status(500).json({
-        error: "Internal Server Error in ODK Proxy",
-        message: error.message,
-        source: "server_crash_handler"
+        error: "ODK data API failed",
+        message: error.message
       });
     }
   });
@@ -645,13 +645,15 @@ export async function createApp() {
   return app;
 }
 
-// Start server
-createApp().then(app => {
-  const PORT = Number(process.env.PORT) || 3000;
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Ready on http://0.0.0.0:${PORT} (Mode: ${process.env.NODE_ENV || 'development'})`);
+// Start server if not imported as a function
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  createApp().then(app => {
+    const PORT = Number(process.env.PORT) || 3000;
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[SERVER] Ready on http://0.0.0.0:${PORT} (Mode: ${process.env.NODE_ENV || 'development'})`);
+    });
+  }).catch(err => {
+    console.error("[SERVER] Fatal Error during startup:", err);
+    process.exit(1);
   });
-}).catch(err => {
-  console.error("[SERVER] Fatal Error during startup:", err);
-  process.exit(1);
-});
+}
