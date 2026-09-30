@@ -84,6 +84,14 @@ export async function createApp() {
       const projects = await res.json();
       
       if (Array.isArray(projects) && projects.length > 0) {
+        // PRIORITIZE Project 3 as per user image and previous successful config
+        const project3 = projects.find(p => String(p.id) === '3');
+        if (project3) {
+          resolvedProjectId = '3';
+          console.log(`[ODK CONFIG] Prioritized Project ID 3 as requested`);
+          return '3';
+        }
+
         console.log(`[ODK CONFIG] Found ${projects.length} projects. Probing for correct project...`);
         
         // Try to find the project that actually contains our target forms
@@ -98,6 +106,7 @@ export async function createApp() {
               const hasTargetForm = forms.some((f: any) => 
                 f.xmlFormId === 'Capacity_building' || 
                 f.xmlFormId === 'Material_distribution' ||
+                f.xmlFormId === 'NF- Activities' ||
                 f.name.toLowerCase().includes('capacity building') ||
                 f.name.toLowerCase().includes('activities')
               );
@@ -112,10 +121,8 @@ export async function createApp() {
           }
         }
 
-        // If no match found via probing, find project with id '3' if it exists, otherwise use the first one
-        const project3 = projects.find(p => String(p.id) === '3');
-        resolvedProjectId = project3 ? '3' : String(projects[0].id);
-        console.log(`[ODK CONFIG] No form match, defaulting to Project: ${resolvedProjectId}`);
+        resolvedProjectId = String(projects[0].id);
+        console.log(`[ODK CONFIG] No form match, defaulting to first available Project: ${resolvedProjectId}`);
         return resolvedProjectId;
       }
       
@@ -126,6 +133,42 @@ export async function createApp() {
       return '3';
     }
   }
+
+  app.get("/api/odk/entities", async (req, res) => {
+    const { projectId: queryProjectId, datasetId } = req.query;
+    
+    if (!datasetId || typeof datasetId !== 'string') {
+      return res.status(400).json({ error: 'Missing datasetId parameter' });
+    }
+
+    try {
+      const token = await getOdkToken();
+      const projectId = queryProjectId || await getProjectId();
+      const url = `https://central.wassan.org/v1/projects/${projectId}/datasets/${encodeURIComponent(datasetId)}.svc/Entities`;
+      
+      console.log(`[ODK ENTITIES] URL: ${url}`);
+      
+      const response = await fetch(url, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      const text = await response.text();
+      if (!response.ok) {
+        return res.status(response.status).json({ 
+          error: "ODK Entities request failed",
+          odkStatus: response.status,
+          odkResponse: text.substring(0, 1000)
+        });
+      }
+
+      res.json(JSON.parse(text));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 
   app.get("/api/odk/image", async (req, res) => {
     const { submissionId, filename, form } = req.query;
