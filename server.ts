@@ -13,8 +13,11 @@ export async function createApp() {
   // Check credentials early
   const odkEmail = (process.env.ODK_EMAIL || '').trim();
   const odkPassword = (process.env.ODK_PASSWORD || '').trim();
+  
+  console.log(`[SERVER] ODK Config: Email=${odkEmail ? 'SET' : 'MISSING'}, Pass=${odkPassword ? 'SET' : 'MISSING'}`);
+  
   if (!odkEmail || !odkPassword) {
-    console.warn('[SERVER] ODK_EMAIL or ODK_PASSWORD environment variables are missing!');
+    console.warn('[SERVER] CRITICAL: ODK_EMAIL or ODK_PASSWORD environment variables are missing! Proxy will fail.');
   }
 
   // ODK Image Proxy
@@ -402,7 +405,7 @@ export async function createApp() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('(.*)', (req, res) => {
+    app.get('/:path*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
