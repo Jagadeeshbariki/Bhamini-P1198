@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 
 export async function createApp() {
@@ -14,6 +13,7 @@ export async function createApp() {
   const odkEmail = (process.env.ODK_EMAIL || '').trim();
   const odkPassword = (process.env.ODK_PASSWORD || '').trim();
   
+  console.log(`[SERVER] Mode: ${process.env.NODE_ENV || 'development'}`);
   console.log(`[SERVER] ODK Config: Email=${odkEmail ? 'SET' : 'MISSING'}, Pass=${odkPassword ? 'SET' : 'MISSING'}`);
   
   if (!odkEmail || !odkPassword) {
@@ -397,12 +397,27 @@ export async function createApp() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+    console.log("[SERVER] Initializing Vite...");
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+      console.log("[SERVER] Vite initialized");
+    } catch (e: any) {
+      console.error("[SERVER] Failed to initialize Vite:", e.message);
+      // In production environment where devDeps might be missing but NODE_ENV is not set
+      console.warn("[SERVER] Falling back to static mode despite non-production NODE_ENV");
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('/:path*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   } else {
+    console.log("[SERVER] Production mode: Serving static files from /dist");
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('/:path*', (req, res) => {
