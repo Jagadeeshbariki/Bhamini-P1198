@@ -23,6 +23,7 @@ export async function createApp() {
   // ODK Image Proxy
   let odkSessionToken: string | null = null;
   let tokenExpiresAt: number = 0;
+  let resolvedProjectId: string | null = null;
 
   async function getOdkToken() {
     const email = (process.env.ODK_EMAIL || '').trim();
@@ -31,8 +32,6 @@ export async function createApp() {
     if (!email || !password) {
       throw new Error('ODK credentials not configured (ODK_EMAIL/ODK_PASSWORD missing)');
     }
-
-    console.log(`[ODK AUTH] Attempting login for: ${email.substring(0, 3)}...${email.split('@')[1] || ''}`);
 
     if (odkSessionToken && Date.now() < tokenExpiresAt - 300000) {
       return odkSessionToken;
@@ -72,6 +71,62 @@ export async function createApp() {
     }
   }
 
+  async function getProjectId() {
+    if (process.env.ODK_PROJECT_ID) return process.env.ODK_PROJECT_ID;
+    if (resolvedProjectId) return resolvedProjectId;
+
+    try {
+      const token = await getOdkToken();
+      const res = await fetch('https://central.wassan.org/v1/projects', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error(`Failed to list projects: ${res.status}`);
+      const projects = await res.json();
+      
+      if (Array.isArray(projects) && projects.length > 0) {
+        console.log(`[ODK CONFIG] Found ${projects.length} projects. Probing for correct project...`);
+        
+        // Try to find the project that actually contains our target forms
+        for (const p of projects) {
+          try {
+            const pid = String(p.id);
+            const formsRes = await fetch(`https://central.wassan.org/v1/projects/${pid}/forms`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (formsRes.ok) {
+              const forms = await formsRes.json();
+              const hasTargetForm = forms.some((f: any) => 
+                f.xmlFormId === 'Capacity_building' || 
+                f.xmlFormId === 'Material_distribution' ||
+                f.name.toLowerCase().includes('capacity building') ||
+                f.name.toLowerCase().includes('activities')
+              );
+              if (hasTargetForm) {
+                resolvedProjectId = pid;
+                console.log(`[ODK CONFIG] Auto-resolved Project ID to: ${resolvedProjectId} (Target forms found)`);
+                return resolvedProjectId;
+              }
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+
+        // If no match found via probing, find project with id '3' if it exists, otherwise use the first one
+        const project3 = projects.find(p => String(p.id) === '3');
+        resolvedProjectId = project3 ? '3' : String(projects[0].id);
+        console.log(`[ODK CONFIG] No form match, defaulting to Project: ${resolvedProjectId}`);
+        return resolvedProjectId;
+      }
+      
+      resolvedProjectId = '3'; // Last resort fallback
+      return resolvedProjectId;
+    } catch (e) {
+      console.warn('[ODK CONFIG] Project resolution failed, defaulting to 3:', e);
+      return '3';
+    }
+  }
+
   app.get("/api/odk/image", async (req, res) => {
     const { submissionId, filename, form } = req.query;
     
@@ -84,7 +139,7 @@ export async function createApp() {
 
     try {
       const token = await getOdkToken();
-      const projectId = process.env.ODK_PROJECT_ID || '3';
+      const projectId = await getProjectId();
       const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(fullSubmissionId)}/attachments/${encodeURIComponent(filename)}`;
 
       const response = await fetch(url, {
@@ -120,8 +175,8 @@ export async function createApp() {
 
     try {
       const token = await getOdkToken();
-      const projectId = process.env.ODK_PROJECT_ID || '3';
-      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}/submissions`;
+      const projectId = await getProjectId();
+      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId as string)}/submissions`;
       
       console.log(`[ODK PROXY] Fetching Standard Submissions: ${url}`);
 
@@ -156,7 +211,7 @@ export async function createApp() {
 
     try {
        const token = await getOdkToken();
-       const projectId = process.env.ODK_PROJECT_ID || '3';
+       const projectId = await getProjectId();
        
        const formRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/forms`, {
          headers: { 'Authorization': `Bearer ${token}` }
@@ -245,12 +300,14 @@ export async function createApp() {
 
     try {
       const token = await getOdkToken();
-      const projectId = queryProjectId || process.env.ODK_PROJECT_ID || '3';
+      // Use query param if provided, otherwise resolve
+      const projectId = queryProjectId || await getProjectId();
       
       // Default to OData Submissions if not specified otherwise
-      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc/Submissions`;
+      const url = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId as string)}.svc/Submissions`;
       
-      console.log(`[ODK DATA] Attempting: ${url}`);
+      console.log(`[ODK DATA] Resolved Project: ${projectId}, Form: ${formId}`);
+      console.log(`[ODK DATA] URL: ${url}`);
       res.setHeader('X-ODK-Target-URL', url);
       
       const response = await fetch(url, {
@@ -262,19 +319,37 @@ export async function createApp() {
       });
 
       const text = await response.text();
+      console.log(`[ODK DATA] Status: ${response.status}`);
       
       if (!response.ok) {
+        console.error(`[ODK DATA] Error Body: ${text.substring(0, 500)}`);
         return res.status(response.status).json({ 
           error: `ODK Central Error (${response.status})`, 
-          details: text.substring(0, 1000)
+          details: text.substring(0, 1000),
+          url: url // Helping debug which URL failed
         });
       }
 
       try {
         const data = JSON.parse(text);
         res.json(data);
-      } catch (e) {
-        res.status(500).json({ error: 'Failed to parse ODK response as JSON' });
+      } catch (e: any) {
+        console.error(`[ODK DATA] JSON Parse Error: ${e.message}`);
+        console.error(`[ODK DATA] Raw Response Start: ${text.substring(0, 200)}`);
+        
+        if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+            return res.status(500).json({ 
+              error: 'ODK Central returned HTML instead of JSON. Check your permissions.', 
+              details: 'The account might not have Project Viewer permissions for this project.',
+              htmlSnippet: text.substring(0, 500)
+            });
+        }
+        
+        res.status(500).json({ 
+          error: 'Failed to parse ODK response as JSON',
+          details: e.message,
+          rawResponse: text.substring(0, 500)
+        });
       }
     } catch (error: any) {
       const status = error.status || 500;
@@ -295,14 +370,15 @@ export async function createApp() {
 
     try {
       const token = await getOdkToken();
-      const projectId = (req.query.projectId as string) || process.env.ODK_PROJECT_ID || '3';
+      // Use query param if provided, otherwise resolve
+      const projectId = (req.query.projectId as string) || await getProjectId();
       
       // ODK Central OData normally exposes root submissions through {formId}.svc/Submissions
-      const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId)}.svc`;
+      const baseUrl = `https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(formId as string)}.svc`;
       const url = `${baseUrl}/Submissions${query ? `?${query}` : ''}`;
       
-      console.log(`[ODK PROXY] Project: ${projectId}, Form: ${formId}`);
-      console.log(`[ODK PROXY] Attempting OData URL: ${url}`);
+      console.log(`[ODK ODATA] Resolved Project: ${projectId}, Form: ${formId}`);
+      console.log(`[ODK ODATA] URL: ${url}`);
 
       const response = await fetch(url, {
         headers: { 
@@ -378,16 +454,19 @@ export async function createApp() {
     }
   });
 
-  app.get("/api/odk-status", (req, res) => {
+  app.get("/api/odk-status", async (req, res) => {
     const email = (process.env.ODK_EMAIL || '').trim();
     const password = (process.env.ODK_PASSWORD || '').trim();
+    const projectId = await getProjectId();
     
     res.json({
       status: "online",
       email_configured: !!email,
       password_configured: !!password,
       odk_configured: !!(email && password),
-      google_configured: false, // Not using Google Sheets for this specifically
+      project_id: projectId,
+      env_project_id: process.env.ODK_PROJECT_ID || "Not Set",
+      google_configured: false, 
       env: process.env.NODE_ENV || "development",
       is_vercel: !!process.env.VERCEL,
       timestamp: new Date().toISOString()
@@ -399,6 +478,7 @@ export async function createApp() {
       const email = (process.env.ODK_EMAIL || '').trim();
       const hasEmail = !!email;
       const hasPass = !!(process.env.ODK_PASSWORD || '').trim();
+      const projectId = await getProjectId();
       
       if (!hasEmail || !hasPass) {
         return res.json({ 
@@ -409,7 +489,6 @@ export async function createApp() {
       }
 
       const token = await getOdkToken();
-      const projectId = process.env.ODK_PROJECT_ID || '3';
       
       const projectsRes = await fetch(`https://central.wassan.org/v1/projects`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -459,7 +538,7 @@ export async function createApp() {
       console.warn("[SERVER] Falling back to static mode despite non-production NODE_ENV");
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
-      app.get('/:path*', (req, res) => {
+      app.get('*', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }
@@ -467,7 +546,7 @@ export async function createApp() {
     console.log("[SERVER] Production mode: Serving static files from /dist");
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('/:path*', (req, res) => {
+    app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

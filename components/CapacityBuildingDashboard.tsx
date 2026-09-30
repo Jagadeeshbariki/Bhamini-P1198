@@ -157,7 +157,7 @@ const CapacityBuildingDashboard: React.FC = () => {
             }
 
             // 2. Fetch OData Submissions
-            const res = await fetch(`/api/odk/data?projectId=3&formId=${encodeURIComponent(targetId)}`);
+            const res = await fetch(`/api/odk/data?formId=${encodeURIComponent(targetId)}`);
             
             let odataText = '';
             try {

@@ -58,24 +58,31 @@ const AppContent: React.FC = () => {
     }, [page]);
 
     useEffect(() => {
-        const storedVersion = localStorage.getItem('app_version');
-        if (storedVersion && storedVersion !== APP_VERSION) {
-            console.log(`System updating from ${storedVersion} to ${APP_VERSION}`);
-            localStorage.setItem('app_version', APP_VERSION);
-            
-            // Safer reload attempt - prevent loops
-            const reloadCount = parseInt(sessionStorage.getItem('app_reload_count') || '0');
-            if (reloadCount < 3) {
-                sessionStorage.setItem('app_reload_count', (reloadCount + 1).toString());
-                window.location.reload();
+        const checkVersion = () => {
+            const storedVersion = localStorage.getItem('app_version');
+            if (storedVersion && storedVersion !== APP_VERSION) {
+                console.log(`System updating from ${storedVersion} to ${APP_VERSION}`);
+                localStorage.setItem('app_version', APP_VERSION);
+                
+                // Safer reload attempt - prevent loops
+                const reloadCount = parseInt(sessionStorage.getItem('app_reload_count') || '0');
+                if (reloadCount < 3) {
+                    sessionStorage.setItem('app_reload_count', (reloadCount + 1).toString());
+                    window.location.reload();
+                } else {
+                    console.error("Too many reloads detected. Stale cache might be persistent.");
+                    // Don't remove the count yet, so we don't restart the loop immediately if user manually reloads
+                }
+            } else if (!storedVersion) {
+                localStorage.setItem('app_version', APP_VERSION);
+                sessionStorage.removeItem('app_reload_count');
             } else {
-                console.error("Too many reloads detected. Stale cache might be persistent.");
+                // Version matches, clear reload count for next update
                 sessionStorage.removeItem('app_reload_count');
             }
-        } else if (!storedVersion) {
-            localStorage.setItem('app_version', APP_VERSION);
-        }
-    }, [user, logout]);
+        };
+        checkVersion();
+    }, []);
 
     useEffect(() => {
         const protectedPages: Page[] = ['attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building'];
