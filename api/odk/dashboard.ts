@@ -1,7 +1,72 @@
+
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { odkFetch } from '../_lib/odk';
 
 export const runtime = 'nodejs';
+
+/**
+ * SELF-CONTAINED ODK CORE LOGIC
+ * Avoids relative import issues on Vercel
+ */
+
+let odkSessionToken: string | null = null;
+let tokenExpiresAt: number = 0;
+
+async function getOdkToken() {
+  const email = (process.env.ODK_EMAIL || '').trim();
+  const password = (process.env.ODK_PASSWORD || '').trim();
+
+  if (!email || !password) {
+    throw new Error('ODK credentials not configured (ODK_EMAIL or ODK_PASSWORD missing)');
+  }
+
+  if (odkSessionToken && Date.now() < tokenExpiresAt - 300000) {
+    return odkSessionToken;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const res = await fetch('https://central.wassan.org/v1/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) throw new Error(`Auth failed: ${res.status}`);
+    const data: any = await res.json();
+    odkSessionToken = data.token;
+    tokenExpiresAt = new Date(data.expiresAt).getTime();
+    return odkSessionToken;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
+async function odkFetch(url: string) {
+  const token = await getOdkToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const res = await fetch(url, {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
 
 let dashboardCache: any = null;
 let dashboardCacheTime: number = 0;
@@ -61,7 +126,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        };
        dashboardCacheTime = Date.now();
 
-       // Cache on Edge for 5 minutes
        res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
        res.json(dashboardCache);
     } catch(e: any) {

@@ -644,29 +644,39 @@ export async function createApp() {
       const token = await getOdkToken();
       const projectId = await getProjectId();
       
-      const projectRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'User-Agent': 'Wassan-App/1.0'
-        },
-        signal: AbortSignal.timeout(5000)
-      });
-      
-      if (!projectRes.ok) {
-        return res.status(200).json({ 
-          status: 'error', 
-          message: `ODK Central connection failed: ${projectRes.status}`,
-          projectId 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      try {
+        const projectRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'User-Agent': 'Wassan-App/1.0'
+          },
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
+        
+        if (!projectRes.ok) {
+          return res.status(200).json({ 
+            status: 'error', 
+            message: `ODK Central connection failed: ${projectRes.status}`,
+            projectId 
+          });
+        }
+        
+        const projectData = await projectRes.json();
+        res.json({ 
+          status: 'ok', 
+          project: projectData.name, 
+          projectId: projectData.id,
+          email: email.split('@')[0] + '@...' 
+        });
+      } catch (innerErr: any) {
+        clearTimeout(timeoutId);
+        throw innerErr;
       }
-      
-      const projectData = await projectRes.json();
-      res.json({ 
-        status: 'ok', 
-        project: projectData.name, 
-        projectId: projectData.id,
-        email: email.split('@')[0] + '@...' 
-      });
     } catch (e: any) {
       console.error("[STATUS API ERROR]", e);
       res.status(200).json({ 
