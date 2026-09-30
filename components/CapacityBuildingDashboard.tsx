@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../hooks/useAuth';
 import PhotoGallery from './PhotoGallery';
-import { GOOGLE_APPS_SCRIPT_URL } from '../config';
+import { GOOGLE_APPS_SCRIPT_URL, APP_VERSION } from '../config';
 
 interface CapacityRecord {
     id: string;
@@ -48,6 +48,19 @@ const CapacityBuildingDashboard: React.FC = () => {
     const [debugMode, setDebugMode] = useState(false);
     const [rawSample, setRawSample] = useState<any>(null);
     const [formId, setFormId] = useState<string>('Capacity_building');
+    const [odkStatus, setOdkStatus] = useState<{status: string, project?: string, message?: string} | null>(null);
+
+    const checkOdkStatus = async () => {
+        try {
+            const res = await fetch('/api/odk/status');
+            if (res.ok) {
+                const status = await res.json();
+                setOdkStatus(status);
+            }
+        } catch (e) {
+            console.error("Failed to check ODK status:", e);
+        }
+    };
 
     const handleUpload = async (submissionId?: string) => {
         if (!selectedFile) {
@@ -134,36 +147,34 @@ const CapacityBuildingDashboard: React.FC = () => {
         setLoading(true);
         setError(null);
         setRawSample(null);
+        checkOdkStatus();
         
         try {
             // 1. Resolve the correct Form ID by searching for "Capacity Building" specifically
-            const dashRes = await fetch('/api/odk/dashboard');
             let targetId = 'Capacity_building'; // Default hardcoded ID
-            
-            if (dashRes.ok) {
-                const dashData = await dashRes.json();
-                const forms = dashData.forms || [];
-                const matchedForm = forms.find((f: any) => 
-                    f.id === 'Capacity_building' ||
-                    f.name.toLowerCase().includes('capacity building')
-                );
-                if (matchedForm) {
-                    targetId = matchedForm.id;
-                    setFormId(targetId);
-                    console.log(`[Dashboard] Resolved Capacity Building form to ID: ${targetId}`);
+            try {
+                const dashRes = await fetch('/api/odk/dashboard');
+                if (dashRes.ok) {
+                    const dashData = await dashRes.json();
+                    const forms = dashData.forms || [];
+                    const matchedForm = forms.find((f: any) => 
+                        f.id === 'Capacity_building' ||
+                        f.name.toLowerCase().includes('capacity building')
+                    );
+                    if (matchedForm) {
+                        targetId = matchedForm.id;
+                        setFormId(targetId);
+                        console.log(`[Dashboard] Resolved Capacity Building form to ID: ${targetId}`);
+                    }
                 }
+            } catch (dashErr) {
+                console.warn("[Dashboard] Could not fetch ODK dashboard for auto-discovery:", dashErr);
             }
 
             // 2. Fetch OData Submissions
             const res = await fetch(`/api/odk/data?formId=${encodeURIComponent(targetId)}`);
             
-            let odataText = '';
-            try {
-                odataText = await res.text();
-            } catch (e) {
-                throw new Error(`Failed to read response from server. Status: ${res.status}`);
-            }
-
+            const odataText = await res.text();
             let json;
             try {
                 json = JSON.parse(odataText);
@@ -171,25 +182,21 @@ const CapacityBuildingDashboard: React.FC = () => {
                 console.error('Non-JSON response from server:', odataText.substring(0, 500));
                 
                 if (odataText.includes('<!DOCTYPE') || odataText.includes('<html')) {
-                    throw new Error(`The server returned a webpage instead of data. This usually means the API route was not found or redirected. (Status: ${res.status})`);
+                    throw new Error(`The server returned a webpage instead of data. This usually means the API route was not found or redirected. Status: ${res.status}`);
                 }
-                throw new Error(`Failed to parse ODK data for "${targetId}". The response was not valid JSON. Status: ${res.status}`);
+                
+                // If the response is not JSON, it might be a raw error message from the proxy or platform
+                throw new Error(`Failed to parse ODK data for "${targetId}". The server returned: ${odataText.substring(0, 100) || 'Empty response'} (Status: ${res.status})`);
             }
 
             if (!res.ok) {
                 const details = json.details || json.message || 'No details provided';
-                const errorMsg = json.error || `Failed to fetch data (${res.status})`;
-                
-                // Check for explicit auth errors
-                if (res.status === 401 || details.includes('credentials') || details.includes('Auth')) {
-                     throw new Error(`Invalid ODK Credentials: Please verify your ODK_EMAIL and ODK_PASSWORD in Vercel settings.`);
-                }
-                
+                const errorMsg = json.error || `ODK Central returned an error (${res.status})`;
                 throw new Error(`${errorMsg}: ${details}`);
             }
 
             // OData returns submissions in the "value" field
-            const rawSubmissions = json.value || [];
+            const rawSubmissions = json.value || (Array.isArray(json) ? json : []);
             
             if (rawSubmissions.length > 0) {
                 setRawSample(rawSubmissions[0]);
@@ -380,6 +387,24 @@ const CapacityBuildingDashboard: React.FC = () => {
 
     return (
         <div className="space-y-8 pb-10">
+            {/* ODK Status Indicator */}
+            {odkStatus && (
+                <div className={`shrink-0 px-4 py-2 rounded-xl border flex items-center justify-between transition-all duration-500 ${odkStatus.status === 'ok' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full animate-pulse ${odkStatus.status === 'ok' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">
+                            ODK Central: {odkStatus.status === 'ok' ? `CONNECTED (${odkStatus.project})` : 'DISCONNECTED'}
+                        </span>
+                    </div>
+                    {odkStatus.status !== 'ok' && (
+                        <p className="text-[9px] font-bold opacity-80">{odkStatus.message}</p>
+                    )}
+                    {odkStatus.status === 'ok' && odkStatus.email && (
+                        <span className="text-[9px] font-bold opacity-60">Session: {odkStatus.email}</span>
+                    )}
+                </div>
+            )}
+
             {/* Header section */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div className="space-y-2">

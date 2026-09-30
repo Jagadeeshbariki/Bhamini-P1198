@@ -28,40 +28,68 @@ const InstitutionDashboard: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid');
     const [formId, setFormId] = useState<string>('Group Formation');
+    const [odkStatus, setOdkStatus] = useState<{status: string, project?: string, message?: string} | null>(null);
+
+    const checkOdkStatus = async () => {
+        try {
+            const res = await fetch('/api/odk/status');
+            if (res.ok) {
+                const status = await res.json();
+                setOdkStatus(status);
+            }
+        } catch (e) {
+            console.error("Failed to check ODK status:", e);
+        }
+    };
 
     const fetchData = async () => {
         setLoading(true);
         setError(null);
+        checkOdkStatus();
         
         try {
             // 1. Resolve the correct Form ID by searching for "Group Formation"
-            const dashRes = await fetch('/api/odk/dashboard');
             let targetId = 'Group Formation';
-            
-            if (dashRes.ok) {
-                const dashData = await dashRes.json();
-                const forms = dashData.forms || [];
-                const matchedForm = forms.find((f: any) => 
-                    f.id === 'Group Formation' ||
-                    f.name.toLowerCase().includes('group formation') ||
-                    f.name.toLowerCase().includes('institution')
-                );
-                if (matchedForm) {
-                    targetId = matchedForm.id;
-                    setFormId(targetId);
+            try {
+                const dashRes = await fetch('/api/odk/dashboard');
+                if (dashRes.ok) {
+                    const dashData = await dashRes.json();
+                    const forms = dashData.forms || [];
+                    const matchedForm = forms.find((f: any) => 
+                        f.id === 'Group Formation' ||
+                        f.name.toLowerCase().includes('group formation') ||
+                        f.name.toLowerCase().includes('institution')
+                    );
+                    if (matchedForm) {
+                        targetId = matchedForm.id;
+                        setFormId(targetId);
+                    }
                 }
+            } catch (dashErr) {
+                console.warn("[Dashboard] Could not fetch ODK dashboard for auto-discovery:", dashErr);
             }
 
             // 2. Fetch OData Submissions
             const res = await fetch(`/api/odk/data?formId=${encodeURIComponent(targetId)}`);
             
-            if (!res.ok) {
-                const json = await res.json();
-                throw new Error(json.details || json.error || `Failed to fetch data (${res.status})`);
+            const odataText = await res.text();
+            let json;
+            try {
+                json = JSON.parse(odataText);
+            } catch (e) {
+                console.error('Non-JSON response from server:', odataText.substring(0, 500));
+                if (odataText.includes('<!DOCTYPE') || odataText.includes('<html')) {
+                    throw new Error(`The server returned a webpage instead of data. Status: ${res.status}`);
+                }
+                throw new Error(`Failed to parse ODK data. The server returned: ${odataText.substring(0, 100) || 'Empty response'} (Status: ${res.status})`);
             }
 
-            const json = await res.json();
-            const rawSubmissions = json.value || [];
+            if (!res.ok) {
+                const details = json.details || json.error || 'No details provided';
+                throw new Error(`ODK Central returned an error (${res.status}): ${details}`);
+            }
+
+            const rawSubmissions = json.value || (Array.isArray(json) ? json : []);
 
             // 3. Robust Path-Based Parsing Logic
             const records: InstitutionRecord[] = rawSubmissions.map((sub: any) => {
@@ -158,17 +186,36 @@ const InstitutionDashboard: React.FC = () => {
 
     if (error) {
         return (
-            <div className="max-w-7xl mx-auto p-8">
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-3xl p-8 text-center">
-                    <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                    <h2 className="text-xl font-black text-red-900 dark:text-red-400 uppercase tracking-tight mb-2">Data Sync Error</h2>
-                    <p className="text-red-600 dark:text-red-300 font-bold mb-6">{error}</p>
-                    <button 
-                        onClick={fetchData}
-                        className="px-8 py-3 bg-red-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-red-700 transition-colors"
-                    >
-                        Retry Connection
-                    </button>
+            <div className="max-w-7xl mx-auto space-y-6">
+                {/* ODK Status Indicator */}
+                {odkStatus && (
+                    <div className={`shrink-0 px-4 py-2 rounded-xl border flex items-center justify-between transition-all duration-500 ${odkStatus.status === 'ok' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
+                        <div className="flex items-center gap-3">
+                            <div className={`w-2 h-2 rounded-full animate-pulse ${odkStatus.status === 'ok' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em]">
+                                ODK Central: {odkStatus.status === 'ok' ? `CONNECTED (${odkStatus.project})` : 'DISCONNECTED'}
+                            </span>
+                        </div>
+                        {odkStatus.status !== 'ok' && (
+                            <p className="text-[9px] font-bold opacity-80">{odkStatus.message}</p>
+                        )}
+                    </div>
+                )}
+
+                <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 p-8 rounded-[2.5rem] text-center">
+                    <div className="w-16 h-16 bg-rose-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-rose-200 dark:shadow-none">
+                        <AlertCircle size={32} />
+                    </div>
+                    <h2 className="text-2xl font-black text-rose-900 dark:text-rose-400 uppercase tracking-tight mb-2">Data Sync Error</h2>
+                    <p className="text-rose-600 dark:text-rose-300 font-bold mb-8 max-w-lg mx-auto">{error}</p>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                        <button 
+                            onClick={() => fetchData()}
+                            className="px-10 py-4 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-rose-700 hover:scale-105 active:scale-95 transition-all shadow-lg"
+                        >
+                            Retry Sync
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -176,6 +223,24 @@ const InstitutionDashboard: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto space-y-8">
+            {/* ODK Status Indicator */}
+            {odkStatus && (
+                <div className={`shrink-0 px-4 py-2 rounded-xl border flex items-center justify-between transition-all duration-500 ${odkStatus.status === 'ok' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full animate-pulse ${odkStatus.status === 'ok' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">
+                            ODK Central: {odkStatus.status === 'ok' ? `CONNECTED (${odkStatus.project})` : 'DISCONNECTED'}
+                        </span>
+                    </div>
+                    {odkStatus.status !== 'ok' && (
+                        <p className="text-[9px] font-bold opacity-80">{odkStatus.message}</p>
+                    )}
+                    {odkStatus.status === 'ok' && odkStatus.email && (
+                        <span className="text-[9px] font-bold opacity-60">Session: {odkStatus.email}</span>
+                    )}
+                </div>
+            )}
+
             {/* Header & Stats */}
             <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
                 <div className="space-y-4">
