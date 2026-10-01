@@ -1,5 +1,5 @@
 /**
- * BHAMINI P1198 - MASTER BACKEND v5
+ * BHAMINI P1198 - MASTER BACKEND v8
  * FULLY INTEGRATED: Attendance, Photos, MIS, and Maintenance
  */
 
@@ -7,8 +7,7 @@
 const PHOTO_FOLDER_ID = "1GP52fAokhGYYUU8QT9oMiMykBo9MH9nA"; 
 const BILL_FOLDER_ID = "1g7H-IBWQEN_bKOHTbkFv1j0QrvMLpFB0"; 
 
-// The ID of your "Beneficiary List" spreadsheet (the one with Master_Sheet)
-// You can find this in the URL of that spreadsheet: docs.google.com/spreadsheets/d/[ID_HERE]/edit
+// The ID of your "Beneficiary List" spreadsheet
 const BENEFICIARY_SS_ID = "1Fex87lW89bQE1cafm_JE0wK8tFZkGtdasI2u0zYCbEo"; 
 
 const SPREADSHEET_ID = SpreadsheetApp.getActiveSpreadsheet().getId();
@@ -23,20 +22,23 @@ function doPost(e) {
     }
 
     const request = JSON.parse(e.postData.contents);
-    const action = request.action;
+    let action = request.action;
+    
+    // Normalize action for robustness
+    if (action) {
+      if (action === "ADD Photo") action = "addPhoto";
+      if (action === "uploadFarmpondPhoto") action = "uploadFarmpondPhoto"; // Stay same
+    }
 
-    // If no action is provided, default to the legacy attendance handler
     if (!action) return handleAttendance(request);
 
     switch (action) {
       case "addPhoto": return handlePhotoUpload(request);
-      case "uploadFarmpondPhoto": return handleUpdateBeneficiaryActivity(request); // Route to common handler
+      case "uploadFarmpondPhoto": return handleUpdateBeneficiaryActivity(request);
       case "updateBeneficiaryActivity": return handleUpdateBeneficiaryActivity(request);
       case "deletePhoto": return handleDeletePhoto(request);
       case "addAchievement": return handleAchievement(request);
       case "addMaintenanceBill": return handleMaintenanceBill(request);
-      case "addTrainingDocument": return handleTrainingDocument(request);
-      case "getTrainingDocuments": return handleGetTrainingDocuments(request);
       case "updateBillStatus": return handleUpdateBillStatus(request);
       case "updateAsset": return handleUpdateAsset(request);
       case "updateBudgetPerformance": return handleBudgetUpdate(request);
@@ -49,44 +51,17 @@ function doPost(e) {
   }
 }
 
-/**
- * Handle GET requests
- */
-function doGet(e) {
-  const action = e.parameter.action;
-  
-  if (!action) {
-    return createResponse("error", "No action specified");
-  }
-
-  switch (action) {
-    case "getTrainingDocuments":
-      return handleGetTrainingDocuments(e.parameter);
-    default:
-      return createResponse("error", "Unknown GET action: " + action);
-  }
-}
-
-/**
- * Helper to create JSON response
- */
 function createResponse(status, message, extra = {}) {
   const response = { status: status, message: message, ...extra };
   return ContentService.createTextOutput(JSON.stringify(response))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-/**
- * Normalize ID for matching
- */
 function normalizeId(id) {
   if (!id) return '';
   return id.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-/**
- * Get sheet by GID
- */
 function getSheetByGid(gid) {
   const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
   for (let i = 0; i < sheets.length; i++) {
@@ -96,7 +71,7 @@ function getSheetByGid(gid) {
 }
 
 /**
- * Handle general photo upload to Photos sheet (in the Bhamini Application Spreadsheet)
+ * Handle general photo upload
  */
 function handlePhotoUpload(data) {
   const folder = DriveApp.getFolderById(PHOTO_FOLDER_ID);
@@ -122,7 +97,7 @@ function handlePhotoUpload(data) {
 }
 
 /**
- * Handle beneficiary activity photo update (Targets the Beneficiary List Spreadsheet)
+ * Handle beneficiary activity photo update
  */
 function handleUpdateBeneficiaryActivity(data) {
   const folder = DriveApp.getFolderById(PHOTO_FOLDER_ID);
@@ -131,7 +106,6 @@ function handleUpdateBeneficiaryActivity(data) {
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   const fileUrl = file.getUrl();
   
-  // 1. OPEN THE BENEFICIARY SPREADSHEET
   let ss;
   try {
     ss = SpreadsheetApp.openById(BENEFICIARY_SS_ID);
@@ -139,34 +113,30 @@ function handleUpdateBeneficiaryActivity(data) {
     ss = SpreadsheetApp.getActiveSpreadsheet();
   }
   
-  // 2. TARGET THE MASTER SHEET
   let sheet = ss.getSheetByName("Master_Sheet") || ss.getSheets()[0];
-  
   const rows = sheet.getDataRange().getValues();
   const headers = rows[0].map(h => h.toString().toUpperCase().replace(/[\s_]+/g, ''));
-  
   const hhIdCol = headers.findIndex(h => h === 'HHID' || h === 'FARMERID' || h === 'ID' || h.includes('HHID'));
-  const activityCol = headers.findIndex(h => h === 'ACTIVITY' || h === 'BENEFICIARYACTIVITY' || h.includes('ACTIVITY'));
-  const imageCol = headers.findIndex(h => h === 'IMAGE' || h === 'PHOTO' || h.includes('IMAGE'));
   
+  let activity = (data.activity || "").trim().toUpperCase();
+  let photoColName = "PHOTO";
+  if (activity.includes("FARMPOND")) photoColName = "FARMPONDPHOTO";
+  else if (activity.includes("POULTRY")) photoColName = "POULTRYPHOTO";
+  else if (activity.includes("GOAT")) photoColName = "GOATPHOTO";
+  
+  let photoCol = headers.findIndex(h => h === photoColName || h === 'PHOTO' || h === 'IMAGE' || h.includes('PHOTO'));
   const latCol = headers.findIndex(h => h === 'LAT' || h === 'LATITUDE');
   const longCol = headers.findIndex(h => h === 'LONG' || h === 'LONGITUDE' || h === 'LNG');
   const accuracyCol = headers.findIndex(h => h === 'ACCURACY' || h === 'GPS_ACCURACY');
   const userCol = headers.findIndex(h => h.includes('UPLOADEDBY') || h.includes('USER'));
 
-  if (hhIdCol === -1) return createResponse("error", "HH ID column not found in " + sheet.getName());
+  if (hhIdCol === -1) return createResponse("error", "HH ID column not found");
 
   const targetId = normalizeId(data.hhId);
-  const targetActivity = (data.activity || "").trim().toUpperCase();
-  
   let found = false;
   for (let i = 1; i < rows.length; i++) {
-    const rowId = normalizeId(rows[i][hhIdCol]);
-    const rowActivity = (rows[i][activityCol] || "").toString().trim().toUpperCase();
-    
-    // Match HH ID and Activity
-    if (rowId === targetId && (activityCol === -1 || rowActivity === targetActivity)) {
-      if (imageCol !== -1) sheet.getRange(i + 1, imageCol + 1).setValue(fileUrl);
+    if (normalizeId(rows[i][hhIdCol]) === targetId) {
+      if (photoCol !== -1) sheet.getRange(i + 1, photoCol + 1).setValue(fileUrl);
       if (latCol !== -1) sheet.getRange(i + 1, latCol + 1).setValue(data.lat);
       if (longCol !== -1) sheet.getRange(i + 1, longCol + 1).setValue(data.long);
       if (accuracyCol !== -1) sheet.getRange(i + 1, accuracyCol + 1).setValue(data.accuracy || 0);
@@ -176,31 +146,17 @@ function handleUpdateBeneficiaryActivity(data) {
     }
   }
 
-  // User requested NOT to log to Photos sheet for activity updates
-  
-  if (found) return createResponse("success", "Activity photo updated in Master_Sheet.", { url: fileUrl });
-  return createResponse("error", "Beneficiary ID and Activity match not found in Master_Sheet.");
+  if (found) return createResponse("success", "Activity photo updated.", { url: fileUrl });
+  return createResponse("error", "Beneficiary ID not found.");
 }
 
 /**
- * Handle attendance logging (In the Bhamini Application Spreadsheet)
+ * Handle attendance logging
  */
 function handleAttendance(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Sheet1') || ss.getSheets()[0];
-  
-  sheet.appendRow([
-    new Date(),
-    data.name,
-    data.date,
-    data.workingStatus,
-    data.reasonNotWorking,
-    data.placeOfVisit,
-    data.purposeOfVisit,
-    data.workingHours,
-    data.outcome
-  ]);
-  
+  sheet.appendRow([new Date(), data.name, data.date, data.workingStatus, data.reasonNotWorking, data.placeOfVisit, data.purposeOfVisit, data.workingHours, data.outcome]);
   return createResponse("success", "Attendance logged.");
 }
 
@@ -210,7 +166,6 @@ function handleAttendance(data) {
 function handleAchievement(data) {
   const sheet = getSheetByGid(1127739857) || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("MIS_Achievements");
   if (!sheet) return createResponse("error", "Achievements sheet not found");
-  
   sheet.appendRow([new Date(), data.id, data.value, data.gp, data.remarks]);
   return createResponse("success", "Achievement logged.");
 }
@@ -227,13 +182,10 @@ function handleMaintenanceBill(data) {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     url = file.getUrl();
   }
-  
   const sheet = getSheetByGid(1851901743) || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Maintenance");
   if (!sheet) return createResponse("error", "Maintenance sheet not found");
-  
   const id = 'BILL-' + Math.floor(Math.random() * 1000000);
   sheet.appendRow([new Date(), id, data.date, data.category, data.description, data.amount, 'Pending with me', url]);
-  
   return createResponse("success", "Bill uploaded successfully.", { id: id, url: url });
 }
 
@@ -243,16 +195,13 @@ function handleMaintenanceBill(data) {
 function handleUpdateAsset(data) {
   const sheet = getSheetByGid(0) || SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
   if (!sheet) return createResponse("error", "Assets sheet not found");
-  
   const rows = sheet.getDataRange().getValues();
   const headers = rows[0].map(h => h.toString().toUpperCase());
   const idCol = headers.indexOf('SNO') === -1 ? headers.indexOf('ID') : headers.indexOf('SNO');
   const statusCol = headers.indexOf('STATUSOFTHEASSET');
   const paymentCol = headers.indexOf('PAYMENTSTATUS');
   const receivedCol = headers.indexOf('HOWMANYRECEIVED');
-  
   if (idCol === -1) return createResponse("error", "ID column not found");
-
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][idCol].toString() === data.id.toString()) {
       if (statusCol !== -1) sheet.getRange(i + 1, statusCol + 1).setValue(data.assetStatus);
@@ -261,7 +210,6 @@ function handleUpdateAsset(data) {
       return createResponse("success", "Asset updated.");
     }
   }
-  
   return createResponse("error", "Asset ID not found.");
 }
 
@@ -271,7 +219,6 @@ function handleUpdateAsset(data) {
 function handleUpdateBillStatus(data) {
   const sheet = getSheetByGid(1851901743) || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Maintenance");
   if (!sheet) return createResponse("error", "Maintenance sheet not found");
-  
   const rows = sheet.getDataRange().getValues();
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][1].toString() === data.id.toString()) {
@@ -279,7 +226,6 @@ function handleUpdateBillStatus(data) {
       return createResponse("success", "Bill status updated.");
     }
   }
-  
   return createResponse("error", "Bill ID not found.");
 }
 
@@ -290,24 +236,17 @@ function handleBudgetUpdate(data) {
   const { year, month, type, updates } = data;
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("HDFC_Target");
   if (!sheet) return createResponse("error", "HDFC_Target sheet not found");
-  
   const range = sheet.getDataRange();
   const rows = range.getValues();
   const headers = rows[0].map(h => h.toString().toUpperCase().replace(/[\s_]+/g, ''));
-  
   const yearCol = headers.indexOf('YEAR');
   const monthsCol = headers.indexOf('MONTHS');
   const headCodeCol = headers.findIndex(h => h === 'HEADCODE' || h === 'HEAD_CODE');
   const spentCol = headers.findIndex(h => h === 'SPENTAMONT' || h === 'SPENTAMOUNT');
   const unitsCol = headers.indexOf('UNITSCOVERED');
-  
-  if (yearCol === -1 || monthsCol === -1 || headCodeCol === -1) {
-    return createResponse("error", "Required columns not found in HDFC_Target");
-  }
-  
+  if (yearCol === -1 || monthsCol === -1 || headCodeCol === -1) return createResponse("error", "Required columns not found");
   const updateCol = type === 'budget' ? spentCol : unitsCol;
   if (updateCol === -1) return createResponse("error", "Update column not found");
-  
   let updatedCount = 0;
   updates.forEach(update => {
     const { code, value } = update;
@@ -315,7 +254,6 @@ function handleBudgetUpdate(data) {
       const rowYear = rows[i][yearCol].toString().trim();
       const rowMonths = rows[i][monthsCol].toString().toLowerCase();
       const rowCode = rows[i][headCodeCol].toString().trim();
-      
       if (rowYear === year && rowMonths.includes(month.toLowerCase()) && rowCode === code) {
         const currentValue = parseFloat(rows[i][updateCol]) || 0;
         sheet.getRange(i + 1, updateCol + 1).setValue(currentValue + value);
@@ -324,83 +262,49 @@ function handleBudgetUpdate(data) {
       }
     }
   });
-  
   return createResponse("success", "Updated " + updatedCount + " budget items.");
 }
 
 /**
- * Handle photo deletion
+ * ROBUST: Handle photo deletion
  */
 function handleDeletePhoto(data) {
   const sheet = getSheetByGid(14172760) || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Photos");
   if (!sheet) return createResponse("error", "Photos sheet not found");
   
   const rows = sheet.getDataRange().getValues();
+  let deletedFromSheet = false;
+  
+  const targetUrl = (data.url || "").toString().trim();
+  const targetId = extractDriveId(targetUrl);
+
+  // Search for the URL or ID in the FIRST column (index 0)
   for (let i = 1; i < rows.length; i++) {
-    // URL is now in the first column (index 0)
-    if (rows[i][0] === data.url) {
+    const rowUrl = (rows[i][0] || "").toString().trim();
+    const rowId = extractDriveId(rowUrl);
+    
+    // Match by full URL or by Drive ID
+    if (rowUrl === targetUrl || (targetId && rowId === targetId)) {
       sheet.deleteRow(i + 1);
-      break;
+      deletedFromSheet = true;
+      break; 
     }
   }
   
-  try {
-    const id = data.url.split('id=')[1] || data.url.split('/d/')[1].split('/')[0];
-    DriveApp.getFileById(id).setTrashed(true);
-  } catch (e) {
-    console.error("Could not delete from Drive: " + e.message);
+  // Also attempt to delete from Google Drive
+  if (targetId) {
+    try {
+      DriveApp.getFileById(targetId).setTrashed(true);
+    } catch (e) {
+      console.error("Drive deletion error: " + e.message);
+    }
   }
   
-  return createResponse("success", "Photo deleted.");
+  return createResponse("success", deletedFromSheet ? "Photo deleted successfully." : "Photo removed from Drive (Registry entry not found).");
 }
 
-/**
- * Handle Training Document Upload
- */
-function handleTrainingDocument(data) {
-  const TRAINING_DOC_FOLDER_ID = "1kd81zYbr5_8qUzi__4fTid_ZjNb7jEJm"; // Provided by user
-  const folder = DriveApp.getFolderById(TRAINING_DOC_FOLDER_ID);
-  
-  const blob = Utilities.newBlob(Utilities.base64Decode(data.fileData), data.mimeType, data.fileName);
-  const file = folder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  const url = file.getUrl();
-  
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName("Training_Documents");
-  if (!sheet) {
-    sheet = ss.insertSheet("Training_Documents");
-    sheet.appendRow(["Timestamp", "Submission ID", "File Name", "File URL", "Uploaded By"]);
-  }
-  
-  sheet.appendRow([
-    new Date(),
-    data.submissionId,
-    data.fileName,
-    url,
-    data.uploadedBy || "Unknown"
-  ]);
-  
-  return createResponse("success", "Document uploaded and linked.", { url: url });
-}
-
-/**
- * Fetch Training Documents for a specific submission
- */
-function handleGetTrainingDocuments(data) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("Training_Documents");
-  if (!sheet) return createResponse("success", "No documents found", { files: [] });
-  
-  const rows = sheet.getDataRange().getValues();
-  const submissionId = data.submissionId;
-  
-  const results = rows.slice(1) // Skip header
-    .filter(row => row[1] === submissionId)
-    .map(row => ({
-      name: row[2],
-      url: row[3]
-    }));
-    
-  return createResponse("success", "Documents fetched", { files: results });
+function extractDriveId(url) {
+  if (!url) return null;
+  const match = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
+  return match ? match[1] : null;
 }

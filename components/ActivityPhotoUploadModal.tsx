@@ -78,7 +78,7 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                     const base64Data = (reader.result as string).split(',')[1];
                     
                     const payload = {
-                        action: 'updateBeneficiaryActivity',
+                        action: 'uploadFarmpondPhoto',
                         hhId: String(beneficiary.hhId || ''),
                         activity: beneficiary.activity,
                         photoData: base64Data,

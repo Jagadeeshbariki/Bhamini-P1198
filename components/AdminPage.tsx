@@ -211,13 +211,14 @@ const AdminPage: React.FC = () => {
                 const base64Data = preview.split(',')[1];
                 
                 const payload = {
-                    action: "addPhoto",
+                    action: 'ADD Photo',
                     fileName: file.name,
                     mimeType: file.type,
                     type: uploadType,
                     description: photoDescription || 'Field Entry',
                     activity: photoActivity,
-                    data: base64Data
+                    data: base64Data,
+                    photoData: base64Data // Legacy support for V2.3.1
                 };
 
                 const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {

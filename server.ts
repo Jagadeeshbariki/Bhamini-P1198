@@ -13,7 +13,10 @@ export async function createApp() {
   const odkEmail = (process.env.ODK_EMAIL || '').trim();
   const odkPassword = (process.env.ODK_PASSWORD || '').trim();
   
-  console.log(`[SERVER] Mode: ${process.env.NODE_ENV || 'development'}`);
+  // Determine if we are in production
+  const isProduction = process.env.NODE_ENV === "production" || !!process.env.K_SERVICE || !!process.env.VERCEL;
+  
+  console.log(`[SERVER] Mode: ${isProduction ? 'production' : 'development'}`);
   console.log(`[SERVER] ODK Config: Email=${odkEmail ? 'SET' : 'MISSING'}, Pass=${odkPassword ? 'SET' : 'MISSING'}`);
   
   if (!odkEmail || !odkPassword) {
@@ -798,8 +801,8 @@ export async function createApp() {
   // Serve static files and SPA fallback
   const distPath = path.join(process.cwd(), 'dist');
   
-  if (process.env.NODE_ENV !== "production") {
-    console.log("[SERVER] Initializing Vite...");
+  if (!isProduction) {
+    console.log("[SERVER] Initializing Vite for development...");
     try {
       const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
@@ -809,17 +812,19 @@ export async function createApp() {
       app.use(vite.middlewares);
       console.log("[SERVER] Vite initialized");
     } catch (e: any) {
-      console.error("[SERVER] Failed to initialize Vite:", e.message);
+      console.warn("[SERVER] Vite import failed, falling back to static serving:", e.message);
       app.use(express.static(distPath));
       app.get(/^((?!\/api\/).)*$/, (req, res) => {
-        res.sendFile(path.join(distPath, 'index.html'));
+        const indexPath = path.join(distPath, 'index.html');
+        res.sendFile(indexPath);
       });
     }
   } else {
-    console.log(`[SERVER] Production mode: Serving from ${distPath}`);
+    console.log(`[SERVER] Production mode: Serving static files from ${distPath}`);
     app.use(express.static(distPath));
     app.get(/^((?!\/api\/).)*$/, (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      res.sendFile(indexPath);
     });
   }
 
@@ -827,10 +832,10 @@ export async function createApp() {
 }
 
 // Start server
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = process.env.PORT || 3000;
 createApp().then(app => {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Listening on port ${PORT} (Mode: ${process.env.NODE_ENV || 'production'})`);
+  app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`[SERVER] Listening on port ${PORT}`);
   });
 }).catch(err => {
   console.error("[SERVER] Fatal Error during startup:", err);
