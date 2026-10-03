@@ -230,15 +230,25 @@ const HomePage: React.FC = () => {
         if (!window.confirm('Permanently remove this documentation from the registry?')) return;
         setIsDeleting(imageUrl);
         try {
-            const response = await fetch('/api/gas-proxy', {
+            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url: GOOGLE_APPS_SCRIPT_URL,
-                    payload: { action: 'deletePhoto', url: imageUrl }
-                })
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({ action: 'deletePhoto', url: imageUrl })
             });
-            const data = await response.json();
+            
+            const raw = await response.text();
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch {
+                // If not JSON, it might still have worked
+                if (raw.toLowerCase().includes('success')) {
+                    data = { status: 'success' };
+                } else {
+                    throw new Error('Invalid response: ' + raw.substring(0, 100));
+                }
+            }
 
             if (data.status === 'success') {
                 setGalleryImages(prev => prev.filter(item => item.url !== imageUrl));

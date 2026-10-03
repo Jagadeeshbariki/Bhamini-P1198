@@ -506,7 +506,7 @@ export async function createApp() {
     const timeout = setTimeout(() => {
       console.warn(`[GAS PROXY] TIMEOUT reached for: ${payload?.action}`);
       controller.abort();
-    }, 150000); // 150 second timeout
+    }, 25000); // 25 second timeout - safer for Vercel Hobby (max 10s usually, but some deployments allow more)
 
     try {
       const bodyString = JSON.stringify(payload);

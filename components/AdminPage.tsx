@@ -221,16 +221,24 @@ const AdminPage: React.FC = () => {
                     photoData: base64Data // Legacy support for V2.3.1
                 };
 
-                const response = await fetch('/api/gas-proxy', {
+                const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: GOOGLE_APPS_SCRIPT_URL,
-                        payload: payload
-                    })
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(payload)
                 });
 
-                const data = await response.json();
+                const raw = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(raw);
+                } catch {
+                    if (raw.toLowerCase().includes('success')) {
+                        data = { status: 'success' };
+                    } else {
+                        throw new Error('Invalid response: ' + raw.substring(0, 100));
+                    }
+                }
                 if (data.status === 'success') {
                     successCount++;
                 } else {
