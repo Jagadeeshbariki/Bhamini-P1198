@@ -3,10 +3,10 @@ import path from "path";
 
 export async function createApp() {
   const app = express();
-
-  // Set global JSON limit for large uploads - 20MB is safe for most Vercel functions
-  app.use(express.json({ limit: '20mb' }));
-  app.use(express.urlencoded({ limit: '20mb', extended: true }));
+  
+  // Increase payload limit for base64 uploads
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // API routes FIRST
   app.get("/api/health", (req, res) => {
@@ -465,128 +465,47 @@ export async function createApp() {
     }
 
     try {
-      console.log(`[SHEET PROXY] Fetching: ${url}`);
-      const response = await fetch(url, {
-        redirect: 'follow',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/csv,text/plain,application/vnd.ms-excel,*/*'
-        }
-      });
-      
+      const response = await fetch(url);
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[SHEET PROXY] Upstream Error (${response.status}):`, errorText.substring(0, 500));
         return res.status(response.status).send(`Upstream returned ${response.status}: ${errorText}`);
       }
-      
       const contentType = response.headers.get('content-type');
       if (contentType) res.setHeader('Content-Type', contentType);
-      
-      // Prevent any caching of the proxy response itself
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      
       const text = await response.text();
       res.send(text);
     } catch (error: any) {
-      console.error(`[SHEET PROXY] Fatal Error:`, error.message);
       res.status(500).send(`Proxy Error: ${error.message}`);
     }
   });
 
-  // NEW: Robust POST proxy for Google Apps Script
+  // Generic Google Apps Script Proxy (POST)
   app.post("/api/gas-proxy", async (req, res) => {
-    const { url, payload } = req.body || {};
-    if (!url) {
-      console.error("[GAS PROXY] ERROR: Missing 'url' in request body");
-      return res.status(400).json({ error: "Missing url parameter" });
+    const { scriptUrl, payload } = req.body;
+    
+    if (!scriptUrl) {
+      return res.status(400).json({ error: 'Missing scriptUrl' });
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      console.warn(`[GAS PROXY] TIMEOUT reached for: ${payload?.action}`);
-      controller.abort();
-    }, 150000); // 150 second timeout
-
     try {
-      const bodyString = JSON.stringify(payload);
-      console.log(`[GAS PROXY] Upstream POST to: ${url}`);
-      console.log(`[GAS PROXY] Action: ${payload?.action}, Size: ${(bodyString.length / 1024).toFixed(2)} KB`);
-      
-      const response = await fetch(url, {
+      console.log(`[GAS PROXY] Forwarding POST to: ${scriptUrl}`);
+      const response = await fetch(scriptUrl, {
         method: 'POST',
-        redirect: 'follow',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
-        body: bodyString,
-        signal: controller.signal
-      });
-
-      const text = await response.text();
-      clearTimeout(timeout);
-      
-      console.log(`[GAS PROXY] Upstream Status: ${response.status}`);
-      
-      if (!response.ok) {
-        console.error(`[GAS PROXY] Upstream error details: ${text.substring(0, 200)}`);
-        return res.status(response.status).json({ 
-          error: "Google Script Error", 
-          details: text.substring(0, 500) 
-        });
-      }
-
-      try {
-        const json = JSON.parse(text);
-        res.json(json);
-      } catch (e) {
-        console.warn(`[GAS PROXY] Response was not JSON. Returning raw text.`);
-        if (text.includes('<!DOCTYPE html>')) {
-          res.status(502).json({ error: "Google returned HTML (likely an error page). Check Script Quotas." });
-        } else {
-          res.json({ status: 'success', raw: text });
-        }
-      }
-    } catch (error: any) {
-      clearTimeout(timeout);
-      const isTimeout = error.name === 'AbortError';
-      console.error(`[GAS PROXY] FATAL ERROR:`, isTimeout ? 'Timed out' : error.message);
-      res.status(500).json({ 
-        error: isTimeout ? "Request to Google timed out." : "Internal Proxy Error",
-        message: error.message 
-      });
-    }
-  });
-
-  // NEW: Robust GET proxy for Google Apps Script
-  app.get("/api/gas-proxy", async (req, res) => {
-    const { url, ...params } = req.query;
-    if (!url || typeof url !== 'string') return res.status(400).json({ error: "Missing url" });
-
-    try {
-      const targetUrl = new URL(url);
-      Object.entries(params).forEach(([key, val]) => {
-        if (typeof val === 'string') targetUrl.searchParams.append(key, val);
-      });
-
-      console.log(`[GAS GET PROXY] Fetching: ${targetUrl.toString()}`);
-      const response = await fetch(targetUrl.toString(), {
-        redirect: 'follow',
-        headers: { 
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload || {})
       });
 
       const text = await response.text();
       try {
+        // Try to return as JSON if possible
         const json = JSON.parse(text);
         res.json(json);
-      } catch (e) {
+      } catch {
+        // Otherwise return as raw text (GAS sometimes returns HTML or plain text)
         res.send(text);
       }
     } catch (error: any) {
+      console.error(`[GAS PROXY] Error: ${error.message}`);
       res.status(500).json({ error: error.message });
     }
   });
