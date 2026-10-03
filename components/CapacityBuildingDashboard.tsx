@@ -115,18 +115,29 @@ const CapacityBuildingDashboard: React.FC = () => {
             if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
             
             const text = await res.text();
+            if (!text || text.length < 10) {
+                console.warn('Empty or invalid CSV response for linked docs');
+                setLinkedDocs([]);
+                return;
+            }
+
             const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
             
+            const cleanId = (id: any) => String(id || '').trim().toLowerCase().replace(/^uuid:/i, '');
+            const targetId = cleanId(submissionId);
+
             const files = (parsed.data as any[])
                 .filter(row => {
-                    const rowId = row['Submission ID'] || row['submissionId'] || Object.values(row)[1];
-                    return String(rowId).trim() === String(submissionId).trim();
+                    if (!row) return false;
+                    const rowId = row['Submission ID'] || row['submissionId'] || row['SubmissionID'] || Object.values(row)[1];
+                    return cleanId(rowId) === targetId;
                 })
                 .map(row => ({
                     id: Math.random().toString(),
-                    name: row['File Name'] || row['fileName'] || Object.values(row)[2],
-                    url: row['File URL'] || row['fileUrl'] || Object.values(row)[3]
-                }));
+                    name: row['File Name'] || row['fileName'] || Object.values(row)[2] || 'Unnamed Document',
+                    url: row['File URL'] || row['fileUrl'] || Object.values(row)[3] || '#'
+                }))
+                .filter(f => f.url !== '#');
 
             setLinkedDocs(files);
         } catch (err: any) {

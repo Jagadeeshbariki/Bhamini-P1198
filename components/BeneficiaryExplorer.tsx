@@ -498,7 +498,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
                 beneficiaryMap.set(key, {
                     hhId: hhId,
                     hhHeadName: getVal(row, ['location-farmer_name', 'location-show_farmer_name', 'HH Head Name', 'farmer_name']),
-                    activity: getVal(row, ['activity', 'activity_registration-activity', 'Activity']).replace(/^(BYP|BFE|AFT)[-\s]*/i, ''),
+                    activity: getVal(row, ['activity', 'activity_registration-activity', 'Activity']),
                     beneficiaryName: getVal(row, ['Name', 'Beneficiary name', 'bnf_section_-bnf_name_', 'bnf_section-bnf_name', 'bnf_name']),
                     beneficiaryId: bId,
                     age: parseInt(getVal(row, ['age', 'Age', 'bnf_section_-age_', 'bnf_section-age'])) || 0,
@@ -572,7 +572,7 @@ const BeneficiaryExplorer: React.FC<BeneficiaryExplorerProps> = ({ onBack }) => 
 
                 const getContribActivityColumn = (activityName: string) => {
                     if (!activityName) return '';
-                    const clean = activityName.toUpperCase().replace(/^(BYP|BFE|AFT)[-\s]*/, '').replace(/[\s_-]/g, '');
+                    const clean = activityName.toUpperCase().replace(/^(BYP|BFE|AFT)[-\s]+/, '').replace(/[\s_-]/g, '');
                     
                     if (clean === 'NS') return 'BYP-NS';
                     if (clean === 'BFE') return 'BYP-BFE';

@@ -347,6 +347,7 @@ export async function createApp() {
         gp: p.location_info?.gp || 'Unknown',
         village: p.location_info?.village || 'Unknown',
         groupName: p.group_info?.group_name || 'Unnamed Group',
+        activity: p['bene_info-activity'] || p.bene_info?.activity || p.group_info?.activity || p.activity_info?.activity || 'General',
         formationDate: p.group_info?.group_formation_date || p.__system?.submissionDate,
         members: membersByParent[p.__id] || []
       }));
@@ -800,6 +801,7 @@ export async function createApp() {
 
   // Serve static files and SPA fallback
   const distPath = path.join(process.cwd(), 'dist');
+  const indexPath = path.join(distPath, 'index.html');
   
   if (!isProduction) {
     console.log("[SERVER] Initializing Vite for development...");
@@ -815,16 +817,39 @@ export async function createApp() {
       console.warn("[SERVER] Vite import failed, falling back to static serving:", e.message);
       app.use(express.static(distPath));
       app.get(/^((?!\/api\/).)*$/, (req, res) => {
-        const indexPath = path.join(distPath, 'index.html');
-        res.sendFile(indexPath);
+        res.sendFile(indexPath, (err) => {
+          if (err) {
+            console.error(`[SERVER] Error sending index.html (dev fallback): ${err.message}`);
+            res.status(500).send(`Critical Error: index.html not found at ${indexPath}. Please run build first.`);
+          }
+        });
       });
     }
   } else {
     console.log(`[SERVER] Production mode: Serving static files from ${distPath}`);
+    
+    // Log if dist exists
+    import('fs').then(fs => {
+      if (fs.existsSync(distPath)) {
+        console.log(`[SERVER] SUCCESS: 'dist' directory found at ${distPath}`);
+        if (fs.existsSync(indexPath)) {
+          console.log(`[SERVER] SUCCESS: 'index.html' found at ${indexPath}`);
+        } else {
+          console.error(`[SERVER] ERROR: 'index.html' NOT found at ${indexPath}`);
+        }
+      } else {
+        console.error(`[SERVER] ERROR: 'dist' directory NOT found at ${distPath}`);
+      }
+    }).catch(() => {});
+
     app.use(express.static(distPath));
     app.get(/^((?!\/api\/).)*$/, (req, res) => {
-      const indexPath = path.join(distPath, 'index.html');
-      res.sendFile(indexPath);
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error(`[SERVER] Error sending index.html: ${err.message}`);
+          res.status(500).send(`Critical Error: index.html not found at ${indexPath}. Ensure build process completed successfully.`);
+        }
+      });
     });
   }
 

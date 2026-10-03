@@ -4,11 +4,12 @@ import {
     Users, Search, RefreshCw, AlertCircle, LayoutGrid, List,
     Landmark, Building2, MapPin, Calendar, User, UserPlus,
     BarChart3, PieChart as PieChartIcon, ChevronDown, ChevronUp,
-    Filter, X, UserCheck
+    Filter, X, UserCheck, Activity as ActivityIcon
 } from 'lucide-react';
 import { 
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
-    CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend
+    CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend,
+    Line, ComposedChart
 } from 'recharts';
 import { useAuth } from '../hooks/useAuth';
 
@@ -28,6 +29,7 @@ interface GroupFormation {
   gp: string;
   village: string;
   groupName: string;
+  activity?: string;
   formationDate: string;
   members: GroupMember[];
 }
@@ -175,17 +177,46 @@ const InstitutionDashboard: React.FC = () => {
         const ageData = Object.entries(ageMap).map(([name, value]) => ({ name, value })).filter(d => d.value > 0);
 
         // Cluster/GP/Village Member Data
-        const clusterMap: Record<string, number> = {};
+        const clusterMemberMap: Record<string, number> = {};
+        const clusterGroupMap: Record<string, number> = {};
+        const activityClusterMap: Record<string, any> = {};
         const gpMap: Record<string, number> = {};
         const villageMap: Record<string, number> = {};
+        const allClusters = new Set<string>();
         
         filteredData.forEach(g => {
-            clusterMap[g.cluster] = (clusterMap[g.cluster] || 0) + g.members.length;
+            const cluster = g.cluster || 'Unknown';
+            allClusters.add(cluster);
+            clusterMemberMap[cluster] = (clusterMemberMap[cluster] || 0) + g.members.length;
+            clusterGroupMap[cluster] = (clusterGroupMap[cluster] || 0) + 1;
+            
+            const activity = g.activity || 'General';
+            if (!activityClusterMap[activity]) {
+                activityClusterMap[activity] = { name: activity, total: 0 };
+            }
+            activityClusterMap[activity].total = (activityClusterMap[activity].total || 0) + 1;
+            activityClusterMap[activity][cluster] = (activityClusterMap[activity][cluster] || 0) + 1;
+
             gpMap[g.gp] = (gpMap[g.gp] || 0) + g.members.length;
             villageMap[g.village] = (villageMap[g.village] || 0) + g.members.length;
         });
 
-        const clusterData = Object.entries(clusterMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 10);
+        const sortedClusters = Array.from(allClusters).sort();
+        const clusterMemberData = Object.entries(clusterMemberMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 10);
+        const clusterGroupData = Object.entries(clusterGroupMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 10);
+        
+        // Ensure every activity point has a value for every cluster to prevent line breaks
+        const activityGroupData = Object.values(activityClusterMap)
+            .sort((a: any, b: any) => b.total - a.total)
+            .slice(0, 10)
+            .map((item: any) => {
+                const normalizedItem = { ...item };
+                sortedClusters.forEach(cluster => {
+                    if (normalizedItem[cluster] === undefined) normalizedItem[cluster] = 0;
+                });
+                return normalizedItem;
+            });
+
         const gpData = Object.entries(gpMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 10);
         const villageData = Object.entries(villageMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 10);
 
@@ -203,9 +234,33 @@ const InstitutionDashboard: React.FC = () => {
         return { 
             totalGroups, totalMembers, maleMembers, femaleMembers, 
             avgMembers, uniqueVillages, uniqueGPs,
-            genderData, ageData, clusterData, gpData, villageData, sizeData
+            genderData, ageData, clusterMemberData, clusterGroupData, activityGroupData, gpData, villageData, sizeData,
+            sortedClusters
         };
     }, [filteredData]);
+
+    if (loading && data.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8 animate-fade-in">
+                <div className="relative w-24 h-24">
+                    <div className="absolute inset-0 border-8 border-indigo-100 rounded-full"></div>
+                    <div className="absolute inset-0 border-8 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="absolute inset-4 bg-indigo-50 rounded-full flex items-center justify-center">
+                        <Landmark className="w-8 h-8 text-indigo-600" />
+                    </div>
+                </div>
+                <div className="text-center space-y-2">
+                    <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-widest">Syncing Data</h2>
+                    <p className="text-gray-400 font-bold text-[10px] uppercase tracking-[0.3em]">Connecting to ODK Central...</p>
+                </div>
+                <div className="grid grid-cols-3 gap-3 w-64">
+                    <Skeleton className="h-2 w-full" />
+                    <Skeleton className="h-2 w-full" />
+                    <Skeleton className="h-2 w-full" />
+                </div>
+            </div>
+        );
+    }
 
     if (error) {
         return (
@@ -401,23 +456,27 @@ const InstitutionDashboard: React.FC = () => {
                                     cursor={{ fill: '#f8fafc' }}
                                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                 />
-                                <Bar dataKey="value" fill="#10b981" radius={[10, 10, 0, 0]} barSize={40} />
+                                <Bar dataKey="value" radius={[10, 10, 0, 0]} barSize={40}>
+                                    {stats.ageData.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                {/* Cluster Distribution */}
+                {/* Cluster Member Distribution */}
                 <div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-sm">
                     <div className="flex items-center gap-3 mb-8">
                         <div className="p-3 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded-2xl">
-                            <MapPin size={20} />
+                            <Users size={20} />
                         </div>
                         <h3 className="text-sm font-black uppercase tracking-widest text-gray-800 dark:text-white">Cluster-wise Members</h3>
                     </div>
                     <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stats.clusterData} layout="vertical">
+                            <BarChart data={stats.clusterMemberData} layout="vertical">
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                 <XAxis type="number" hide />
                                 <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} width={80} />
@@ -425,8 +484,78 @@ const InstitutionDashboard: React.FC = () => {
                                     cursor={{ fill: '#f8fafc' }}
                                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                 />
-                                <Bar dataKey="value" fill="#f59e0b" radius={[0, 10, 10, 0]} barSize={20} />
+                                <Bar dataKey="value" radius={[0, 10, 10, 0]} barSize={20}>
+                                    {stats.clusterMemberData.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Bar>
                             </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Cluster Groups Distribution */}
+                <div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-sm">
+                    <div className="flex items-center gap-3 mb-8">
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-2xl">
+                            <MapPin size={20} />
+                        </div>
+                        <h3 className="text-sm font-black uppercase tracking-widest text-gray-800 dark:text-white">Cluster-wise Groups</h3>
+                    </div>
+                    <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={stats.clusterGroupData} layout="vertical">
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                <XAxis type="number" hide />
+                                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} width={80} />
+                                <Tooltip 
+                                    cursor={{ fill: '#f8fafc' }}
+                                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                />
+                                <Bar dataKey="value" radius={[0, 10, 10, 0]} barSize={20}>
+                                    {stats.clusterGroupData.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Activity Groups Distribution */}
+                <div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-sm lg:col-span-2">
+                    <div className="flex items-center gap-3 mb-8">
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded-2xl">
+                            <ActivityIcon size={20} />
+                        </div>
+                        <h3 className="text-sm font-black uppercase tracking-widest text-gray-800 dark:text-white">Activity Distribution by Cluster</h3>
+                    </div>
+                    <div className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={stats.activityGroupData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                                <Tooltip 
+                                    cursor={{ fill: '#f8fafc' }}
+                                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                />
+                                <Legend verticalAlign="top" height={36}/>
+                                <Bar dataKey="total" name="Total Groups" fill="#10b981" opacity={0.2} radius={[10, 10, 0, 0]} barSize={40} />
+                                {stats.sortedClusters.map((cluster, idx) => (
+                                    <Line 
+                                        key={cluster}
+                                        type="monotone" 
+                                        dataKey={cluster} 
+                                        name={cluster}
+                                        stroke={['#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#10b981'][idx % 5]} 
+                                        strokeWidth={3}
+                                        dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
+                                        activeDot={{ r: 6, strokeWidth: 0 }}
+                                        connectNulls={true}
+                                    />
+                                ))}
+                            </ComposedChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
@@ -449,7 +578,11 @@ const InstitutionDashboard: React.FC = () => {
                                     cursor={{ fill: '#f8fafc' }}
                                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                 />
-                                <Bar dataKey="value" fill="#8b5cf6" radius={[10, 10, 0, 0]} barSize={40} />
+                                <Bar dataKey="value" radius={[10, 10, 0, 0]} barSize={40}>
+                                    {stats.sizeData.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -499,9 +632,12 @@ const InstitutionDashboard: React.FC = () => {
                                         <td className="px-8 py-6">
                                             <div className="flex flex-col">
                                                 <span className="font-black text-gray-900 dark:text-white uppercase tracking-tight">{group.groupName}</span>
-                                                <span className="text-[10px] font-bold text-gray-500 flex items-center gap-1 mt-1">
-                                                    <MapPin size={10} className="text-gray-300" /> {group.village}
-                                                </span>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 px-1.5 py-0.5 rounded uppercase tracking-tighter">{group.activity || 'General'}</span>
+                                                    <span className="text-[10px] font-bold text-gray-500 flex items-center gap-1">
+                                                        <MapPin size={10} className="text-gray-300" /> {group.village}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-8 py-6">
