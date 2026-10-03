@@ -37,6 +37,8 @@ function doPost(e) {
       case "uploadFarmpondPhoto": return handleUpdateBeneficiaryActivity(request);
       case "updateBeneficiaryActivity": return handleUpdateBeneficiaryActivity(request);
       case "deletePhoto": return handleDeletePhoto(request);
+      case "addTrainingDocument": return handleTrainingDocumentUpload(request);
+      case "deleteTrainingDocument": return handleDeleteTrainingDocument(request);
       case "addAchievement": return handleAchievement(request);
       case "addMaintenanceBill": return handleMaintenanceBill(request);
       case "updateBillStatus": return handleUpdateBillStatus(request);
@@ -307,4 +309,67 @@ function extractDriveId(url) {
   if (!url) return null;
   const match = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
   return match ? match[1] : null;
+}
+
+/**
+ * Handle training document upload
+ */
+function handleTrainingDocumentUpload(data) {
+  const folder = DriveApp.getFolderById(PHOTO_FOLDER_ID); // Reusing photo folder or use a specific one
+  const blob = Utilities.newBlob(Utilities.base64Decode(data.fileData || data.data), data.mimeType, data.fileName);
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const url = file.getUrl();
+  const fileId = file.getId();
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("TrainingDocuments") || getSheetByGid(448434982);
+  if (sheet) {
+    sheet.appendRow([
+      new Date(),
+      data.submissionId || "general",
+      data.fileName,
+      url,
+      fileId,
+      data.uploadedBy || 'Unknown'
+    ]);
+  }
+  
+  return createResponse("success", "Document uploaded successfully", { url: url, fileId: fileId });
+}
+
+/**
+ * Handle training document deletion
+ */
+function handleDeleteTrainingDocument(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("TrainingDocuments") || getSheetByGid(448434982);
+  if (!sheet) return createResponse("error", "TrainingDocuments sheet not found");
+  
+  const rows = sheet.getDataRange().getValues();
+  let deletedFromSheet = false;
+  
+  const targetUrl = (data.url || "").toString().trim();
+  const targetId = extractDriveId(targetUrl);
+
+  for (let i = 1; i < rows.length; i++) {
+    const rowUrl = (rows[i][3] || "").toString().trim(); // URL is in 4th column (index 3)
+    const rowId = extractDriveId(rowUrl);
+    
+    if (rowUrl === targetUrl || (targetId && rowId === targetId)) {
+      sheet.deleteRow(i + 1);
+      deletedFromSheet = true;
+      break; 
+    }
+  }
+  
+  if (targetId) {
+    try {
+      DriveApp.getFileById(targetId).setTrashed(true);
+    } catch (e) {
+      console.error("Drive deletion error: " + e.message);
+    }
+  }
+  
+  return createResponse("success", deletedFromSheet ? "Document deleted successfully." : "Document removed from Drive.");
 }

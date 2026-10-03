@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../hooks/useAuth';
 import PhotoGallery from './PhotoGallery';
-import { GOOGLE_APPS_SCRIPT_URL, APP_VERSION } from '../config';
+import { GOOGLE_APPS_SCRIPT_URL, APP_VERSION, CAPACITY_BUILDING_DOCS_URL, CAPACITY_BUILDING_SCRIPT_URL } from '../config';
 
 interface CapacityRecord {
     id: string;
@@ -42,6 +42,7 @@ const CapacityBuildingDashboard: React.FC = () => {
     const [uploading, setUploading] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploadingToId, setUploadingToId] = useState<string | null>(null);
+    const [deletingDocUrl, setDeletingDocUrl] = useState<string | null>(null);
     const [linkedDocs, setLinkedDocs] = useState<{ id: string; name: string; url: string }[]>([]);
     const [loadingDocs, setLoadingDocs] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -70,36 +71,47 @@ const CapacityBuildingDashboard: React.FC = () => {
         setUploading(true);
         try {
             const reader = new FileReader();
-            reader.onload = async (e) => {
-                const base64 = (e.target?.result as string).split(',')[1];
-                
-                const payload = {
-                    action: 'addTrainingDocument',
-                    submissionId: submissionId || 'general',
-                    fileName: selectedFile.name,
-                    fileData: base64,
-                    mimeType: selectedFile.type,
-                    uploadedBy: user?.name || 'Unknown'
-                };
-
-                const res = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(payload)
-                });
-
-                // With no-cors we can't see the result, but we can verify it by checking the list
-                alert('Upload request sent! Please wait a moment for it to be processed and then refresh the list.');
-                setShowUploadModal(false);
-                setSelectedFile(null);
-                setUploading(false);
-                setUploadingToId(null);
-                
-                // Poll for the new document after a short delay
-                setTimeout(() => fetchLinkedDocs(submissionId || 'general'), 3000);
-            };
             reader.readAsDataURL(selectedFile);
+            reader.onload = async (e) => {
+                try {
+                    const base64 = (e.target?.result as string).split(',')[1];
+                    
+                    const payload = {
+                        action: 'addTrainingDocument',
+                        submissionId: submissionId || 'general',
+                        fileName: selectedFile.name,
+                        fileData: base64,
+                        mimeType: selectedFile.type,
+                        uploadedBy: user?.name || user?.username || 'Unknown'
+                    };
+
+                    const res = await fetch(CAPACITY_BUILDING_SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await res.json();
+                    
+                    if (result.status === 'success') {
+                        alert('Document uploaded successfully!');
+                        setShowUploadModal(false);
+                        setSelectedFile(null);
+                        setUploading(false);
+                        setUploadingToId(null);
+                        
+                        // Refresh documents
+                        setTimeout(() => fetchLinkedDocs(submissionId || 'general'), 1000);
+                    } else {
+                        throw new Error(result.message || 'Upload failed');
+                    }
+                } catch (err: any) {
+                    console.error(err);
+                    alert('Upload failed: ' + err.message);
+                    setUploading(false);
+                }
+            };
         } catch (err: any) {
             console.error(err);
             alert('Upload failed: ' + err.message);
@@ -107,10 +119,39 @@ const CapacityBuildingDashboard: React.FC = () => {
         }
     };
 
+    const handleDeleteDoc = async (url: string, submissionId: string) => {
+        if (!window.confirm('Are you sure you want to delete this document?')) return;
+        
+        setDeletingDocUrl(url);
+        try {
+            const res = await fetch(CAPACITY_BUILDING_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({
+                    action: 'deleteTrainingDocument',
+                    url: url
+                })
+            });
+
+            const result = await res.json();
+            if (result.status === 'success') {
+                setLinkedDocs(prev => prev.filter(d => d.url !== url));
+            } else {
+                throw new Error(result.message || 'Delete failed');
+            }
+        } catch (err: any) {
+            console.error(err);
+            alert('Delete failed: ' + err.message);
+        } finally {
+            setDeletingDocUrl(null);
+        }
+    };
+
     const fetchLinkedDocs = async (submissionId: string) => {
         setLoadingDocs(true);
         try {
-            const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv';
+            const csvUrl = CAPACITY_BUILDING_DOCS_URL;
             const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(csvUrl)}`);
             if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
             
@@ -779,10 +820,10 @@ const CapacityBuildingDashboard: React.FC = () => {
                                     ) : linkedDocs.length > 0 ? (
                                         <div className="space-y-2">
                                             {linkedDocs.map(doc => (
-                                                <div key={doc.id} className="group relative">
+                                                <div key={doc.id} className="group relative flex items-center gap-2">
                                                     <button 
                                                         onClick={() => setPreviewUrl(doc.url)}
-                                                        className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-indigo-200 transition-all text-left"
+                                                        className="flex-1 flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-indigo-200 transition-all text-left"
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <div className="p-2 bg-white dark:bg-gray-900 rounded-lg shadow-sm">
@@ -795,6 +836,19 @@ const CapacityBuildingDashboard: React.FC = () => {
                                                             <ExternalLink size={12} className="text-gray-300 group-hover:text-indigo-600" />
                                                         </div>
                                                     </button>
+                                                    {isAdmin && (
+                                                        <button 
+                                                            disabled={deletingDocUrl === doc.url}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteDoc(doc.url, selectedRecord.id);
+                                                            }}
+                                                            className={`p-4 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-2xl hover:bg-rose-600 hover:text-white transition-all ${deletingDocUrl === doc.url ? 'animate-pulse' : ''}`}
+                                                            title="Delete Document"
+                                                        >
+                                                            {deletingDocUrl === doc.url ? <RefreshCw size={14} className="animate-spin" /> : <X size={14} />}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
