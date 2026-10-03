@@ -80,26 +80,22 @@ const CapacityBuildingDashboard: React.FC = () => {
                     uploadedBy: user?.name || 'Unknown'
                 };
 
-                // Use server-side proxy to avoid CORS/redirect issues in live link
-                const res = await fetch('/api/gas-proxy', {
+                await fetch(CAPACITY_BUILDING_SCRIPT_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        scriptUrl: CAPACITY_BUILDING_SCRIPT_URL,
-                        payload: payload
-                    })
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(payload)
                 });
 
-                if (!res.ok) throw new Error(`Upload failed with status ${res.status}`);
-                
-                alert('Document uploaded successfully!');
+                // With no-cors we can't see the result, but we can verify it by checking the list
+                alert('Upload request sent! Please wait a moment for it to be processed and then refresh the list.');
                 setShowUploadModal(false);
                 setSelectedFile(null);
                 setUploading(false);
                 setUploadingToId(null);
                 
-                // Refresh docs immediately
-                fetchLinkedDocs(submissionId || 'general');
+                // Poll for the new document after a short delay
+                setTimeout(() => fetchLinkedDocs(submissionId || 'general'), 3000);
             };
             reader.readAsDataURL(selectedFile);
         } catch (err: any) {
@@ -112,9 +108,8 @@ const CapacityBuildingDashboard: React.FC = () => {
     const fetchLinkedDocs = async (submissionId: string) => {
         setLoadingDocs(true);
         try {
-            // Use sheet-proxy to avoid CORS/redirect issues in live link
-            const gasUrl = `${CAPACITY_BUILDING_SCRIPT_URL}?submissionId=${encodeURIComponent(submissionId)}`;
-            const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(gasUrl)}`);
+            // Fetch directly from the separate App Script's doGet
+            const res = await fetch(`${CAPACITY_BUILDING_SCRIPT_URL}?submissionId=${encodeURIComponent(submissionId)}`);
             if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
             
             const json = await res.json();
@@ -125,6 +120,7 @@ const CapacityBuildingDashboard: React.FC = () => {
             }
         } catch (err: any) {
             console.error('Error fetching docs from App Script:', err);
+            // Fallback to empty list instead of showing old/wrong data
             setLinkedDocs([]);
         } finally {
             setLoadingDocs(false);
