@@ -129,14 +129,15 @@ const CapacityBuildingDashboard: React.FC = () => {
                 transformHeader: (h) => h.trim().toLowerCase().replace(/[\s_]/g, '')
             });
             
-            const cleanId = (id: any) => String(id || '').trim().toLowerCase().replace(/^uuid:/i, '');
+            const cleanId = (id: any) => String(id || '').trim().toLowerCase().replace(/^uuid:/i, '').replace(/[\{\}]/g, '');
             const targetId = cleanId(submissionId);
 
             const files = (parsed.data as any[])
                 .filter(row => {
                     if (!row) return false;
-                    // Use transformed header names
-                    const rowId = row['submissionid'] || row['id'] || Object.values(row)[1];
+                    // Use transformed header names (lowercase, no spaces)
+                    // Check multiple potential ID columns just in case
+                    const rowId = row['submissionid'] || row['id'] || row['submissionid(odk)'] || Object.values(row)[1];
                     return cleanId(rowId) === targetId;
                 })
                 .map(row => ({

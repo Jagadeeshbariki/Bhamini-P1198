@@ -461,16 +461,30 @@ export async function createApp() {
     }
 
     try {
-      const response = await fetch(url);
+      console.log(`[SHEET PROXY] Fetching: ${url}`);
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/csv,text/plain,application/vnd.ms-excel,*/*'
+        }
+      });
+      
       if (!response.ok) {
         const errorText = await response.text();
+        console.error(`[SHEET PROXY] Upstream Error (${response.status}):`, errorText.substring(0, 500));
         return res.status(response.status).send(`Upstream returned ${response.status}: ${errorText}`);
       }
+      
       const contentType = response.headers.get('content-type');
       if (contentType) res.setHeader('Content-Type', contentType);
+      
+      // Prevent any caching of the proxy response itself
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      
       const text = await response.text();
       res.send(text);
     } catch (error: any) {
+      console.error(`[SHEET PROXY] Fatal Error:`, error.message);
       res.status(500).send(`Proxy Error: ${error.message}`);
     }
   });
