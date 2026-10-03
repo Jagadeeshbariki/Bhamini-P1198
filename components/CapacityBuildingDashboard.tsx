@@ -110,7 +110,8 @@ const CapacityBuildingDashboard: React.FC = () => {
     const fetchLinkedDocs = async (submissionId: string) => {
         setLoadingDocs(true);
         try {
-            const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv';
+            // Cache-buster to ensure fresh data in hosted environment
+            const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv&t=${Date.now()}`;
             const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(csvUrl)}`);
             if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
             
@@ -121,7 +122,12 @@ const CapacityBuildingDashboard: React.FC = () => {
                 return;
             }
 
-            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+            // Transform headers to lowercase and remove spaces/underscores for robust matching
+            const parsed = Papa.parse(text, { 
+                header: true, 
+                skipEmptyLines: true,
+                transformHeader: (h) => h.trim().toLowerCase().replace(/[\s_]/g, '')
+            });
             
             const cleanId = (id: any) => String(id || '').trim().toLowerCase().replace(/^uuid:/i, '');
             const targetId = cleanId(submissionId);
@@ -129,15 +135,16 @@ const CapacityBuildingDashboard: React.FC = () => {
             const files = (parsed.data as any[])
                 .filter(row => {
                     if (!row) return false;
-                    const rowId = row['Submission ID'] || row['submissionId'] || row['SubmissionID'] || Object.values(row)[1];
+                    // Use transformed header names
+                    const rowId = row['submissionid'] || row['id'] || Object.values(row)[1];
                     return cleanId(rowId) === targetId;
                 })
                 .map(row => ({
                     id: Math.random().toString(),
-                    name: row['File Name'] || row['fileName'] || Object.values(row)[2] || 'Unnamed Document',
-                    url: row['File URL'] || row['fileUrl'] || Object.values(row)[3] || '#'
+                    name: row['filename'] || row['name'] || row['file'] || Object.values(row)[2] || 'Unnamed Document',
+                    url: row['fileurl'] || row['url'] || row['link'] || Object.values(row)[3] || '#'
                 }))
-                .filter(f => f.url !== '#');
+                .filter(f => f.url !== '#' && f.url.startsWith('http'));
 
             setLinkedDocs(files);
         } catch (err: any) {
