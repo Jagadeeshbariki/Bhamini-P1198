@@ -495,22 +495,28 @@ export async function createApp() {
     const { url, payload } = req.body;
     if (!url) return res.status(400).json({ error: "Missing url" });
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000); // 120 second timeout
+
     try {
       console.log(`[GAS PROXY] POST to: ${url}`);
-      console.log(`[GAS PROXY] Payload Action: ${payload?.action}`);
+      console.log(`[GAS PROXY] Action: ${payload?.action}`);
       
       const response = await fetch(url, {
         method: 'POST',
-        redirect: 'follow', // GAS always redirects on POST
+        redirect: 'follow',
         headers: { 
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain', // GAS often handles text/plain better for JSON payloads
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
 
       const text = await response.text();
-      console.log(`[GAS PROXY] Response Status: ${response.status}`);
+      clearTimeout(timeout);
+      
+      console.log(`[GAS PROXY] Upstream Status: ${response.status}`);
       
       if (!response.ok) {
         return res.status(response.status).json({ 
@@ -526,8 +532,10 @@ export async function createApp() {
         res.json({ status: 'success', raw: text });
       }
     } catch (error: any) {
-      console.error(`[GAS PROXY] Fatal Error:`, error.message);
-      res.status(500).json({ error: error.message });
+      clearTimeout(timeout);
+      const isTimeout = error.name === 'AbortError';
+      console.error(`[GAS PROXY] Error:`, isTimeout ? 'Timed out after 120s' : error.message);
+      res.status(500).json({ error: isTimeout ? "Request to Google timed out" : error.message });
     }
   });
 

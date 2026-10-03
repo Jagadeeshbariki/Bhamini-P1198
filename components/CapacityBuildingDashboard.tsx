@@ -68,53 +68,73 @@ const CapacityBuildingDashboard: React.FC = () => {
             return;
         }
         setUploading(true);
+        
         try {
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const base64 = (e.target?.result as string).split(',')[1];
-                
-                const payload = {
-                    action: 'addTrainingDocument',
-                    submissionId: submissionId || 'general',
-                    fileName: selectedFile.name,
-                    fileData: base64,
-                    // Robustness: Include both data and photoData as fallbacks
-                    data: base64,
-                    photoData: base64,
-                    mimeType: selectedFile.type,
-                    uploadedBy: user?.name || 'Unknown'
+            // Convert file to base64 using a Promise
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const res = reader.result as string;
+                    resolve(res.split(',')[1]);
                 };
+                reader.onerror = reject;
+                reader.readAsDataURL(selectedFile);
+            });
 
+            const payload = {
+                action: 'addTrainingDocument',
+                submissionId: submissionId || 'general',
+                fileName: selectedFile.name,
+                fileData: base64,
+                data: base64,
+                photoData: base64,
+                mimeType: selectedFile.type,
+                uploadedBy: user?.name || 'Unknown'
+            };
+
+            // Use an AbortController for a 120-second timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+            try {
                 const res = await fetch('/api/gas-proxy', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         url: GOOGLE_APPS_SCRIPT_URL,
                         payload: payload
-                    })
+                    }),
+                    signal: controller.signal
                 });
 
+                clearTimeout(timeoutId);
+
                 if (!res.ok) {
-                    const errData = await res.json();
-                    throw new Error(errData.details || 'Proxy request failed');
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error || errData.details || `Server responded with ${res.status}`);
                 }
 
                 const result = await res.json();
-                console.log('Upload Result:', result);
-                
-                alert('Upload successful! The document has been linked to this training session.');
-                setShowUploadModal(false);
-                setSelectedFile(null);
-                setUploading(false);
-                setUploadingToId(null);
-                
-                // Refresh the list immediately
-                fetchLinkedDocs(submissionId || 'general');
-            };
-            reader.readAsDataURL(selectedFile);
+                if (result.status === 'success' || result.status === 'partial_success') {
+                    alert('Upload successful! The document has been linked to this training session.');
+                    setShowUploadModal(false);
+                    setSelectedFile(null);
+                    setUploadingToId(null);
+                    fetchLinkedDocs(submissionId || 'general');
+                } else {
+                    throw new Error(result.message || 'Google Script returned an error');
+                }
+            } catch (fetchErr: any) {
+                clearTimeout(timeoutId);
+                if (fetchErr.name === 'AbortError') {
+                    throw new Error('Upload timed out. The file might be too large or the server is slow.');
+                }
+                throw fetchErr;
+            }
         } catch (err: any) {
-            console.error(err);
+            console.error('Upload Error:', err);
             alert('Upload failed: ' + err.message);
+        } finally {
             setUploading(false);
         }
     };
