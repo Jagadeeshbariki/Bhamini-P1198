@@ -221,21 +221,25 @@ const AdminPage: React.FC = () => {
                     photoData: base64Data // Legacy support for V2.3.1
                 };
 
-                const response = await fetch('/api/gas-proxy', {
+                const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: GOOGLE_APPS_SCRIPT_URL,
-                        payload: payload
-                    })
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(payload)
                 });
 
-                const data = await response.json();
-                if (data.status === 'success') {
-                    successCount++;
-                } else {
+                const raw = await response.text();
+                try {
+                    const data = JSON.parse(raw);
+                    if (data.status === 'success') {
+                        successCount++;
+                    } else {
+                        errorCount++;
+                        lastErrorMessage = data.message || 'Unknown error from script';
+                    }
+                } catch {
                     errorCount++;
-                    lastErrorMessage = data.message || 'Unknown error from script';
+                    lastErrorMessage = 'Invalid JSON response from script. Check if the script is deployed as "Anyone".';
                 }
             }
 

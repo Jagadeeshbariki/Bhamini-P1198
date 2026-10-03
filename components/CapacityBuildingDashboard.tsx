@@ -78,38 +78,26 @@ const CapacityBuildingDashboard: React.FC = () => {
                     submissionId: submissionId || 'general',
                     fileName: selectedFile.name,
                     fileData: base64,
-                    // Robustness: Include both data and photoData as fallbacks
-                    data: base64,
-                    photoData: base64,
                     mimeType: selectedFile.type,
                     uploadedBy: user?.name || 'Unknown'
                 };
 
-                const res = await fetch('/api/gas-proxy', {
+                const res = await fetch(GOOGLE_APPS_SCRIPT_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: GOOGLE_APPS_SCRIPT_URL,
-                        payload: payload
-                    })
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(payload)
                 });
 
-                if (!res.ok) {
-                    const errData = await res.json();
-                    throw new Error(errData.details || 'Proxy request failed');
-                }
-
-                const result = await res.json();
-                console.log('Upload Result:', result);
-                
-                alert('Upload successful! The document has been linked to this training session.');
+                // With no-cors we can't see the result, but we can verify it by checking the list
+                alert('Upload request sent! Please wait a moment for it to be processed and then refresh the list.');
                 setShowUploadModal(false);
                 setSelectedFile(null);
                 setUploading(false);
                 setUploadingToId(null);
                 
-                // Refresh the list immediately
-                fetchLinkedDocs(submissionId || 'general');
+                // Poll for the new document after a short delay
+                setTimeout(() => fetchLinkedDocs(submissionId || 'general'), 3000);
             };
             reader.readAsDataURL(selectedFile);
         } catch (err: any) {
@@ -122,77 +110,27 @@ const CapacityBuildingDashboard: React.FC = () => {
     const fetchLinkedDocs = async (submissionId: string) => {
         setLoadingDocs(true);
         try {
-            // 1. Try fetching via Apps Script dynamic GET proxy first
-            // This is the most reliable as it reads directly from the script's memory/sheet
-            const scriptUrl = `${window.location.origin}/api/gas-proxy?url=${encodeURIComponent(GOOGLE_APPS_SCRIPT_URL)}&action=getTrainingDocuments&submissionId=${encodeURIComponent(submissionId)}`;
+            const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv';
+            const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(csvUrl)}`);
+            if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
             
-            try {
-                const scriptRes = await fetch(scriptUrl);
-                if (scriptRes.ok) {
-                    const data = await scriptRes.json();
-                    if (data.status === 'success' && Array.isArray(data.files)) {
-                        setLinkedDocs(data.files.map((f: any) => ({
-                            id: Math.random().toString(),
-                            name: f.name || 'Unnamed Document',
-                            url: f.url || '#'
-                        })));
-                        setLoadingDocs(false);
-                        return;
-                    }
-                }
-            } catch (scriptErr) {
-                console.warn('Script fetch failed, falling back to CSV:', scriptErr);
-            }
-
-            // 2. Fallback to CSV Fetch (Existing Logic)
-            const timestamp = Date.now();
-            const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv&t=${timestamp}`;
+            const text = await res.text();
+            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
             
-            let text = '';
-            try {
-                const directRes = await fetch(csvUrl);
-                if (directRes.ok) {
-                    text = await directRes.text();
-                } else {
-                    throw new Error('Direct fetch failed');
-                }
-            } catch (e) {
-                const proxyUrl = `/api/sheet-proxy?url=${encodeURIComponent(csvUrl)}`;
-                const res = await fetch(proxyUrl);
-                if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
-                text = await res.text();
-            }
-
-            if (!text || text.length < 10) {
-                setLinkedDocs([]);
-                return;
-            }
-
-            const parsed = Papa.parse(text, { 
-                header: true, 
-                skipEmptyLines: true,
-                transformHeader: (h) => h.trim().toLowerCase().replace(/[\s_]/g, '')
-            });
-            
-            const cleanId = (id: any) => String(id || '').trim().toLowerCase().replace(/^uuid:/i, '').replace(/[\{\}]/g, '');
-            const targetId = cleanId(submissionId);
-
             const files = (parsed.data as any[])
                 .filter(row => {
-                    if (!row) return false;
-                    const rowId = row['submissionid'] || row['id'] || row['submissionid(odk)'] || Object.values(row)[1];
-                    return cleanId(rowId) === targetId;
+                    const rowId = row['Submission ID'] || row['submissionId'] || Object.values(row)[1];
+                    return String(rowId).trim() === String(submissionId).trim();
                 })
                 .map(row => ({
                     id: Math.random().toString(),
-                    name: row['filename'] || row['name'] || row['file'] || Object.values(row)[2] || 'Unnamed Document',
-                    url: row['fileurl'] || row['url'] || row['link'] || Object.values(row)[3] || '#'
-                }))
-                .filter(f => f.url !== '#' && f.url.startsWith('http'));
+                    name: row['File Name'] || row['fileName'] || Object.values(row)[2],
+                    url: row['File URL'] || row['fileUrl'] || Object.values(row)[3]
+                }));
 
             setLinkedDocs(files);
         } catch (err: any) {
-            console.error('Error fetching docs:', err);
+            console.error('Error fetching docs from CSV:', err);
         } finally {
             setLoadingDocs(false);
         }
@@ -821,40 +759,17 @@ const CapacityBuildingDashboard: React.FC = () => {
                                 <div className="border-t border-gray-100 dark:border-gray-800 pt-8">
                                     <div className="flex items-center justify-between mb-4">
                                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Linked Documents</p>
-                                        <div className="flex gap-2">
-                                            {debugMode && (
-                                                <button 
-                                                    onClick={() => fetchLinkedDocs(selectedRecord.id)}
-                                                    className="p-1.5 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-all"
-                                                    title="Debug Reload"
-                                                >
-                                                    <RefreshCw size={10} />
-                                                </button>
-                                            )}
-                                            <button 
-                                                onClick={() => {
-                                                    setUploadingToId(selectedRecord.id);
-                                                    setShowUploadModal(true);
-                                                }}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
-                                            >
-                                                <Upload size={10} />
-                                                Add Document
-                                            </button>
-                                        </div>
+                                        <button 
+                                            onClick={() => {
+                                                setUploadingToId(selectedRecord.id);
+                                                setShowUploadModal(true);
+                                            }}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
+                                        >
+                                            <Upload size={10} />
+                                            Add Document
+                                        </button>
                                     </div>
-                                    
-                                    {debugMode && (
-                                        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-800 space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-[8px] font-black text-amber-600 uppercase">Debug Info</span>
-                                                <span className="text-[8px] font-mono text-amber-500">ID: {selectedRecord.id}</span>
-                                            </div>
-                                            <p className="text-[8px] text-amber-700 dark:text-amber-400 font-medium">
-                                                Cleaned ID: {String(selectedRecord.id || '').trim().toLowerCase().replace(/^uuid:/i, '').replace(/[\{\}]/g, '')}
-                                            </p>
-                                        </div>
-                                    )}
                                     
                                     {loadingDocs ? (
                                         <div className="flex items-center gap-2 py-4">
