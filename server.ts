@@ -4,6 +4,10 @@ import path from "path";
 export async function createApp() {
   const app = express();
 
+  // Set global JSON limit for large uploads
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
   // API routes FIRST
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
@@ -491,7 +495,7 @@ export async function createApp() {
   });
 
   // NEW: Robust POST proxy for Google Apps Script
-  app.post("/api/gas-proxy", express.json({ limit: '50mb' }), async (req, res) => {
+  app.post("/api/gas-proxy", async (req, res) => {
     const { url, payload } = req.body;
     if (!url) return res.status(400).json({ error: "Missing url" });
 
@@ -500,15 +504,14 @@ export async function createApp() {
 
     try {
       const bodyString = JSON.stringify(payload);
-      console.log(`[GAS PROXY] POST to: ${url}`);
-      console.log(`[GAS PROXY] Action: ${payload?.action}, Payload Size: ${(bodyString.length / 1024).toFixed(2)} KB`);
+      console.log(`[GAS PROXY] POST Request - Action: ${payload?.action}, Size: ${(bodyString.length / 1024).toFixed(2)} KB`);
       
       const response = await fetch(url, {
         method: 'POST',
         redirect: 'follow',
         headers: { 
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          'Content-Type': 'text/plain', // GAS handles this well as a raw stream
+          'Accept': 'application/json'
         },
         body: bodyString,
         signal: controller.signal
@@ -517,9 +520,10 @@ export async function createApp() {
       const text = await response.text();
       clearTimeout(timeout);
       
-      console.log(`[GAS PROXY] Upstream Status: ${response.status}`);
+      console.log(`[GAS PROXY] Upstream Result - Status: ${response.status}`);
       
       if (!response.ok) {
+        console.error(`[GAS PROXY] Upstream Error:`, text.substring(0, 500));
         return res.status(response.status).json({ 
           error: "GAS request failed", 
           details: text.substring(0, 500) 
@@ -530,10 +534,8 @@ export async function createApp() {
         const json = JSON.parse(text);
         res.json(json);
       } catch (e) {
-        console.warn(`[GAS PROXY] Response was not JSON: ${text.substring(0, 100)}...`);
-        // If it's HTML, it might be a Google error page
         if (text.includes('<!DOCTYPE html>')) {
-          res.status(502).json({ error: "Google Script returned an HTML page instead of JSON. This usually means a quota limit or script error." });
+          res.status(502).json({ error: "Google returned HTML instead of JSON. Quota or Script error." });
         } else {
           res.json({ status: 'success', raw: text });
         }
@@ -541,8 +543,8 @@ export async function createApp() {
     } catch (error: any) {
       clearTimeout(timeout);
       const isTimeout = error.name === 'AbortError';
-      console.error(`[GAS PROXY] Error:`, isTimeout ? 'Timed out after 150s' : error.message);
-      res.status(500).json({ error: isTimeout ? "Request to Google timed out. The file might be too large." : error.message });
+      console.error(`[GAS PROXY] Fatal Error:`, isTimeout ? 'Timed out' : error.message);
+      res.status(500).json({ error: isTimeout ? "Request to Google timed out." : error.message });
     }
   });
 

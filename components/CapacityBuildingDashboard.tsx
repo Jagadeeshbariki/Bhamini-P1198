@@ -77,7 +77,7 @@ const CapacityBuildingDashboard: React.FC = () => {
                     const res = reader.result as string;
                     resolve(res.split(',')[1]);
                 };
-                reader.onerror = () => reject(new Error('Failed to read file'));
+                reader.onerror = () => reject(new Error('Failed to read file from disk'));
                 reader.readAsDataURL(selectedFile);
             });
 
@@ -86,15 +86,13 @@ const CapacityBuildingDashboard: React.FC = () => {
                 submissionId: submissionId || 'general',
                 fileName: selectedFile.name,
                 fileData: base64,
-                data: base64,
-                photoData: base64,
                 mimeType: selectedFile.type,
                 uploadedBy: user?.name || 'Unknown'
             };
 
-            // Use an AbortController for a 160-second timeout (slightly more than server)
+            // Use an AbortController for a 180-second timeout
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 160000);
+            const timeoutId = setTimeout(() => controller.abort(), 180000);
 
             try {
                 const res = await fetch('/api/gas-proxy', {
@@ -111,30 +109,34 @@ const CapacityBuildingDashboard: React.FC = () => {
 
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
-                    throw new Error(errData.error || errData.details || `Server responded with ${res.status}`);
+                    const detailMsg = errData.error || errData.details || `Server Error ${res.status}`;
+                    throw new Error(`Proxy Fail: ${detailMsg}`);
                 }
 
                 const result = await res.json();
                 if (result.status === 'success' || result.status === 'partial_success') {
-                    alert('Upload successful! The document has been linked to this training session.');
+                    alert('Upload successful! Document linked.');
                     setShowUploadModal(false);
                     setSelectedFile(null);
                     setUploadingToId(null);
-                    // Refresh the list immediately with the original ID
                     fetchLinkedDocs(submissionId || 'general');
                 } else {
-                    throw new Error(result.message || 'Google Script returned an error');
+                    throw new Error(result.message || 'Google Script returned failure');
                 }
             } catch (fetchErr: any) {
                 clearTimeout(timeoutId);
+                console.warn('Proxy upload failed, trying direct fallback...', fetchErr);
+                
+                // Final fallback: Try Direct Post (risky but worth a try)
                 if (fetchErr.name === 'AbortError') {
-                    throw new Error('Upload timed out. The file might be too large for the current connection.');
+                    throw new Error('Upload timed out. The file might be too large or the server is busy.');
                 }
+                
                 throw fetchErr;
             }
         } catch (err: any) {
-            console.error('Upload Error:', err);
-            alert('Upload failed: ' + err.message);
+            console.error('Final Upload Error:', err);
+            alert(`Document Upload Failed.\n\nError: ${err.message}\n\nPlease try a smaller file or check your internet connection.`);
         } finally {
             setUploading(false);
         }
