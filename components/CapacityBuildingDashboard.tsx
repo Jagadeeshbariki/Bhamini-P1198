@@ -106,7 +106,30 @@ const CapacityBuildingDashboard: React.FC = () => {
             const timeoutId = setTimeout(() => controller.abort(), 180000);
 
             try {
-                console.log(`[UPLOAD] Fetching /api/gas-proxy...`);
+                console.log(`[UPLOAD] Attempting DIRECT upload to Google...`);
+                // Use a direct fetch to bypass Vercel's 10s timeout limit
+                // Google Apps Script doPost handles CORS with text/plain
+                const directRes = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', // We use no-cors because we don't need the return body if it works
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(payload)
+                });
+
+                // With no-cors, we can't check .ok, but we can wait a few seconds and then check the linked docs
+                console.log(`[UPLOAD] Direct attempt sent. Waiting for propagation...`);
+                await new Promise(r => setTimeout(r, 4000));
+                
+                alert('Upload process initiated. Please wait a moment for the document to appear in the list.');
+                setShowUploadModal(false);
+                setSelectedFile(null);
+                setUploadingToId(null);
+                fetchLinkedDocs(submissionId || 'general');
+                return;
+
+            } catch (directErr) {
+                console.warn(`[UPLOAD] Direct attempt failed, falling back to Proxy...`, directErr);
+                
                 const res = await fetch('/api/gas-proxy', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -129,10 +152,10 @@ const CapacityBuildingDashboard: React.FC = () => {
                 }
 
                 const result = await res.json();
-                console.log(`[UPLOAD] Server Result:`, result);
+                console.log(`[UPLOAD] Proxy Result:`, result);
 
                 if (result.status === 'success' || result.status === 'partial_success') {
-                    alert('Upload successful! Document linked.');
+                    alert('Upload successful via Proxy! Document linked.');
                     setShowUploadModal(false);
                     setSelectedFile(null);
                     setUploadingToId(null);
@@ -140,15 +163,6 @@ const CapacityBuildingDashboard: React.FC = () => {
                 } else {
                     throw new Error(result.message || result.error || 'Google Script returned failure');
                 }
-            } catch (fetchErr: any) {
-                clearTimeout(timeoutId);
-                if (fetchErr.name === 'AbortError') {
-                    throw new Error('Upload timed out. The file might be too large or the server is busy.');
-                }
-                if (fetchErr.message === 'Failed to fetch') {
-                    throw new Error('Network Error: Could not connect to the server. Check your connection or VPN.');
-                }
-                throw fetchErr;
             }
         } catch (err: any) {
             console.error('Final Upload Error:', err);

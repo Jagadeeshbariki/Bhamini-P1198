@@ -4,14 +4,13 @@ import path from "path";
 export async function createApp() {
   const app = express();
 
-  // Set global JSON limit for large uploads
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
   // API routes FIRST
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
+
+  // Specific body parsing for GAS proxy to avoid global overhead
+  const jsonParser = express.json({ limit: '10mb' });
 
   // Check credentials early
   const odkEmail = (process.env.ODK_EMAIL || '').trim();
@@ -495,15 +494,8 @@ export async function createApp() {
   });
 
   // NEW: Robust POST proxy for Google Apps Script
-  app.post("/api/gas-proxy", async (req, res) => {
-    console.log(`[GAS PROXY] Incoming request. Body type: ${typeof req.body}, Has payload: ${!!req.body?.payload}`);
-    
-    if (!req.body || Object.keys(req.body).length === 0) {
-      console.error("[GAS PROXY] ERROR: Empty request body. express.json() might have failed.");
-      return res.status(400).json({ error: "Empty request body" });
-    }
-
-    const { url, payload } = req.body;
+  app.post("/api/gas-proxy", jsonParser, async (req, res) => {
+    const { url, payload } = req.body || {};
     if (!url) {
       console.error("[GAS PROXY] ERROR: Missing 'url' in request body");
       return res.status(400).json({ error: "Missing url parameter" });
