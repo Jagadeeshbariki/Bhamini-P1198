@@ -110,19 +110,32 @@ const CapacityBuildingDashboard: React.FC = () => {
     const fetchLinkedDocs = async (submissionId: string) => {
         setLoadingDocs(true);
         try {
-            // Cache-buster to ensure fresh data in hosted environment
-            const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv&t=${Date.now()}`;
-            const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(csvUrl)}`);
-            if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
+            const timestamp = Date.now();
+            const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv&t=${timestamp}`;
             
-            const text = await res.text();
+            let text = '';
+            try {
+                // Try direct fetch first (sometimes Published Sheets allow this)
+                const directRes = await fetch(csvUrl);
+                if (directRes.ok) {
+                    text = await directRes.text();
+                } else {
+                    throw new Error('Direct fetch failed');
+                }
+            } catch (e) {
+                // Fallback to proxy
+                const proxyUrl = `/api/sheet-proxy?url=${encodeURIComponent(csvUrl)}`;
+                const res = await fetch(proxyUrl);
+                if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
+                text = await res.text();
+            }
+
             if (!text || text.length < 10) {
                 console.warn('Empty or invalid CSV response for linked docs');
                 setLinkedDocs([]);
                 return;
             }
 
-            // Transform headers to lowercase and remove spaces/underscores for robust matching
             const parsed = Papa.parse(text, { 
                 header: true, 
                 skipEmptyLines: true,
@@ -132,11 +145,18 @@ const CapacityBuildingDashboard: React.FC = () => {
             const cleanId = (id: any) => String(id || '').trim().toLowerCase().replace(/^uuid:/i, '').replace(/[\{\}]/g, '');
             const targetId = cleanId(submissionId);
 
+            if (debugMode) {
+                console.log('[DEBUG] Target ID:', targetId);
+                console.log('[DEBUG] Spreadsheet Rows:', parsed.data.length);
+                if (parsed.data.length > 0) {
+                    console.log('[DEBUG] First Row Keys:', Object.keys(parsed.data[0]));
+                    console.log('[DEBUG] First 3 IDs in Sheet:', (parsed.data as any[]).slice(0, 3).map(r => r.submissionid || r.id || Object.values(r)[1]));
+                }
+            }
+
             const files = (parsed.data as any[])
                 .filter(row => {
                     if (!row) return false;
-                    // Use transformed header names (lowercase, no spaces)
-                    // Check multiple potential ID columns just in case
                     const rowId = row['submissionid'] || row['id'] || row['submissionid(odk)'] || Object.values(row)[1];
                     return cleanId(rowId) === targetId;
                 })
@@ -778,17 +798,40 @@ const CapacityBuildingDashboard: React.FC = () => {
                                 <div className="border-t border-gray-100 dark:border-gray-800 pt-8">
                                     <div className="flex items-center justify-between mb-4">
                                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Linked Documents</p>
-                                        <button 
-                                            onClick={() => {
-                                                setUploadingToId(selectedRecord.id);
-                                                setShowUploadModal(true);
-                                            }}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
-                                        >
-                                            <Upload size={10} />
-                                            Add Document
-                                        </button>
+                                        <div className="flex gap-2">
+                                            {debugMode && (
+                                                <button 
+                                                    onClick={() => fetchLinkedDocs(selectedRecord.id)}
+                                                    className="p-1.5 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-all"
+                                                    title="Debug Reload"
+                                                >
+                                                    <RefreshCw size={10} />
+                                                </button>
+                                            )}
+                                            <button 
+                                                onClick={() => {
+                                                    setUploadingToId(selectedRecord.id);
+                                                    setShowUploadModal(true);
+                                                }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
+                                            >
+                                                <Upload size={10} />
+                                                Add Document
+                                            </button>
+                                        </div>
                                     </div>
+                                    
+                                    {debugMode && (
+                                        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-800 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[8px] font-black text-amber-600 uppercase">Debug Info</span>
+                                                <span className="text-[8px] font-mono text-amber-500">ID: {selectedRecord.id}</span>
+                                            </div>
+                                            <p className="text-[8px] text-amber-700 dark:text-amber-400 font-medium">
+                                                Cleaned ID: {String(selectedRecord.id || '').trim().toLowerCase().replace(/^uuid:/i, '').replace(/[\{\}]/g, '')}
+                                            </p>
+                                        </div>
+                                    )}
                                     
                                     {loadingDocs ? (
                                         <div className="flex items-center gap-2 py-4">
