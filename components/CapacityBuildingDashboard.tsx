@@ -118,12 +118,12 @@ const CapacityBuildingDashboard: React.FC = () => {
 
                 if (!res.ok) {
                     let detailMsg = `HTTP ${res.status}`;
+                    const rawBody = await res.text().catch(() => "");
                     try {
-                        const errData = await res.json();
+                        const errData = JSON.parse(rawBody);
                         detailMsg = errData.error || errData.details || errData.message || detailMsg;
                     } catch (e) {
-                        const raw = await res.text();
-                        if (raw.length > 0) detailMsg = raw.substring(0, 100);
+                        if (rawBody.length > 0) detailMsg = rawBody.substring(0, 150);
                     }
                     throw new Error(`Server Error: ${detailMsg}`);
                 }
