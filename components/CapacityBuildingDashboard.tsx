@@ -68,106 +68,53 @@ const CapacityBuildingDashboard: React.FC = () => {
             return;
         }
         setUploading(true);
-        
         try {
-            console.log(`[UPLOAD] Starting upload for ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(2)} KB)`);
-            
-            // Convert file to base64 using a Promise with a timeout
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const res = reader.result as string;
-                    resolve(res.split(',')[1]);
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64 = (e.target?.result as string).split(',')[1];
+                
+                const payload = {
+                    action: 'addTrainingDocument',
+                    submissionId: submissionId || 'general',
+                    fileName: selectedFile.name,
+                    fileData: base64,
+                    // Robustness: Include both data and photoData as fallbacks
+                    data: base64,
+                    photoData: base64,
+                    mimeType: selectedFile.type,
+                    uploadedBy: user?.name || 'Unknown'
                 };
-                reader.onerror = () => reject(new Error('Failed to read file from disk'));
-                reader.readAsDataURL(selectedFile);
-            });
 
-            console.log(`[UPLOAD] Base64 conversion complete. Payload preparing...`);
-
-            const payload = {
-                action: 'addTrainingDocument',
-                submissionId: submissionId || 'general',
-                fileName: selectedFile.name,
-                fileData: base64,
-                mimeType: selectedFile.type,
-                uploadedBy: user?.name || 'Unknown'
-            };
-
-            const fullBody = JSON.stringify({
-                url: GOOGLE_APPS_SCRIPT_URL,
-                payload: payload
-            });
-
-            console.log(`[UPLOAD] Request Body size: ${(fullBody.length / 1024).toFixed(2)} KB`);
-
-            // Use an AbortController for a 180-second timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 180000);
-
-            try {
-                console.log(`[UPLOAD] Attempting DIRECT upload to Google...`);
-                // Use a direct fetch to bypass Vercel's 10s timeout limit
-                // Google Apps Script doPost handles CORS with text/plain
-                const directRes = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    mode: 'no-cors', // We use no-cors because we don't need the return body if it works
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(payload)
-                });
-
-                // With no-cors, we can't check .ok, but we can wait a few seconds and then check the linked docs
-                console.log(`[UPLOAD] Direct attempt sent. Waiting for propagation...`);
-                await new Promise(r => setTimeout(r, 4000));
-                
-                alert('Upload process initiated. Please wait a moment for the document to appear in the list.');
-                setShowUploadModal(false);
-                setSelectedFile(null);
-                setUploadingToId(null);
-                fetchLinkedDocs(submissionId || 'general');
-                return;
-
-            } catch (directErr) {
-                console.warn(`[UPLOAD] Direct attempt failed, falling back to Proxy...`, directErr);
-                
                 const res = await fetch('/api/gas-proxy', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: fullBody,
-                    signal: controller.signal
+                    body: JSON.stringify({
+                        url: GOOGLE_APPS_SCRIPT_URL,
+                        payload: payload
+                    })
                 });
 
-                clearTimeout(timeoutId);
-
                 if (!res.ok) {
-                    let detailMsg = `HTTP ${res.status}`;
-                    const rawBody = await res.text().catch(() => "");
-                    try {
-                        const errData = JSON.parse(rawBody);
-                        detailMsg = errData.error || errData.details || errData.message || detailMsg;
-                    } catch (e) {
-                        if (rawBody.length > 0) detailMsg = rawBody.substring(0, 150);
-                    }
-                    throw new Error(`Server Error: ${detailMsg}`);
+                    const errData = await res.json();
+                    throw new Error(errData.details || 'Proxy request failed');
                 }
 
                 const result = await res.json();
-                console.log(`[UPLOAD] Proxy Result:`, result);
-
-                if (result.status === 'success' || result.status === 'partial_success') {
-                    alert('Upload successful via Proxy! Document linked.');
-                    setShowUploadModal(false);
-                    setSelectedFile(null);
-                    setUploadingToId(null);
-                    fetchLinkedDocs(submissionId || 'general');
-                } else {
-                    throw new Error(result.message || result.error || 'Google Script returned failure');
-                }
-            }
+                console.log('Upload Result:', result);
+                
+                alert('Upload successful! The document has been linked to this training session.');
+                setShowUploadModal(false);
+                setSelectedFile(null);
+                setUploading(false);
+                setUploadingToId(null);
+                
+                // Refresh the list immediately
+                fetchLinkedDocs(submissionId || 'general');
+            };
+            reader.readAsDataURL(selectedFile);
         } catch (err: any) {
-            console.error('Final Upload Error:', err);
-            alert(`Document Upload Failed.\n\nDetails: ${err.message}\n\nPlease try a smaller file or refresh the page.`);
-        } finally {
+            console.error(err);
+            alert('Upload failed: ' + err.message);
             setUploading(false);
         }
     };
