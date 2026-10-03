@@ -490,6 +490,78 @@ export async function createApp() {
     }
   });
 
+  // NEW: Robust POST proxy for Google Apps Script
+  app.post("/api/gas-proxy", express.json({ limit: '50mb' }), async (req, res) => {
+    const { url, payload } = req.body;
+    if (!url) return res.status(400).json({ error: "Missing url" });
+
+    try {
+      console.log(`[GAS PROXY] POST to: ${url}`);
+      console.log(`[GAS PROXY] Payload Action: ${payload?.action}`);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        redirect: 'follow', // GAS always redirects on POST
+        headers: { 
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const text = await response.text();
+      console.log(`[GAS PROXY] Response Status: ${response.status}`);
+      
+      if (!response.ok) {
+        return res.status(response.status).json({ 
+          error: "GAS request failed", 
+          details: text.substring(0, 500) 
+        });
+      }
+
+      try {
+        const json = JSON.parse(text);
+        res.json(json);
+      } catch (e) {
+        res.json({ status: 'success', raw: text });
+      }
+    } catch (error: any) {
+      console.error(`[GAS PROXY] Fatal Error:`, error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // NEW: Robust GET proxy for Google Apps Script
+  app.get("/api/gas-proxy", async (req, res) => {
+    const { url, ...params } = req.query;
+    if (!url || typeof url !== 'string') return res.status(400).json({ error: "Missing url" });
+
+    try {
+      const targetUrl = new URL(url);
+      Object.entries(params).forEach(([key, val]) => {
+        if (typeof val === 'string') targetUrl.searchParams.append(key, val);
+      });
+
+      console.log(`[GAS GET PROXY] Fetching: ${targetUrl.toString()}`);
+      const response = await fetch(targetUrl.toString(), {
+        redirect: 'follow',
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+
+      const text = await response.text();
+      try {
+        const json = JSON.parse(text);
+        res.json(json);
+      } catch (e) {
+        res.send(text);
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/odk/data", async (req, res) => {
     try {
       // 1. Read and Validate projectId/formId

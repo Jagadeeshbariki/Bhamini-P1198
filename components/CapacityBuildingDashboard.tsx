@@ -78,26 +78,38 @@ const CapacityBuildingDashboard: React.FC = () => {
                     submissionId: submissionId || 'general',
                     fileName: selectedFile.name,
                     fileData: base64,
+                    // Robustness: Include both data and photoData as fallbacks
+                    data: base64,
+                    photoData: base64,
                     mimeType: selectedFile.type,
                     uploadedBy: user?.name || 'Unknown'
                 };
 
-                const res = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                const res = await fetch('/api/gas-proxy', {
                     method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(payload)
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: GOOGLE_APPS_SCRIPT_URL,
+                        payload: payload
+                    })
                 });
 
-                // With no-cors we can't see the result, but we can verify it by checking the list
-                alert('Upload request sent! Please wait a moment for it to be processed and then refresh the list.');
+                if (!res.ok) {
+                    const errData = await res.json();
+                    throw new Error(errData.details || 'Proxy request failed');
+                }
+
+                const result = await res.json();
+                console.log('Upload Result:', result);
+                
+                alert('Upload successful! The document has been linked to this training session.');
                 setShowUploadModal(false);
                 setSelectedFile(null);
                 setUploading(false);
                 setUploadingToId(null);
                 
-                // Poll for the new document after a short delay
-                setTimeout(() => fetchLinkedDocs(submissionId || 'general'), 3000);
+                // Refresh the list immediately
+                fetchLinkedDocs(submissionId || 'general');
             };
             reader.readAsDataURL(selectedFile);
         } catch (err: any) {
@@ -110,12 +122,34 @@ const CapacityBuildingDashboard: React.FC = () => {
     const fetchLinkedDocs = async (submissionId: string) => {
         setLoadingDocs(true);
         try {
+            // 1. Try fetching via Apps Script dynamic GET proxy first
+            // This is the most reliable as it reads directly from the script's memory/sheet
+            const scriptUrl = `${window.location.origin}/api/gas-proxy?url=${encodeURIComponent(GOOGLE_APPS_SCRIPT_URL)}&action=getTrainingDocuments&submissionId=${encodeURIComponent(submissionId)}`;
+            
+            try {
+                const scriptRes = await fetch(scriptUrl);
+                if (scriptRes.ok) {
+                    const data = await scriptRes.json();
+                    if (data.status === 'success' && Array.isArray(data.files)) {
+                        setLinkedDocs(data.files.map((f: any) => ({
+                            id: Math.random().toString(),
+                            name: f.name || 'Unnamed Document',
+                            url: f.url || '#'
+                        })));
+                        setLoadingDocs(false);
+                        return;
+                    }
+                }
+            } catch (scriptErr) {
+                console.warn('Script fetch failed, falling back to CSV:', scriptErr);
+            }
+
+            // 2. Fallback to CSV Fetch (Existing Logic)
             const timestamp = Date.now();
             const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv&t=${timestamp}`;
             
             let text = '';
             try {
-                // Try direct fetch first (sometimes Published Sheets allow this)
                 const directRes = await fetch(csvUrl);
                 if (directRes.ok) {
                     text = await directRes.text();
@@ -123,7 +157,6 @@ const CapacityBuildingDashboard: React.FC = () => {
                     throw new Error('Direct fetch failed');
                 }
             } catch (e) {
-                // Fallback to proxy
                 const proxyUrl = `/api/sheet-proxy?url=${encodeURIComponent(csvUrl)}`;
                 const res = await fetch(proxyUrl);
                 if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
@@ -131,7 +164,6 @@ const CapacityBuildingDashboard: React.FC = () => {
             }
 
             if (!text || text.length < 10) {
-                console.warn('Empty or invalid CSV response for linked docs');
                 setLinkedDocs([]);
                 return;
             }
@@ -144,15 +176,6 @@ const CapacityBuildingDashboard: React.FC = () => {
             
             const cleanId = (id: any) => String(id || '').trim().toLowerCase().replace(/^uuid:/i, '').replace(/[\{\}]/g, '');
             const targetId = cleanId(submissionId);
-
-            if (debugMode) {
-                console.log('[DEBUG] Target ID:', targetId);
-                console.log('[DEBUG] Spreadsheet Rows:', parsed.data.length);
-                if (parsed.data.length > 0) {
-                    console.log('[DEBUG] First Row Keys:', Object.keys(parsed.data[0]));
-                    console.log('[DEBUG] First 3 IDs in Sheet:', (parsed.data as any[]).slice(0, 3).map(r => r.submissionid || r.id || Object.values(r)[1]));
-                }
-            }
 
             const files = (parsed.data as any[])
                 .filter(row => {
@@ -169,7 +192,7 @@ const CapacityBuildingDashboard: React.FC = () => {
 
             setLinkedDocs(files);
         } catch (err: any) {
-            console.error('Error fetching docs from CSV:', err);
+            console.error('Error fetching docs:', err);
         } finally {
             setLoadingDocs(false);
         }
