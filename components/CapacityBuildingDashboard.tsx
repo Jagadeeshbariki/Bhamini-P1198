@@ -157,34 +157,26 @@ const CapacityBuildingDashboard: React.FC = () => {
     const fetchLinkedDocs = async (submissionId: string) => {
         setLoadingDocs(true);
         try {
-            // Using the script's API via proxy for better reliability
-            const apiUrl = `${CAPACITY_BUILDING_SCRIPT_URL}?submissionId=${encodeURIComponent(submissionId)}`;
-            const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(apiUrl)}`);
-            
+            const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(CAPACITY_BUILDING_DOCS_URL)}`);
             if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
             
             const text = await res.text();
-            let json;
-            try {
-                json = JSON.parse(text);
-            } catch {
-                throw new Error('Script returned non-JSON response: ' + text.substring(0, 100));
-            }
+            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+            
+            const files = (parsed.data as any[])
+                .filter(row => {
+                    const rowId = row['Submission ID'] || row['submissionId'] || Object.values(row)[1];
+                    return String(rowId).trim() === String(submissionId).trim();
+                })
+                .map(row => ({
+                    id: Math.random().toString(),
+                    name: row['File Name'] || row['fileName'] || Object.values(row)[2],
+                    url: row['File URL'] || row['fileUrl'] || Object.values(row)[3]
+                }));
 
-            if (json.status === 'success' || json.success) {
-                const files = (json.files || [])
-                    .map((f: any) => ({
-                        id: f.id || Math.random().toString(),
-                        name: f.name || 'Untitled Document',
-                        url: f.url
-                    }));
-                setLinkedDocs(files);
-            } else {
-                console.warn('Script fetch failed:', json.message || json.error);
-                setLinkedDocs([]);
-            }
+            setLinkedDocs(files);
         } catch (err: any) {
-            console.error('Error fetching docs from API:', err);
+            console.error('Error fetching docs from CSV:', err);
             setLinkedDocs([]);
         } finally {
             setLoadingDocs(false);
