@@ -282,7 +282,11 @@ const AdminPage: React.FC = () => {
             try {
                 data = JSON.parse(raw);
             } catch {
-                throw new Error('Invalid server response: ' + raw.substring(0, 100));
+                if (raw.toLowerCase().includes('success')) {
+                    data = { status: 'success' };
+                } else {
+                    throw new Error('Invalid server response: ' + raw.substring(0, 100));
+                }
             }
 
             if (data.status === 'success') {

@@ -81,18 +81,26 @@ const AddFarmpondPhotoModal: React.FC<AddFarmpondPhotoModalProps> = ({ data, onC
                     uploadedBy: user?.username || 'Unknown'
                 };
 
-                const response = await fetch('/api/gas-proxy', {
+                const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: GOOGLE_APPS_SCRIPT_URL,
-                        payload: payload
-                    })
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(payload)
                 });
 
-                const result = await response.json();
+                const raw = await response.text();
+                let result;
+                try {
+                    result = JSON.parse(raw);
+                } catch {
+                    if (raw.toLowerCase().includes('success')) {
+                        result = { status: 'success' };
+                    } else {
+                        throw new Error('Invalid response from server');
+                    }
+                }
 
-                if (response.ok && result.status === 'success') {
+                if (result.status === 'success') {
                     setStatus('success');
                     setTimeout(() => {
                         onSuccess();

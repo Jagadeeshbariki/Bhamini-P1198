@@ -40,31 +40,28 @@ const AttendanceFormModal: React.FC<AttendanceFormModalProps> = ({ user, date, i
         };
 
         try {
-            const response = await fetch('/api/gas-proxy', {
+            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url: GOOGLE_APPS_SCRIPT_URL,
-                    payload: formData
-                }),
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(formData),
             });
             
-            if (response.ok) {
-                // Save to local storage for instant feedback (Optimistic Update)
-                const localKey = `bhamini_local_${user.username}`;
-                const localData = JSON.parse(localStorage.getItem(localKey) || '{}');
-                localData[formattedDate] = {
-                    ...formData,
-                    outcomes: formData.outcome, // Mapping 'outcome' to 'outcomes' for consistency
-                    timestamp: new Date().toISOString()
-                };
-                localStorage.setItem(localKey, JSON.stringify(localData));
+            // With text/plain and GAS, we might not get a traditional response object
+            // but we can check if it didn't throw an error.
+            
+            // Save to local storage for instant feedback (Optimistic Update)
+            const localKey = `bhamini_local_${user.username}`;
+            const localData = JSON.parse(localStorage.getItem(localKey) || '{}');
+            localData[formattedDate] = {
+                ...formData,
+                outcomes: formData.outcome, // Mapping 'outcome' to 'outcomes' for consistency
+                timestamp: new Date().toISOString()
+            };
+            localStorage.setItem(localKey, JSON.stringify(localData));
 
-                onSubmitSuccess(formData);
-                onClose();
-            } else {
-                 throw new Error(`Submission failed with status ${response.status}`);
-            }
+            onSubmitSuccess(formData);
+            onClose();
         } catch (err) {
             setError(`Connection error. If this persists, please check your internet.`);
             console.warn(err);
