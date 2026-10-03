@@ -496,20 +496,21 @@ export async function createApp() {
     if (!url) return res.status(400).json({ error: "Missing url" });
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000); // 120 second timeout
+    const timeout = setTimeout(() => controller.abort(), 150000); // 150 second timeout
 
     try {
+      const bodyString = JSON.stringify(payload);
       console.log(`[GAS PROXY] POST to: ${url}`);
-      console.log(`[GAS PROXY] Action: ${payload?.action}`);
+      console.log(`[GAS PROXY] Action: ${payload?.action}, Payload Size: ${(bodyString.length / 1024).toFixed(2)} KB`);
       
       const response = await fetch(url, {
         method: 'POST',
         redirect: 'follow',
         headers: { 
-          'Content-Type': 'text/plain', // GAS often handles text/plain better for JSON payloads
+          'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         },
-        body: JSON.stringify(payload),
+        body: bodyString,
         signal: controller.signal
       });
 
@@ -529,13 +530,19 @@ export async function createApp() {
         const json = JSON.parse(text);
         res.json(json);
       } catch (e) {
-        res.json({ status: 'success', raw: text });
+        console.warn(`[GAS PROXY] Response was not JSON: ${text.substring(0, 100)}...`);
+        // If it's HTML, it might be a Google error page
+        if (text.includes('<!DOCTYPE html>')) {
+          res.status(502).json({ error: "Google Script returned an HTML page instead of JSON. This usually means a quota limit or script error." });
+        } else {
+          res.json({ status: 'success', raw: text });
+        }
       }
     } catch (error: any) {
       clearTimeout(timeout);
       const isTimeout = error.name === 'AbortError';
-      console.error(`[GAS PROXY] Error:`, isTimeout ? 'Timed out after 120s' : error.message);
-      res.status(500).json({ error: isTimeout ? "Request to Google timed out" : error.message });
+      console.error(`[GAS PROXY] Error:`, isTimeout ? 'Timed out after 150s' : error.message);
+      res.status(500).json({ error: isTimeout ? "Request to Google timed out. The file might be too large." : error.message });
     }
   });
 

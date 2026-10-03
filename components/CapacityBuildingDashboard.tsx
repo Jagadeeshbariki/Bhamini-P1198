@@ -70,14 +70,14 @@ const CapacityBuildingDashboard: React.FC = () => {
         setUploading(true);
         
         try {
-            // Convert file to base64 using a Promise
+            // Convert file to base64 using a Promise with a timeout
             const base64 = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = () => {
                     const res = reader.result as string;
                     resolve(res.split(',')[1]);
                 };
-                reader.onerror = reject;
+                reader.onerror = () => reject(new Error('Failed to read file'));
                 reader.readAsDataURL(selectedFile);
             });
 
@@ -92,9 +92,9 @@ const CapacityBuildingDashboard: React.FC = () => {
                 uploadedBy: user?.name || 'Unknown'
             };
 
-            // Use an AbortController for a 120-second timeout
+            // Use an AbortController for a 160-second timeout (slightly more than server)
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000);
+            const timeoutId = setTimeout(() => controller.abort(), 160000);
 
             try {
                 const res = await fetch('/api/gas-proxy', {
@@ -120,6 +120,7 @@ const CapacityBuildingDashboard: React.FC = () => {
                     setShowUploadModal(false);
                     setSelectedFile(null);
                     setUploadingToId(null);
+                    // Refresh the list immediately with the original ID
                     fetchLinkedDocs(submissionId || 'general');
                 } else {
                     throw new Error(result.message || 'Google Script returned an error');
@@ -127,7 +128,7 @@ const CapacityBuildingDashboard: React.FC = () => {
             } catch (fetchErr: any) {
                 clearTimeout(timeoutId);
                 if (fetchErr.name === 'AbortError') {
-                    throw new Error('Upload timed out. The file might be too large or the server is slow.');
+                    throw new Error('Upload timed out. The file might be too large for the current connection.');
                 }
                 throw fetchErr;
             }
