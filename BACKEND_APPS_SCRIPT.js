@@ -10,6 +10,8 @@ const BILL_FOLDER_ID = "1g7H-IBWQEN_bKOHTbkFv1j0QrvMLpFB0";
 // The ID of your "Beneficiary List" spreadsheet
 const BENEFICIARY_SS_ID = "1Fex87lW89bQE1cafm_JE0wK8tFZkGtdasI2u0zYCbEo"; 
 
+const SPREADSHEET_ID = SpreadsheetApp.getActiveSpreadsheet().getId();
+
 function doPost(e) {
   const lock = LockService.getScriptLock();
   try {
@@ -61,9 +63,7 @@ function normalizeId(id) {
 }
 
 function getSheetByGid(gid) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) return null;
-  const sheets = ss.getSheets();
+  const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
   for (let i = 0; i < sheets.length; i++) {
     if (sheets[i].getSheetId() == gid) return sheets[i];
   }
@@ -81,7 +81,7 @@ function handlePhotoUpload(data) {
   const url = file.getUrl();
   
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = (ss ? ss.getSheetByName("Photos") : null) || getSheetByGid(14172760);
+  const sheet = ss.getSheetByName("Photos") || getSheetByGid(14172760);
   if (sheet) {
     sheet.appendRow([
       url, 

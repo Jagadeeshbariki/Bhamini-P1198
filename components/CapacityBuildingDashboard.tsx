@@ -92,9 +92,15 @@ const CapacityBuildingDashboard: React.FC = () => {
                         body: JSON.stringify(payload)
                     });
 
-                    const result = await res.json();
+                    const raw = await res.text();
+                    let result;
+                    try {
+                        result = JSON.parse(raw);
+                    } catch {
+                        throw new Error('Server returned an invalid response (not JSON). Please ensure your Apps Script is deployed as "Anyone". Body: ' + raw.substring(0, 100));
+                    }
                     
-                    if (result.status === 'success') {
+                    if (result.status === 'success' || result.success) {
                         alert('Document uploaded successfully!');
                         setShowUploadModal(false);
                         setSelectedFile(null);
@@ -151,27 +157,35 @@ const CapacityBuildingDashboard: React.FC = () => {
     const fetchLinkedDocs = async (submissionId: string) => {
         setLoadingDocs(true);
         try {
-            const csvUrl = CAPACITY_BUILDING_DOCS_URL;
-            const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(csvUrl)}`);
+            // Using the script's API via proxy for better reliability
+            const apiUrl = `${CAPACITY_BUILDING_SCRIPT_URL}?submissionId=${encodeURIComponent(submissionId)}`;
+            const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(apiUrl)}`);
+            
             if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
             
             const text = await res.text();
-            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-            
-            const files = (parsed.data as any[])
-                .filter(row => {
-                    const rowId = row['Submission ID'] || row['submissionId'] || Object.values(row)[1];
-                    return String(rowId).trim() === String(submissionId).trim();
-                })
-                .map(row => ({
-                    id: Math.random().toString(),
-                    name: row['File Name'] || row['fileName'] || Object.values(row)[2],
-                    url: row['File URL'] || row['fileUrl'] || Object.values(row)[3]
-                }));
+            let json;
+            try {
+                json = JSON.parse(text);
+            } catch {
+                throw new Error('Script returned non-JSON response: ' + text.substring(0, 100));
+            }
 
-            setLinkedDocs(files);
+            if (json.status === 'success' || json.success) {
+                const files = (json.files || [])
+                    .map((f: any) => ({
+                        id: f.id || Math.random().toString(),
+                        name: f.name || 'Untitled Document',
+                        url: f.url
+                    }));
+                setLinkedDocs(files);
+            } else {
+                console.warn('Script fetch failed:', json.message || json.error);
+                setLinkedDocs([]);
+            }
         } catch (err: any) {
-            console.error('Error fetching docs from CSV:', err);
+            console.error('Error fetching docs from API:', err);
+            setLinkedDocs([]);
         } finally {
             setLoadingDocs(false);
         }
