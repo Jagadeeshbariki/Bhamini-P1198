@@ -1,86 +1,119 @@
 /**
- * GOOGLE APPS SCRIPT: DOCUMENT UPLOAD & TRACKING
+ * GOOGLE APPS SCRIPT: CAPACITY BUILDING DOCUMENT MANAGEMENT
  * 
- * 1. Create a new Google Sheet.
- * 2. Go to Extensions > Apps Script.
- * 3. Paste this code.
- * 4. Update FOLDER_ID and SPREADSHEET_ID below.
- * 5. Deploy as Web App:
- *    - Execute as: Me
- *    - Who has access: Anyone
+ * Version: 1.2.0
  */
 
-const FOLDER_ID = '1kd81zYbr5_8qUzi__4fTid_ZjNb7jEJm'; // Folder you provided
-const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE'; // The Sheet you created
+// --- CONFIGURATION ---
+const FOLDER_ID = '1kd81zYbr5_8qUzi__4fTid_ZjNb7jEJm'; 
+const SPREADSHEET_ID = '1cFIHuzwpPrx0C_Z-gKBdg_2pLuHvEPUKA_Fh83NAclk'; 
+// ---------------------
 
 function doPost(e) {
+  const lock = LockService.getScriptLock();
   try {
-    const data = JSON.parse(e.postData.contents);
+    lock.waitLock(30000);
+    if (!e.postData || !e.postData.contents) throw new Error("No data received");
+
+    const request = JSON.parse(e.postData.contents);
+    const action = request.action;
+
+    if (action === "deleteTrainingDocument") {
+      return handleDelete(request);
+    } else {
+      // Default to upload for any other action or legacy calls
+      return handleUpload(request);
+    }
+  } catch (error) {
+    return createResponse("error", error.toString());
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleUpload(data) {
+  try {
     const folder = DriveApp.getFolderById(FOLDER_ID);
-    
-    // 1. Create the file in Drive
-    const blob = Utilities.newBlob(Utilities.base64Decode(data.fileData), data.mimeType, data.fileName);
+    const blob = Utilities.newBlob(Utilities.base64Decode(data.fileData || data.data), data.mimeType, data.fileName);
     const file = folder.createFile(blob);
-    file.setDescription('ODK_LINK:' + data.submissionId);
-    
-    // 2. Set permissions (Optional: makes it viewable by anyone with the link)
+    file.setDescription('ODK_LINK:' + (data.submissionId || 'general'));
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     
     const fileUrl = file.getUrl();
     const fileId = file.getId();
     
-    // 3. Log to Spreadsheet
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheets()[0]; // Use first sheet
+    const sheet = ss.getSheets()[0];
+    
     sheet.appendRow([
-      new Date(),
-      data.submissionId,
-      data.fileName,
-      fileUrl,
-      fileId
+      new Date(),                      
+      data.submissionId || "general",  
+      data.fileName,                   
+      fileUrl,                         
+      fileId,                          
+      data.uploadedBy || 'Unknown'     
     ]);
     
-    return ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      fileUrl: fileUrl,
-      fileId: fileId
-    })).setMimeType(ContentService.MimeType.JSON);
-    
+    return createResponse("success", "Uploaded.", { url: fileUrl, fileId: fileId, success: true });
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({
-      success: false,
-      error: err.toString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    return createResponse("error", err.toString());
+  }
+}
+
+function handleDelete(data) {
+  try {
+    const targetUrl = (data.url || "").toString().trim();
+    const targetId = extractDriveId(targetUrl);
+    
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheets()[0];
+    const rows = sheet.getDataRange().getValues();
+    let deleted = false;
+
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][3].toString().trim() === targetUrl) {
+        sheet.deleteRow(i + 1);
+        deleted = true;
+        break;
+      }
+    }
+
+    if (targetId) {
+      try { DriveApp.getFileById(targetId).setTrashed(true); } catch (e) {}
+    }
+
+    return createResponse("success", "Deleted.", { success: true });
+  } catch (err) {
+    return createResponse("error", err.toString());
   }
 }
 
 function doGet(e) {
   try {
     const submissionId = e.parameter.submissionId;
-    if (!submissionId) throw new Error('Missing submissionId');
+    if (!submissionId) return createResponse("error", "Missing ID");
     
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = ss.getSheets()[0];
     const data = sheet.getDataRange().getValues();
     
-    // Skip header row
-    const filtered = data.slice(1).filter(row => row[1] === submissionId);
+    const results = data.slice(1)
+      .filter(row => row[1].toString().trim() === submissionId.toString().trim())
+      .map(row => ({ name: row[2], url: row[3], id: row[4] }));
     
-    const results = filtered.map(row => ({
-      name: row[2],
-      url: row[3],
-      id: row[4]
-    }));
-    
-    return ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      files: results
-    })).setMimeType(ContentService.MimeType.JSON);
-    
+    return createResponse("success", "Found.", { files: results, success: true });
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({
-      success: false,
-      error: err.toString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    return createResponse("error", err.toString());
   }
+}
+
+function createResponse(status, message, extra = {}) {
+  const response = { status: status, message: message, ...extra };
+  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function extractDriveId(url) {
+  if (!url) return null;
+  const match = url.match(/(?:id=|\/d\/|folders\/|file\/d\/|open\?id=)([-\w]{25,})/);
+  return match ? match[1] : null;
 }

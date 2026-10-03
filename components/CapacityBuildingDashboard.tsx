@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../hooks/useAuth';
 import PhotoGallery from './PhotoGallery';
-import { GOOGLE_APPS_SCRIPT_URL, APP_VERSION } from '../config';
+import { CAPACITY_BUILDING_SCRIPT_URL, APP_VERSION } from '../config';
 
 interface CapacityRecord {
     id: string;
@@ -48,14 +48,13 @@ const CapacityBuildingDashboard: React.FC = () => {
     const [debugMode, setDebugMode] = useState(false);
     const [rawSample, setRawSample] = useState<any>(null);
     const [formId, setFormId] = useState<string>('Capacity_building');
-    const [odkStatus, setOdkStatus] = useState<{status: string, project?: string, message?: string} | null>(null);
 
     const checkOdkStatus = async () => {
         try {
             const res = await fetch('/api/odk/status');
             if (res.ok) {
-                const status = await res.json();
-                setOdkStatus(status);
+                // Not using odkStatus currently, but keeping the fetch for connectivity verification
+                await res.json();
             }
         } catch (e) {
             console.error("Failed to check ODK status:", e);
@@ -74,7 +73,6 @@ const CapacityBuildingDashboard: React.FC = () => {
                 const base64 = (e.target?.result as string).split(',')[1];
                 
                 const payload = {
-                    action: 'addTrainingDocument',
                     submissionId: submissionId || 'general',
                     fileName: selectedFile.name,
                     fileData: base64,
@@ -82,7 +80,7 @@ const CapacityBuildingDashboard: React.FC = () => {
                     uploadedBy: user?.name || 'Unknown'
                 };
 
-                const res = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                await fetch(CAPACITY_BUILDING_SCRIPT_URL, {
                     method: 'POST',
                     mode: 'no-cors',
                     headers: { 'Content-Type': 'text/plain' },
@@ -110,27 +108,20 @@ const CapacityBuildingDashboard: React.FC = () => {
     const fetchLinkedDocs = async (submissionId: string) => {
         setLoadingDocs(true);
         try {
-            const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv';
-            const res = await fetch(`/api/sheet-proxy?url=${encodeURIComponent(csvUrl)}`);
+            // Fetch directly from the separate App Script's doGet
+            const res = await fetch(`${CAPACITY_BUILDING_SCRIPT_URL}?submissionId=${encodeURIComponent(submissionId)}`);
             if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
             
-            const text = await res.text();
-            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-            
-            const files = (parsed.data as any[])
-                .filter(row => {
-                    const rowId = row['Submission ID'] || row['submissionId'] || Object.values(row)[1];
-                    return String(rowId).trim() === String(submissionId).trim();
-                })
-                .map(row => ({
-                    id: Math.random().toString(),
-                    name: row['File Name'] || row['fileName'] || Object.values(row)[2],
-                    url: row['File URL'] || row['fileUrl'] || Object.values(row)[3]
-                }));
-
-            setLinkedDocs(files);
+            const json = await res.json();
+            if (json.success && Array.isArray(json.files)) {
+                setLinkedDocs(json.files);
+            } else {
+                setLinkedDocs([]);
+            }
         } catch (err: any) {
-            console.error('Error fetching docs from CSV:', err);
+            console.error('Error fetching docs from App Script:', err);
+            // Fallback to empty list instead of showing old/wrong data
+            setLinkedDocs([]);
         } finally {
             setLoadingDocs(false);
         }
@@ -186,20 +177,6 @@ const CapacityBuildingDashboard: React.FC = () => {
             }
 
             // 3. Robust Path-Based Parsing Logic
-            const getVal = (obj: any, paths: string[]): any => {
-                for (const path of paths) {
-                    if (obj[path] !== undefined && obj[path] !== null && obj[path] !== '') return obj[path];
-                    const parts = path.split(/[./]/);
-                    let current = obj;
-                    for (const part of parts) {
-                        current = current?.[part];
-                        if (current === undefined || current === null) break;
-                    }
-                    if (current !== undefined && current !== null && current !== '') return current;
-                }
-                return null;
-            };
-
             const records: CapacityRecord[] = rawSubmissions.map((sub: any) => {
                 // 1. Flatten the submission for easier searching
                 const flatData: Record<string, any> = {};
@@ -287,6 +264,7 @@ const CapacityBuildingDashboard: React.FC = () => {
 
     useEffect(() => {
         fetchData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const filteredData = useMemo(() => {

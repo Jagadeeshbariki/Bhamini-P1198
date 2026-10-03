@@ -97,7 +97,21 @@ const ActivityPhotoUploadModal: React.FC<ActivityPhotoUploadModalProps> = ({ ben
                         body: JSON.stringify(payload)
                     });
 
-                    const result = await response.json();
+                    const raw = await response.text();
+                    let result;
+                    try {
+                        result = JSON.parse(raw);
+                    } catch {
+                        if (raw.toLowerCase().includes('success')) {
+                            setStatus('success');
+                            setTimeout(() => {
+                                onSuccess();
+                                onClose();
+                            }, 2000);
+                            return;
+                        }
+                        throw new Error(raw.length > 100 ? raw.substring(0, 100) + '...' : raw);
+                    }
 
                     if (response.ok && result.status === 'success') {
                         setStatus('success');

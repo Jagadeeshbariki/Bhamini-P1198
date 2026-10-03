@@ -81,11 +81,13 @@ const AddFarmpondPhotoModal: React.FC<AddFarmpondPhotoModalProps> = ({ data, onC
                     uploadedBy: user?.username || 'Unknown'
                 };
 
-                const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                const response = await fetch('/api/gas-proxy', {
                     method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(payload)
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: GOOGLE_APPS_SCRIPT_URL,
+                        payload: payload
+                    })
                 });
 
                 const result = await response.json();
