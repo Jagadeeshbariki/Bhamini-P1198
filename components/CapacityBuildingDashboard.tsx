@@ -70,6 +70,8 @@ const CapacityBuildingDashboard: React.FC = () => {
         setUploading(true);
         
         try {
+            console.log(`[UPLOAD] Starting upload for ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(2)} KB)`);
+            
             // Convert file to base64 using a Promise with a timeout
             const base64 = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
@@ -81,6 +83,8 @@ const CapacityBuildingDashboard: React.FC = () => {
                 reader.readAsDataURL(selectedFile);
             });
 
+            console.log(`[UPLOAD] Base64 conversion complete. Payload preparing...`);
+
             const payload = {
                 action: 'addTrainingDocument',
                 submissionId: submissionId || 'general',
@@ -90,30 +94,43 @@ const CapacityBuildingDashboard: React.FC = () => {
                 uploadedBy: user?.name || 'Unknown'
             };
 
+            const fullBody = JSON.stringify({
+                url: GOOGLE_APPS_SCRIPT_URL,
+                payload: payload
+            });
+
+            console.log(`[UPLOAD] Request Body size: ${(fullBody.length / 1024).toFixed(2)} KB`);
+
             // Use an AbortController for a 180-second timeout
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 180000);
 
             try {
+                console.log(`[UPLOAD] Fetching /api/gas-proxy...`);
                 const res = await fetch('/api/gas-proxy', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: GOOGLE_APPS_SCRIPT_URL,
-                        payload: payload
-                    }),
+                    body: fullBody,
                     signal: controller.signal
                 });
 
                 clearTimeout(timeoutId);
 
                 if (!res.ok) {
-                    const errData = await res.json().catch(() => ({}));
-                    const detailMsg = errData.error || errData.details || `Server Error ${res.status}`;
-                    throw new Error(`Proxy Fail: ${detailMsg}`);
+                    let detailMsg = `HTTP ${res.status}`;
+                    try {
+                        const errData = await res.json();
+                        detailMsg = errData.error || errData.details || errData.message || detailMsg;
+                    } catch (e) {
+                        const raw = await res.text();
+                        if (raw.length > 0) detailMsg = raw.substring(0, 100);
+                    }
+                    throw new Error(`Server Error: ${detailMsg}`);
                 }
 
                 const result = await res.json();
+                console.log(`[UPLOAD] Server Result:`, result);
+
                 if (result.status === 'success' || result.status === 'partial_success') {
                     alert('Upload successful! Document linked.');
                     setShowUploadModal(false);
@@ -121,22 +138,21 @@ const CapacityBuildingDashboard: React.FC = () => {
                     setUploadingToId(null);
                     fetchLinkedDocs(submissionId || 'general');
                 } else {
-                    throw new Error(result.message || 'Google Script returned failure');
+                    throw new Error(result.message || result.error || 'Google Script returned failure');
                 }
             } catch (fetchErr: any) {
                 clearTimeout(timeoutId);
-                console.warn('Proxy upload failed, trying direct fallback...', fetchErr);
-                
-                // Final fallback: Try Direct Post (risky but worth a try)
                 if (fetchErr.name === 'AbortError') {
                     throw new Error('Upload timed out. The file might be too large or the server is busy.');
                 }
-                
+                if (fetchErr.message === 'Failed to fetch') {
+                    throw new Error('Network Error: Could not connect to the server. Check your connection or VPN.');
+                }
                 throw fetchErr;
             }
         } catch (err: any) {
             console.error('Final Upload Error:', err);
-            alert(`Document Upload Failed.\n\nError: ${err.message}\n\nPlease try a smaller file or check your internet connection.`);
+            alert(`Document Upload Failed.\n\nDetails: ${err.message}\n\nPlease try a smaller file or refresh the page.`);
         } finally {
             setUploading(false);
         }
