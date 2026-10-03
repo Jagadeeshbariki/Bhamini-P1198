@@ -40,15 +40,15 @@ const AttendanceFormModal: React.FC<AttendanceFormModalProps> = ({ user, date, i
         };
 
         try {
-            const response = await fetch('/api/gas-proxy', {
+            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url: GOOGLE_APPS_SCRIPT_URL,
-                    payload: formData
-                }),
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(formData),
             });
             
+            // Note: Google Apps Script returns 200 even for some internal errors, 
+            // but we check the response content if possible.
             if (response.ok) {
                 // Save to local storage for instant feedback (Optimistic Update)
                 const localKey = `bhamini_local_${user.username}`;

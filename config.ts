@@ -1,6 +1,6 @@
 
 // Central configuration for the Bhamini-P1198 Application
-export const APP_VERSION = '2.6.1';
+export const APP_VERSION = '2.5.9';
 
 /**
  * PROJECT MASTER SPREADSHEET SETUP
@@ -39,7 +39,6 @@ export const BENEFICIARY_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2P
 // 11. ASSET DISTRIBUTION DATA
 export const ASSET_DISTRIBUTION_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRnf96Py7icFx4_-yDw0a6xp9_pDOIfDJNHk5nUpBFDeJohuIq5RpbhShAlZlG7k4M8xTHarmZqmPX-/pub?gid=1409614466&single=true&output=csv';
 export const BUDGET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQgIQP5-BbSLrJRyN-E___LfrW-uQlNa3iZ4AbFfKM3Ne_FHlFeRXbHG2Xk5JYQhh9o_HLekVTmwsh6/pub?gid=1547578809&single=true&output=csv';
-export const CAPACITY_BUILDING_DOCS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSv08cn5H8cYjLqL81AZWiGbgv_apa8vgJ1nqXeqDlhlNfIYsHTPo03wyDUCp5cxqQJeO0XC6NlyJWf/pub?gid=448434982&single=true&output=csv';
 
 // 12. ECO-FARMPOND DATA
 export const ECO_FARMPOND_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS0e9wD0FOCBjNgdCArE9EuVsm4-wJNZLJZEkzDldWq2nW3dwnOjqhy7tZ3t-gLnJOLXiRiWwF1I3Qe/pub?gid=1343892079&single=true&output=csv';
@@ -69,7 +68,6 @@ export const VILLAGES_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX
 // 9. SYSTEM ENDPOINT
 export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxe1GMW0s18iwtZsvmLjg5Hlf_AuIOVESDx7tqWI3wyUk7dyo5vxx1kDjgmWlFbQNn97w/exec';
 export const ACQUITTANCE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2s0HDWZdwIqvT7UtsCm491PZ3Gqs6aZkRczItIdNsnAUOTPoFAEB0Ylxps-02YAfYbw/exec';
-export const CAPACITY_BUILDING_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwKioQzihe2t2zoyp48VXZ4_YYPXxMfrhjN63ZfoBufzDfkER0zAQaVdvlelfdXagqI4Q/exec';
 
 export const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200';
 

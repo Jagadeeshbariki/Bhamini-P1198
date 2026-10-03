@@ -65,26 +65,17 @@ interface MediaUploadModalProps {
                 });
 
                 const raw = await response.text();
-                let data;
                 try {
-                    data = JSON.parse(raw);
-                } catch {
-                    // Fallback: If it's not JSON, check if it contains "success" in text 
-                    // or just report the raw error more cleanly.
-                    if (raw.toLowerCase().includes('success')) {
+                    const data = JSON.parse(raw);
+                    if (data.status === 'success') {
                         successCount++;
-                        continue;
+                    } else {
+                        errorCount++;
+                        lastErrorMessage = data.message || 'Unknown error from script';
                     }
+                } catch {
                     errorCount++;
-                    lastErrorMessage = raw.length > 100 ? raw.substring(0, 100) + '...' : raw;
-                    continue;
-                }
-
-                if (data.status === 'success') {
-                    successCount++;
-                } else {
-                    errorCount++;
-                    lastErrorMessage = data.message || 'Unknown error from script';
+                    lastErrorMessage = 'Invalid JSON response from script.';
                 }
             }
 
