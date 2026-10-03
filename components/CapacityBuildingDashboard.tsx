@@ -251,7 +251,10 @@ const CapacityBuildingDashboard: React.FC = () => {
                     photo = `/api/odk/image?submissionId=${encodeURIComponent(sub.__id)}&filename=${encodeURIComponent(filename)}&form=${encodeURIComponent(targetId)}`;
                 }
 
-                return { id: sub.__id, date, topic: String(topic), participants, trainer: String(trainer), photo, raw: sub };
+                // NORMALIZE ID: Remove "uuid:" prefix for better matching with spreadsheet/script
+                const cleanId = sub.__id.replace(/^uuid:/i, '');
+
+                return { id: cleanId, date, topic: String(topic), participants, trainer: String(trainer), photo, raw: sub };
             });
 
             setData(records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
