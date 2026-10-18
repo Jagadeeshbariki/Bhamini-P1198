@@ -45,46 +45,89 @@ interface ActivityStatusDashboardProps {
 
 
 
-const ACTIVITY_ASSET_CATALOG: Record<string, { label: string; labelTe: string; unit: string; count: number; code: string }[]> = {
+
+const TELUGU_ASSET_LABELS: Record<string, string> = {
+    "cement bags": "సిమెంట్ బస్తాలు (Cement Bags)",
+    "j bolts (12_inc)": "జే బోల్ట్‌లు (J Bolts 12 Inch)",
+    "mesh roll 4ft": "మెష్ రోల్ 4 అడుగులు (Mesh Roll 4ft)",
+    "asbestos cement sheets 2m": "ఆస్బెస్టాస్ సిమెంట్ షీట్లు (Asbestos Cement Sheets 2M)",
+    "ridge sheet blue sheet": "రిడ్జ్ బ్లూ షీట్ (Ridge Sheet Blue Sheet)",
+    "green shaded net": "గ్రీన్ షేడ్ నెట్ (Green Shaded Net)",
+    "hammer grinders": "హామర్ గ్రైండర్ ప్రాసెసింగ్ యంత్రం (Hammer Grinders)",
+    "bramhastram": "బ్రహ్మాస్త్రం జీవ ద్రావణం (Bramhastram)",
+    "agniastram": "అగ్నిఅస్త్రం జీవ ద్రావణం (Agniastram)",
+    "panchagavya": "పంచగవ్య జీవ ద్రావణం (Panchagavya)",
+    "bio stimulant": "బయో స్టిమ్యులెంట్ (Bio Stimulant)",
+    "seeds": "నాణ్యమైన విత్తనాలు (Quality Seeds)"
+};
+
+const ACTIVITY_ASSET_CATALOG: Record<string, { label: string; labelTe: string; unit: string; count: number }[]> = {
     "ns": [
-        { label: "Nutrition Garden Vegetable Seeds Kit", labelTe: "పోషక పెరటి తోట కూరగాయల విత్తనాల కిట్", unit: "Kit", count: 1, code: "HDFC-NG-01" },
-        { label: "Bio-Fertilizer & Organic Input Package", labelTe: "జీవ ఎరువులు & సహజ ద్రావణాల కిట్", unit: "Package", count: 1, code: "HDFC-NG-02" }
+        { label: "Cement Bags", labelTe: "సిమెంట్ బస్తాలు (Cement Bags)", unit: "Number", count: 2 },
+        { label: "J Bolts (12_Inc)", labelTe: "జే బోల్ట్‌లు (J Bolts 12 Inch)", unit: "Number", count: 12 },
+        { label: "Mesh Roll 4ft", labelTe: "మెష్ రోల్ 4 అడుగులు (Mesh Roll 4ft)", unit: "Number", count: 1 },
+        { label: "Asbestos Cement Sheets 2M", labelTe: "ఆస్బెస్టాస్ సిమెంట్ షీట్లు (Asbestos Sheets 2M)", unit: "Number", count: 6 },
+        { label: "Ridge sheet Blue Sheet", labelTe: "రిడ్జ్ బ్లూ షీట్ (Ridge Sheet)", unit: "sqft", count: 10 },
+        { label: "Green Shaded net", labelTe: "గ్రీన్ షేడ్ నెట్ (Green Shaded Net)", unit: "Meters", count: 40 }
     ],
     "elevated goat shed": [
-        { label: "Elevated Goat Shed Infrastructure & Wooden Slats", labelTe: "ఎలివేటెడ్ మేకల షెడ్ చెక్క పలకల నిర్మాణం", unit: "Shed Unit", count: 1, code: "HDFC-GS-01" },
-        { label: "Fodder Feeder & Water Trough Setup", labelTe: "మేత & నీటి తొట్టెల అమరిక", unit: "Set", count: 1, code: "HDFC-GS-02" }
+        { label: "Elevated Goat Shed Infrastructure & Wooden Slats", labelTe: "ఎలివేటెడ్ మేకల షెడ్ చెక్క పలకల నిర్మాణం", unit: "Shed Unit", count: 1 },
+        { label: "Fodder Feeder & Water Trough Setup", labelTe: "మేత & నీటి తొట్టెల అమరిక", unit: "Set", count: 1 }
     ],
     "goat": [
-        { label: "Elevated Goat Shed Infrastructure & Wooden Slats", labelTe: "ఎలివేటెడ్ మేకల షెడ్ చెక్క పలకల నిర్మాణం", unit: "Shed Unit", count: 1, code: "HDFC-GS-01" },
-        { label: "Fodder Feeder & Water Trough Setup", labelTe: "మేత & నీటి తొట్టెల అమరిక", unit: "Set", count: 1, code: "HDFC-GS-02" }
+        { label: "Elevated Goat Shed Infrastructure & Wooden Slats", labelTe: "ఎలివేటెడ్ మేకల షెడ్ చెక్క పలకల నిర్మాణం", unit: "Shed Unit", count: 1 },
+        { label: "Fodder Feeder & Water Trough Setup", labelTe: "మేత & నీటి తొట్టెల అమరిక", unit: "Set", count: 1 }
     ],
     "eco farmpond": [
-        { label: "Eco Farmpond Excavation & Inflow Silt Trap", labelTe: "సిల్ట్ ట్రాప్‌తో కూడిన రైతు కుంట నిర్మాణం", unit: "Farmpond", count: 1, code: "HDFC-FP-01" },
-        { label: "Outlet Spillway Stone Pitching", labelTe: "రాతి రక్షణ కట్ట మరియు అవుట్‌లెట్", unit: "Structure", count: 1, code: "HDFC-FP-02" }
+        { label: "Eco Farmpond Excavation & Inflow Silt Trap", labelTe: "సిల్ట్ ట్రాప్‌తో కూడిన రైతు కుంట నిర్మాణం", unit: "Farmpond", count: 1 },
+        { label: "Outlet Spillway Stone Pitching", labelTe: "రాతి రక్షణ కట్ట మరియు అవుట్‌లెట్", unit: "Structure", count: 1 }
     ],
     "farmpond": [
-        { label: "Eco Farmpond Excavation & Inflow Silt Trap", labelTe: "సిల్ట్ ట్రాప్‌తో కూడిన రైతు కుంట నిర్మాణం", unit: "Farmpond", count: 1, code: "HDFC-FP-01" }
+        { label: "Eco Farmpond Excavation & Inflow Silt Trap", labelTe: "సిల్ట్ ట్రాప్‌తో కూడిన రైతు కుంట నిర్మాణం", unit: "Farmpond", count: 1 }
     ],
     "processing_hubs": [
-        { label: "Hammer Grinder / Pulverizer Processing Machinery", labelTe: "హామర్ గ్రైండర్ ప్రాసెసింగ్ యంత్రం", unit: "Machinery Unit", count: 1, code: "HDFC-A1.9-0126" }
+        { label: "Hammer Grinder / Pulverizer Processing Machinery", labelTe: "హామర్ గ్రైండర్ ప్రాసెసింగ్ యంత్రం", unit: "Machinery Unit", count: 1 }
     ],
     "crops": [
-        { label: "NPM Bio-Formulations (Bramhastram, Agniastram, Panchagavya)", labelTe: "ప్రకృతి వ్యవసాయ జీవ ద్రావణాలు (బ్రహ్మాస్త్రం, అగ్నిఅస్త్రం)", unit: "Liters", count: 10, code: "HDFC-A1.11-0049" },
-        { label: "Quality Foundation Seeds Package", labelTe: "నాణ్యమైన విత్తనాల ప్యాకేజీ", unit: "Kgs", count: 5, code: "HDFC-SD-01" }
+        { label: "NPM Bio-Formulations (Bramhastram, Agniastram, Panchagavya)", labelTe: "ప్రకృతి వ్యవసాయ జీవ ద్రావణాలు (బ్రహ్మాస్త్రం, అగ్నిఅస్త్రం)", unit: "Liters", count: 10 },
+        { label: "Quality Foundation Seeds Package", labelTe: "నాణ్యమైన విత్తనాల ప్యాకేజీ", unit: "Kgs", count: 5 }
     ],
     "kitchen garden": [
-        { label: "Kitchen Garden Seasonal Vegetable Seeds Kit", labelTe: "కూరగాయల విత్తనాల కిట్", unit: "Kit", count: 1, code: "HDFC-KG-01" },
-        { label: "Bio-Nutrient Spray", labelTe: "జీవ పోషక ద్రావణం", unit: "Bottle", count: 1, code: "HDFC-KG-02" }
+        { label: "Kitchen Garden Seasonal Vegetable Seeds Kit", labelTe: "కూరగాయల విత్తనాల కిట్", unit: "Kit", count: 1 },
+        { label: "Bio-Nutrient Spray", labelTe: "జీవ పోషక ద్రావణం", unit: "Bottle", count: 1 }
     ],
     "biomass plantation": [
-        { label: "Agro-Forestry & Biomass Saplings", labelTe: "బయోమాస్ మొక్కలు & నర్సరీ సామాగ్రి", unit: "Saplings", count: 50, code: "HDFC-BP-01" }
+        { label: "Agro-Forestry & Biomass Saplings", labelTe: "బయోమాస్ మొక్కలు & నర్సరీ సామాగ్రి", unit: "Saplings", count: 50 }
     ],
     "vermi compost": [
-        { label: "HDPE Vermi Bed Structure & Earthworm Culture", labelTe: "వర్మీ కంపోస్ట్ బెడ్ & వానపాముల యూనిట్", unit: "Unit", count: 1, code: "HDFC-VC-01" }
+        { label: "HDPE Vermi Bed Structure & Earthworm Culture", labelTe: "వర్మీ కంపోస్ట్ బెడ్ & వానపాముల యూనిట్", unit: "Unit", count: 1 }
     ],
     "livestock health": [
-        { label: "Veterinary First Aid Kit & Deworming Supplements", labelTe: "పశువైద్య ప్రథమ చికిత్స కిట్ & మందులు", unit: "Kit", count: 1, code: "HDFC-LH-01" }
+        { label: "Veterinary First Aid Kit & Deworming Supplements", labelTe: "పశువైద్య ప్రథమ చికిత్స కిట్ & మందులు", unit: "Kit", count: 1 }
     ]
+};
+
+
+const getAssetDisplayLabel = (mat: any): { title: string; subtitle?: string } => {
+    const rawLabel = (mat.label || "").trim();
+    const lower = rawLabel.toLowerCase();
+    
+    // Check known Telugu label mapping
+    if (TELUGU_ASSET_LABELS[lower]) {
+        return {
+            title: TELUGU_ASSET_LABELS[lower],
+            subtitle: rawLabel !== TELUGU_ASSET_LABELS[lower] ? rawLabel : undefined
+        };
+    }
+    
+    if (mat.labelTe && mat.labelTe !== rawLabel) {
+        return {
+            title: mat.labelTe,
+            subtitle: rawLabel
+        };
+    }
+    
+    return { title: rawLabel };
 };
 
 const parseCSVLine = (line: string): string[] => {
@@ -1544,8 +1587,110 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
 
             {/* Acknowledgement Letter Modal (HDFC Bank Parivartan - WASSAN Letterhead) */}
             {ackLetterData && (
-                <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" onClick={() => setAckLetterData(null)}>
-                    <div className="bg-white text-gray-900 rounded-3xl p-6 max-w-4xl w-full max-h-[92vh] overflow-y-auto space-y-4 shadow-2xl relative print:p-0 print:max-h-none print:shadow-none" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in modal-backdrop-print" onClick={() => setAckLetterData(null)}>
+                    {/* Embedded Print CSS for Guaranteed Single-Page A4 Letterhead with Header & Footer */}
+                    <style>{`
+                        @page {
+                            size: A4 portrait;
+                            margin: 0mm;
+                        }
+                        @media print {
+                            html, body {
+                                margin: 0 !important;
+                                padding: 0 !important;
+                                background: white !important;
+                                width: 210mm !important;
+                                height: 297mm !important;
+                                -webkit-print-color-adjust: exact !important;
+                                print-color-adjust: exact !important;
+                                overflow: visible !important;
+                            }
+                            .modal-backdrop-print {
+                                position: static !important;
+                                background: white !important;
+                                padding: 0 !important;
+                                margin: 0 !important;
+                                overflow: visible !important;
+                                display: block !important;
+                                width: 210mm !important;
+                                height: 297mm !important;
+                                z-index: auto !important;
+                            }
+                            .modal-content-print {
+                                padding: 0 !important;
+                                margin: 0 !important;
+                                max-width: none !important;
+                                max-height: none !important;
+                                overflow: visible !important;
+                                box-shadow: none !important;
+                                border: none !important;
+                                width: 210mm !important;
+                                height: 297mm !important;
+                            }
+                            .a4-print-sheet {
+                                width: 210mm !important;
+                                height: 297mm !important;
+                                min-height: 297mm !important;
+                                max-height: 297mm !important;
+                                margin: 0 auto !important;
+                                padding: 0 !important;
+                                box-sizing: border-box !important;
+                                display: flex !important;
+                                flex-direction: column !important;
+                                justify-content: space-between !important;
+                                page-break-after: avoid !important;
+                                page-break-inside: avoid !important;
+                                page-break-before: avoid !important;
+                                overflow: hidden !important;
+                                border: none !important;
+                                box-shadow: none !important;
+                                border-radius: 0 !important;
+                                background: white !important;
+                            }
+                            .a4-content-area {
+                                padding: 1.5mm 12mm 1mm 12mm !important;
+                                gap: 2mm !important;
+                                display: flex !important;
+                                flex-direction: column !important;
+                                flex: 1 !important;
+                            }
+                            .a4-grid {
+                                padding: 2mm 3mm !important;
+                                font-size: 8pt !important;
+                                line-height: 1.25 !important;
+                                gap: 1mm 3mm !important;
+                            }
+                            .a4-table th, .a4-table td {
+                                padding: 1.2mm 2mm !important;
+                                font-size: 8pt !important;
+                                line-height: 1.2 !important;
+                            }
+                            .a4-decl {
+                                padding: 2mm 3mm !important;
+                                font-size: 8pt !important;
+                                line-height: 1.2 !important;
+                                gap: 1.2mm !important;
+                            }
+                            .a4-sig {
+                                padding-top: 2.5mm !important;
+                                padding-bottom: 0.5mm !important;
+                                font-size: 8pt !important;
+                            }
+                            .a4-sig-line {
+                                height: 7mm !important;
+                                width: 42mm !important;
+                            }
+                            .a4-title h2 {
+                                font-size: 10.5pt !important;
+                                line-height: 1.2 !important;
+                            }
+                            .a4-title p {
+                                font-size: 6.5pt !important;
+                            }
+                        }
+                    `}</style>
+
+                    <div className="bg-white text-gray-900 rounded-3xl p-6 max-w-4xl w-full max-h-[92vh] overflow-y-auto space-y-4 shadow-2xl relative modal-content-print print:p-0 print:max-h-none print:shadow-none" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center print:hidden border-b border-gray-100 pb-3">
                             <div className="flex items-center gap-2">
                                 <FileText className="text-indigo-600" size={20} />
@@ -1560,9 +1705,9 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                         </div>
 
                         {/* Letterhead Container with Header, Content and Footer */}
-                        <div className="mx-auto bg-white border border-gray-300 rounded-xl shadow-lg flex flex-col justify-between overflow-hidden print:border-none print:shadow-none print:m-0" style={{ width: "100%", maxWidth: "800px", minHeight: "1120px" }}>
+                        <div className="mx-auto bg-white border border-gray-300 rounded-xl shadow-lg flex flex-col justify-between overflow-hidden a4-print-sheet print:border-none print:shadow-none print:m-0" style={{ width: "100%", maxWidth: "794px", minHeight: "1123px" }}>
                             {/* 1. Official Google Docs Letterhead Header */}
-                            <div className="w-full bg-white">
+                            <div className="w-full bg-white flex-shrink-0">
                                 <img 
                                     src="/letterhead_header.png" 
                                     alt="HDFC Bank Parivartan – WASSAN Letterhead" 
@@ -1571,9 +1716,9 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                             </div>
 
                             {/* 2. Letter Content Area */}
-                            <div className="p-8 py-3 space-y-4 text-gray-900 font-sans flex-1">
+                            <div className="p-8 py-3 space-y-3.5 a4-content-area text-gray-900 font-sans flex-1">
                                 {/* Ack Number and Date Header */}
-                                <div className="flex justify-between items-center text-xs font-bold border-b border-gray-300 pb-2">
+                                <div className="flex justify-between items-center text-xs font-bold border-b border-gray-300 pb-1.5">
                                     <span className="font-mono text-indigo-900 font-black">
                                         రసీదు సంఖ్య (ACK NO): P1198-BHM-2026-{Math.abs((ackLetterData.beneficiaryId || ackLetterData.farmerId || '0').split('').reduce((a,b)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,6)}
                                     </span>
@@ -1581,7 +1726,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 </div>
 
                                 {/* Telugu Letter Title */}
-                                <div className="text-center space-y-0.5">
+                                <div className="text-center space-y-0.5 a4-title">
                                     <h2 className="text-lg font-black text-gray-900 tracking-wide">
                                         వస్తువుల స్వీకరణ, పనుల నిర్మాణం పూర్తి మరియు ఫోటోగ్రఫీ సమ్మతి పత్రం
                                     </h2>
@@ -1591,7 +1736,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 </div>
 
                                 {/* Beneficiary Information Grid */}
-                                <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-3 rounded-xl border border-gray-200">
+                                <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-2.5 rounded-xl border border-gray-200 a4-grid">
                                     <div><span className="font-bold text-gray-600">లబ్ధిదారుని పేరు (Name):</span> <span className="font-black text-gray-900">{ackLetterData.beneficiaryName || ackLetterData.name}</span></div>
                                     <div><span className="font-bold text-gray-600">లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span className="font-mono font-bold text-gray-900">{ackLetterData.beneficiaryId || ackLetterData.farmerId}</span></div>
                                     <div><span className="font-bold text-gray-600">గ్రామం / పంచాయతీ (Village/GP):</span> <span className="font-bold text-gray-900">{ackLetterData.village} / {ackLetterData.gp}</span></div>
@@ -1601,11 +1746,11 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 </div>
 
                                 {/* Material Details Table */}
-                                <div className="space-y-1.5">
+                                <div className="space-y-1">
                                     <h3 className="text-[11px] font-black uppercase text-gray-800 tracking-wider">
-                                        అందజేయబడిన వస్తువులు / సహాయ వివరాలు (Issued Materials & Assets)
+                                        అందజేయబడిన వస్తువులు / సహాయ వివరాలు (ISSUED MATERIALS & ASSETS)
                                     </h3>
-                                    <table className="w-full text-xs border-collapse border border-gray-400 bg-white">
+                                    <table className="w-full text-xs border-collapse border border-gray-400 bg-white a4-table">
                                         <thead>
                                             <tr className="bg-gray-100 text-gray-900 font-black">
                                                 <th className="border border-gray-400 p-2 text-center w-12">క్రమ సంఖ్య</th>
@@ -1617,45 +1762,43 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                         <tbody>
                                             {(() => {
                                                 const mats = modalMaterials.length > 0 ? modalMaterials : getIssuedMaterials(ackLetterData);
-                                                return mats.map((mat: any, idx: number) => (
-                                                    <tr key={idx} className="hover:bg-gray-50/50">
-                                                        <td className="border border-gray-400 p-2 text-center font-bold text-gray-700">{idx + 1}</td>
-                                                        <td className="border border-gray-400 p-2">
-                                                            <span className="font-bold text-gray-900 block">{mat.labelTe || mat.label}</span>
-                                                            {mat.labelTe && mat.label && mat.labelTe !== mat.label && (
-                                                                <span className="text-[10px] text-gray-600 block">{mat.label}</span>
-                                                            )}
-                                                            {(mat.code || mat.materialId) && (
-                                                                <span className="text-[9px] text-indigo-700 font-mono font-medium block">
-                                                                    కోడ్ / ID: {mat.code || mat.materialId} {mat.date ? `· తేదీ: ${mat.date}` : ""}
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                        <td className="border border-gray-400 p-2 text-center font-bold text-gray-900">{mat.count || 1}</td>
-                                                        <td className="border border-gray-400 p-2 text-center text-gray-700 font-medium">{mat.unit || "Unit"}</td>
-                                                    </tr>
-                                                ));
+                                                return mats.map((mat: any, idx: number) => {
+                                                    const display = getAssetDisplayLabel(mat);
+                                                    return (
+                                                        <tr key={idx} className="hover:bg-gray-50/50">
+                                                            <td className="border border-gray-400 p-1.5 text-center font-bold text-gray-700">{idx + 1}</td>
+                                                            <td className="border border-gray-400 p-1.5">
+                                                                <span className="font-bold text-gray-900 block">{display.title}</span>
+                                                                {display.subtitle && display.subtitle !== display.title && (
+                                                                    <span className="text-[10px] text-gray-500 font-medium block">{display.subtitle}</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="border border-gray-400 p-1.5 text-center font-bold text-gray-900">{mat.count || 1}</td>
+                                                            <td className="border border-gray-400 p-1.5 text-center text-gray-700 font-medium">{mat.unit || "Unit"}</td>
+                                                        </tr>
+                                                    );
+                                                });
                                             })()}
                                         </tbody>
                                     </table>
                                 </div>
 
                                 {/* Beneficiary Acknowledgement & Declarations (All 3 Key Points) */}
-                                <div className="text-xs space-y-2 bg-gray-50/90 p-3.5 rounded-xl border border-gray-200">
-                                    <h4 className="text-[11px] font-black uppercase text-indigo-950 tracking-wider">
-                                        లబ్ధిదారుని స్వీకృతి & ధృవీకరణ పత్రం (Beneficiary Acknowledgement & Declarations)
+                                <div className="text-xs space-y-1.5 bg-gray-50/90 p-2.5 rounded-xl border border-gray-200 a4-decl">
+                                    <h4 className="text-[10.5px] font-black uppercase text-indigo-950 tracking-wider">
+                                        లబ్ధిదారుని స్వీకృతి & ధృవీకరణ పత్రం (BENEFICIARY ACKNOWLEDGEMENT & DECLARATIONS)
                                     </h4>
                                     
                                     {/* Point 1: Receipt of Materials */}
-                                    <div className="flex items-start gap-2">
+                                    <div className="flex items-start gap-1.5">
                                         <span className="font-bold text-indigo-700">1.</span>
                                         <p className="leading-snug">
                                             <strong>వస్తువుల స్వీకరణ (Receipt of Materials):</strong> పైన పట్టికలో పేర్కొన్న వస్తువులు / సహాయ సామాగ్రిని నా జీవనోపాధి అభివృద్ధి కొరకు వాసన్ (WASSAN) ద్వారా సరైన స్థితిలో పూర్తిగా స్వీకరించాను.
                                         </p>
                                     </div>
 
-                                    {/* Point 2: Construction / Installation Completion (Requested by User) */}
-                                    <div className="flex items-start gap-2 bg-indigo-50/80 p-2 rounded-lg border border-indigo-200">
+                                    {/* Point 2: Construction / Installation Completion */}
+                                    <div className="flex items-start gap-1.5 bg-indigo-50/80 p-1.5 rounded-lg border border-indigo-200">
                                         <span className="font-black text-indigo-800">2.</span>
                                         <p className="leading-snug text-indigo-950">
                                             <strong>పనుల నిర్మాణం / సంస్థాపన పూర్తి (Completion of Work / Installation):</strong> HDFC బ్యాంక్ పరివర్తన్ (HDFC Bank Parivartan) వారి ఆర్థిక సహాయంతో, వాసన్ (WASSAN) సంస్థ ద్వారా నాకు మంజూరు చేయబడిన పనుల నిర్మాణం / వస్తువుల సంస్థాపన (Construction of work / Installation) ను నేను క్షేత్రస్థాయిలో విజయవంతంగా మరియు సంతృప్తికరంగా పూర్తి చేశానని దీనిద్వారా ధృవీకరిస్తున్నాను / అంగీకరిస్తున్నాను.
@@ -1663,13 +1806,13 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                     </div>
 
                                     {/* Point 3: Photography Consent */}
-                                    <div className="flex items-start gap-2 pt-1 border-t border-gray-200">
+                                    <div className="flex items-start gap-1.5 pt-1 border-t border-gray-200">
                                         <span className="font-bold text-gray-700">3.</span>
-                                        <div className="space-y-1">
-                                            <p className="leading-snug text-[11px] text-gray-700">
+                                        <div className="space-y-0.5">
+                                            <p className="leading-snug text-[10.5px] text-gray-700">
                                                 <strong>ఫోటోగ్రఫీ సమ్మతి (Photography Consent):</strong> ప్రాజెక్ట్ డాక్యుమెంటేషన్, పర్యవేక్షణ కొరకు నా ఫోటో / పూర్తయిన పనుల ఫోటోల వినియోగానికి స్వచ్ఛందంగా సమ్మతిస్తున్నాను (ఫోటోగ్రఫీ సమ్మతి నిరాకరించడం వలన ప్రాజెక్ట్ ప్రయోజనాలపై ఎటువంటి ప్రభావం ఉండదు).
                                             </p>
-                                            <div className="flex items-center gap-6 text-xs font-bold pt-0.5">
+                                            <div className="flex items-center gap-6 text-[10.5px] font-bold pt-0.5">
                                                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 border border-gray-500 inline-block rounded bg-white"></span> సమ్మతిస్తున్నాను (Yes)</span>
                                                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 border border-gray-500 inline-block rounded bg-white"></span> సమ్మతించడం లేదు (No)</span>
                                             </div>
@@ -1678,14 +1821,14 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 </div>
 
                                 {/* Signatures */}
-                                <div className="flex justify-between items-end pt-8 pb-2 text-xs font-bold text-gray-900">
+                                <div className="flex justify-between items-end pt-3 pb-1 text-xs font-bold text-gray-900 a4-sig">
                                     <div className="text-center">
-                                        <div className="h-10 border-b border-dashed border-gray-500 w-48 mb-1.5"></div>
+                                        <div className="h-8 border-b border-dashed border-gray-500 w-44 mb-1 a4-sig-line"></div>
                                         <p>లబ్ధిదారుని సంతకం / వేలిముద్ర</p>
                                         <p className="text-[9px] text-gray-500 font-normal">Beneficiary Signature / Thumb Impression</p>
                                     </div>
                                     <div className="text-center">
-                                        <div className="h-10 border-b border-dashed border-gray-500 w-48 mb-1.5"></div>
+                                        <div className="h-8 border-b border-dashed border-gray-500 w-44 mb-1 a4-sig-line"></div>
                                         <p>అధికారిక సంతకం</p>
                                         <p className="text-[9px] text-gray-500 font-normal">WASSAN / HDFC Parivartan Project Team</p>
                                     </div>
@@ -1693,7 +1836,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                             </div>
 
                             {/* 3. Official Google Docs Letterhead Footer */}
-                            <div className="w-full bg-white mt-auto">
+                            <div className="w-full bg-white mt-auto flex-shrink-0">
                                 <img 
                                     src="/letterhead_footer.png" 
                                     alt="HDFC Bank Parivartan – WASSAN Letterhead Footer" 

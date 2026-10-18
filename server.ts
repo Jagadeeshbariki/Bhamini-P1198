@@ -1192,6 +1192,7 @@ export async function createApp() {
   // Serve static files and SPA fallback
   const distPath = path.join(process.cwd(), 'dist');
   const indexPath = path.join(distPath, 'index.html');
+  const rootIndexPath = path.join(process.cwd(), 'index.html');
 
   if (!fs.existsSync(indexPath)) {
     console.log('[SERVER] index.html not found in dist/. Triggering automatic build...');
@@ -1217,10 +1218,14 @@ export async function createApp() {
       console.warn("[SERVER] Vite import failed, falling back to static serving:", e.message);
       app.use(express.static(distPath));
       app.get(/^((?!\/api\/).)*$/, (req, res) => {
-        res.sendFile(indexPath, (err) => {
-          if (err) {
-            console.error(`[SERVER] Error sending index.html (dev fallback): ${err.message}`);
-            res.status(500).send(`Critical Error: index.html not found at ${indexPath}. Please run build first.`);
+        const fileToSend = fs.existsSync(indexPath) ? indexPath : rootIndexPath;
+        res.sendFile(fileToSend, (err) => {
+          if (err && !res.headersSent) {
+            if (fs.existsSync(rootIndexPath)) {
+              res.sendFile(rootIndexPath);
+            } else {
+              res.status(503).send("Server starting up or compiling assets. Please refresh.");
+            }
           }
         });
       });
@@ -1244,10 +1249,14 @@ export async function createApp() {
 
     app.use(express.static(distPath));
     app.get(/^((?!\/api\/).)*$/, (req, res) => {
-      res.sendFile(indexPath, (err) => {
-        if (err) {
-          console.error(`[SERVER] Error sending index.html: ${err.message}`);
-          res.status(500).send(`Critical Error: index.html not found at ${indexPath}. Ensure build process completed successfully.`);
+      const fileToSend = fs.existsSync(indexPath) ? indexPath : rootIndexPath;
+      res.sendFile(fileToSend, (err) => {
+        if (err && !res.headersSent) {
+          if (fs.existsSync(rootIndexPath)) {
+            res.sendFile(rootIndexPath);
+          } else {
+            res.status(503).send("Server compiling assets. Please refresh.");
+          }
         }
       });
     });
