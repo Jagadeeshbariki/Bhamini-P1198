@@ -72,10 +72,4 @@ export const CAPACITY_BUILDING_SCRIPT_URL = 'https://script.google.com/macros/s/
 
 export const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200';
 
-export const getProxyUrl = (url: string) => {
-    if (!url) return url;
-    if (url.includes("docs.google.com/spreadsheets")) {
-        return `/api/sheet-proxy?url=${encodeURIComponent(url)}`;
-    }
-    return url;
-};
+export const getProxyUrl = (url: string) => url;

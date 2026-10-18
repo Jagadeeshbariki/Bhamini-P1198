@@ -116,59 +116,12 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
         setLoading(true);
         setError(null);
         try {
-            const [ackRes, odkRes, benRes, distRes] = await Promise.all([
+            const [ackRes, odkRes, benRes] = await Promise.all([
                 fetch("/api/acknowledgements/list").then(r => r.json()).catch(() => ({ success: false, acknowledgements: [] })),
                 fetch("/api/odk/data?formId=Status&projectId=3").then(r => r.json()).catch(() => ({ value: [] })),
-                fetch(getProxyUrl(BENEFICIARY_DATA_URL)).then(r => r.text()).catch(() => ""),
-                fetch(getProxyUrl(ASSET_DISTRIBUTION_URL)).then(r => r.text()).catch(() => "")
+                fetch(getProxyUrl(BENEFICIARY_DATA_URL)).then(r => r.text()).catch(() => "")
             ]);
 
-            if (distRes) {
-                const distLines = distRes.trim().split(/\r?\n/).filter(Boolean);
-                if (distLines.length > 1) {
-                    const distHeaders = parseCSVLine(distLines[0]).map(h => h.toLowerCase().trim());
-                    const newMatMap = new Map<string, any[]>();
-                    distLines.slice(1).forEach(l => {
-                        const row = parseCSVLine(l);
-                        const getCol = (keys: string[]) => {
-                            for (const k of keys) {
-                                const idx = distHeaders.findIndex(h => h === k || h.includes(k));
-                                if (idx !== -1 && row[idx]) return row[idx].trim();
-                            }
-                            return "";
-                        };
-                        const bId = getCol(["ben_id", "beneficiary id", "adhaar"]).toLowerCase();
-                        const fId = getCol(["farmer id", "farmer_id", "hh id"]).toLowerCase();
-                        const bName = getCol(["beneficiary name", "name", "farmer_name"]).toLowerCase();
-                        const vName = getCol(["village"]).toLowerCase();
-                        const label = getCol(["this_material_label", "material", "asset"]);
-                        const count = getCol(["materials_details-material_count", "count", "quantity"]) || "1";
-                        const unit = getCol(["materials_details-material_unit", "unit"]) || "Unit";
-                        const date = getCol(["materials_details-distributed_date", "date"]);
-                        const materialId = getCol(["material_id"]);
-
-                        if (label) {
-                            const item = { label, count, unit, date, materialId };
-                            if (bId) {
-                                if (!newMatMap.has(bId)) newMatMap.set(bId, []);
-                                newMatMap.get(bId)!.push(item);
-                            }
-                            if (fId && fId !== bId) {
-                                if (!newMatMap.has(fId)) newMatMap.set(fId, []);
-                                newMatMap.get(fId)!.push(item);
-                            }
-                            if (bName && vName) {
-                                const combo = `${bName}_${vName}`;
-                                if (!newMatMap.has(combo)) newMatMap.set(combo, []);
-                                newMatMap.get(combo)!.push(item);
-                            }
-                        }
-                    });
-                    setMaterialsMap(newMatMap);
-                }
-            }
-
-            
             // Preload complete materials map from server
             try {
                 const matAllRes = await fetch("/api/materials/all").then(r => r.json()).catch(() => ({ success: false, map: {} }));
