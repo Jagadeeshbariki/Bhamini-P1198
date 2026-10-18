@@ -115,6 +115,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
     const [selectedStatus, setSelectedStatus] = useState('ALL');
     const [selectedProfile, setSelectedProfile] = useState<any | null>(null);
     const [ackLetterData, setAckLetterData] = useState<any | null>(null);
+    const [modalMaterials, setModalMaterials] = useState<any[]>([]);
     const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState<"overview" | "eligible" | "letters" | "tracking">("overview");
     const [selectedFY, setSelectedFY] = useState('ALL');
@@ -530,6 +531,24 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
 
     
     
+    
+    const openAckLetter = async (item: any) => {
+        openAckLetter(item);
+        setModalMaterials([]);
+        try {
+            const benId = item.farmerId || item.beneficiaryId || item.hhId || "";
+            const bName = encodeURIComponent(item.beneficiaryName || item.name || "");
+            const vName = encodeURIComponent(item.village || "");
+            const res = await fetch(`/api/materials/query?id=${encodeURIComponent(benId)}&name=${bName}&village=${vName}`);
+            const data = await res.json();
+            if (data.success && Array.isArray(data.materials) && data.materials.length > 0) {
+                setModalMaterials(data.materials);
+            }
+        } catch (e) {
+            console.warn("Failed to query materials:", e);
+        }
+    };
+
     const getIssuedMaterials = (item: any) => {
         if (!item) return [];
         const candidates = [
@@ -966,7 +985,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                                 </td>
                                                 <td className="py-4 px-6 text-right">
                                                     <button
-                                                        onClick={() => setAckLetterData(item)}
+                                                        onClick={() => openAckLetter(item)}
                                                         className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1.5 ml-auto"
                                                     >
                                                         <Printer size={13} /> Generate Letter
@@ -1480,7 +1499,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                         </td>
                                         <td className="py-4 px-6 text-right">
                                             <button
-                                                onClick={() => setAckLetterData(item)}
+                                                onClick={() => openAckLetter(item)}
                                                 className="px-4 py-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1.5 ml-auto"
                                             >
                                                 <Printer size={13} /> View Telugu Letter
@@ -1576,7 +1595,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 {/* Ack Number and Date Header */}
                                 <div className="flex justify-between items-center text-xs font-bold border-b border-gray-300 pb-2">
                                     <span className="font-mono text-indigo-900 font-black">
-                                        రసీదు సంఖ్య (ACK NO): `P1198-BHM-2026-${Math.abs((ackLetterData.beneficiaryId || ackLetterData.farmerId || '0').split('').reduce((a,b)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,6)}`
+                                        రసీదు సంఖ్య (ACK NO): P1198-BHM-2026-{Math.abs((ackLetterData.beneficiaryId || ackLetterData.farmerId || '0').split('').reduce((a,b)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,6)}
                                     </span>
                                     <span>తేదీ (Date): {new Date().toLocaleDateString("te-IN")}</span>
                                 </div>
@@ -1617,7 +1636,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                         </thead>
                                         <tbody>
                                             {(() => {
-                                                const mats = getIssuedMaterials(ackLetterData);
+                                                const mats = modalMaterials.length > 0 ? modalMaterials : getIssuedMaterials(ackLetterData);
                                                 return mats.map((mat: any, idx: number) => (
                                                     <tr key={idx} className="hover:bg-gray-50/50">
                                                         <td className="border border-gray-400 p-2 text-center font-bold text-gray-700">{idx + 1}</td>

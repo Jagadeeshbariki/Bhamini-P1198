@@ -909,6 +909,127 @@ export async function createApp() {
     }
   });
 
+  
+  // ============================================================================
+  // SERVER-SIDE MATERIAL DISTRIBUTION INDEXER & API
+  // ============================================================================
+  const ASSET_DISTRIBUTION_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRnf96Py7icFx4_-yDw0a6xp9_pDOIfDJNHk5nUpBFDeJohuIq5RpbhShAlZlG7k4M8xTHarmZqmPX-/pub?gid=1409614466&single=true&output=csv";
+  
+  let cachedMaterialsMap = new Map<string, any[]>();
+  let lastMaterialsFetch = 0;
+
+  function parseCSVLine(line: string): string[] {
+    const vals: string[] = [];
+    let cur = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') inQuotes = !inQuotes;
+      else if (char === "," && !inQuotes) {
+        vals.push(cur.trim().replace(/^"|"$/g, ""));
+        cur = "";
+      } else {
+        cur += char;
+      }
+    }
+    vals.push(cur.trim().replace(/^"|"$/g, ""));
+    return vals;
+  }
+
+  async function refreshMaterialsCache() {
+    try {
+      console.log("[MATERIALS] Refreshing material distribution cache...");
+      const res = await fetch(ASSET_DISTRIBUTION_URL, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/csv,text/plain,*/*"
+        }
+      });
+      if (!res.ok) {
+        console.error("[MATERIALS] Failed to fetch distribution sheet:", res.status);
+        return;
+      }
+      const text = await res.text();
+      const lines = text.trim().split(/\r?\n/).filter(Boolean);
+      if (lines.length < 2) return;
+
+      const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+      const map = new Map<string, any[]>();
+
+      lines.slice(1).forEach(l => {
+        const row = parseCSVLine(l);
+        const getCol = (keys: string[]) => {
+          for (const k of keys) {
+            const idx = headers.findIndex(h => h === k || h.includes(k));
+            if (idx !== -1 && row[idx]) return row[idx].trim();
+          }
+          return "";
+        };
+
+        const bId = getCol(["ben_id", "beneficiary id", "adhaar"]).toLowerCase();
+        const fId = getCol(["farmer id", "farmer_id", "hh id"]).toLowerCase();
+        const bName = getCol(["beneficiary name", "name"]).toLowerCase();
+        const vName = getCol(["village"]).toLowerCase();
+        const label = getCol(["this_material_label", "material", "asset"]);
+        const count = parseFloat(getCol(["materials_details-material_count"])) || 1;
+        const unit = getCol(["materials_details-material_unit"]) || "Unit";
+        const date = getCol(["materials_details-distributed_date"]);
+        const materialId = getCol(["material_id"]);
+
+        if (label) {
+          const item = { label, count, unit, date, materialId };
+          if (bId) {
+            if (!map.has(bId)) map.set(bId, []);
+            map.get(bId)!.push(item);
+          }
+          if (fId && fId !== bId) {
+            if (!map.has(fId)) map.set(fId, []);
+            map.get(fId)!.push(item);
+          }
+          if (bName && vName) {
+            const combo = `${bName}_${vName}`;
+            if (!map.has(combo)) map.set(combo, []);
+            map.get(combo)!.push(item);
+          }
+        }
+      });
+
+      cachedMaterialsMap = map;
+      lastMaterialsFetch = Date.now();
+      console.log(`[MATERIALS] Cached ${map.size} unique keys from ${lines.length - 1} distribution rows.`);
+    } catch (e: any) {
+      console.error("[MATERIALS] Cache refresh error:", e.message);
+    }
+  }
+
+  // Preload cache
+  refreshMaterialsCache();
+  setInterval(refreshMaterialsCache, 10 * 60 * 1000);
+
+  app.get("/api/materials/query", async (req, res) => {
+    try {
+      if (Date.now() - lastMaterialsFetch > 10 * 60 * 1000 || cachedMaterialsMap.size === 0) {
+        await refreshMaterialsCache();
+      }
+
+      const id = String(req.query.id || "").toLowerCase().trim();
+      const name = String(req.query.name || "").toLowerCase().trim();
+      const village = String(req.query.village || "").toLowerCase().trim();
+
+      let matched: any[] = [];
+      if (id && cachedMaterialsMap.has(id)) {
+        matched = cachedMaterialsMap.get(id)!;
+      } else if (name && village && cachedMaterialsMap.has(`${name}_${village}`)) {
+        matched = cachedMaterialsMap.get(`${name}_${village}`)!;
+      }
+
+      res.json({ success: true, count: matched.length, materials: matched });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message, materials: [] });
+    }
+  });
+
+
   // ============================================================================
   // BENEFICIARY ACKNOWLEDGEMENT & TRACKING API ROUTES
   // ============================================================================

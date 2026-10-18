@@ -106,6 +106,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
     const [selectedHardCopy, setSelectedHardCopy] = useState("ALL");
     const [selectedTab, setSelectedTab] = useState<"dashboard" | "eligible" | "generate" | "tracking">("dashboard");
     const [selectedAckForPrint, setSelectedAckForPrint] = useState<any | null>(null);
+    const [modalMaterials, setModalMaterials] = useState<any[]>([]);
     const [selectedBeneficiaryIds, setSelectedBeneficiaryIds] = useState<Set<string>>(new Set());
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [materialsMap, setMaterialsMap] = useState<Map<string, any[]>>(new Map());
@@ -330,7 +331,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
             if (data.success) {
                 setSuccessMessage(`Acknowledgement generated: ${data.acknowledgement.acknowledgement_number}`);
                 fetchData();
-                setSelectedAckForPrint(data.acknowledgement);
+                openPortalAckLetter(data.acknowledgement);
             } else {
                 alert(data.error || "Failed to generate");
             }
@@ -376,6 +377,24 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
 
     
     
+    
+    const openPortalAckLetter = async (item: any) => {
+        openPortalAckLetter(item);
+        setModalMaterials([]);
+        try {
+            const benId = item.beneficiary_id || item.beneficiaryId || item.farmerId || "";
+            const bName = encodeURIComponent(item.beneficiary_name || item.beneficiaryName || "");
+            const vName = encodeURIComponent(item.village || "");
+            const res = await fetch(`/api/materials/query?id=${encodeURIComponent(benId)}&name=${bName}&village=${vName}`);
+            const data = await res.json();
+            if (data.success && Array.isArray(data.materials) && data.materials.length > 0) {
+                setModalMaterials(data.materials);
+            }
+        } catch (e) {
+            console.warn("Failed to query materials:", e);
+        }
+    };
+
     const getIssuedMaterials = (item: any) => {
         if (!item) return [];
         const candidates = [
@@ -696,7 +715,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                                             <td className="py-4 px-6 text-right">
                                                 {item.isGenerated ? (
                                                     <button 
-                                                        onClick={() => setSelectedAckForPrint(item.acknowledgement)}
+                                                        onClick={() => openPortalAckLetter(item.acknowledgement)}
                                                         className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 text-indigo-600 rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1.5 ml-auto"
                                                     >
                                                         <Printer size={14} /> View Letter
@@ -759,7 +778,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                                             <td className="py-4 px-6 text-gray-500">{new Date(ack.created_at).toLocaleDateString()}</td>
                                             <td className="py-4 px-6 text-right">
                                                 <button 
-                                                    onClick={() => setSelectedAckForPrint(ack)}
+                                                    onClick={() => openPortalAckLetter(ack)}
                                                     className="px-4 py-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1.5 ml-auto"
                                                 >
                                                     <Printer size={14} /> Open Telugu Letter
@@ -909,7 +928,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                                         </thead>
                                         <tbody>
                                             {(() => {
-                                                const mats = getIssuedMaterials(selectedAckForPrint);
+                                                const mats = modalMaterials.length > 0 ? modalMaterials : getIssuedMaterials(selectedAckForPrint);
                                                 return mats.map((mat: any, idx: number) => (
                                                     <tr key={idx} className="hover:bg-gray-50/50">
                                                         <td className="border border-gray-400 p-2 text-center font-bold text-gray-700">{idx + 1}</td>
