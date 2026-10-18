@@ -379,7 +379,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
     
     
     const openPortalAckLetter = async (item: any) => {
-        openPortalAckLetter(item);
+        setSelectedAckForPrint(item);
         setModalMaterials([]);
         try {
             const benId = item.beneficiary_id || item.beneficiaryId || item.farmerId || "";

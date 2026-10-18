@@ -533,7 +533,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
     
     
     const openAckLetter = async (item: any) => {
-        openAckLetter(item);
+        setAckLetterData(item);
         setModalMaterials([]);
         try {
             const benId = item.farmerId || item.beneficiaryId || item.hhId || "";
