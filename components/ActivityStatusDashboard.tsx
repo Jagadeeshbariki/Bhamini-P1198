@@ -479,6 +479,21 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                 console.warn("Failed to load material distribution:", matErr);
             }
 
+            
+            // Preload complete materials map from server
+            try {
+                const matAllRes = await fetch("/api/materials/all").then(r => r.json()).catch(() => ({ success: false, map: {} }));
+                if (matAllRes.success && matAllRes.map) {
+                    const loadedMap = new Map<string, any[]>();
+                    for (const [k, v] of Object.entries(matAllRes.map)) {
+                        loadedMap.set(k.toLowerCase().trim(), v as any[]);
+                    }
+                    setMaterialsMap(loadedMap);
+                }
+            } catch (matLoadErr) {
+                console.warn("Failed to preload materials map:", matLoadErr);
+            }
+
             const sortedRecords = records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
             setData(sortedRecords);
 
@@ -532,14 +547,29 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
     
     
     
-    const openAckLetter = async (item: any) => {
+        const openAckLetter = async (item: any) => {
         setAckLetterData(item);
-        setModalMaterials([]);
+        // Pre-fill synchronously if available
+        const instantMats = getIssuedMaterials(item);
+        if (instantMats && instantMats.length > 0) {
+            setModalMaterials(instantMats);
+        } else {
+            setModalMaterials([]);
+        }
+
         try {
-            const benId = item.farmerId || item.beneficiaryId || item.hhId || "";
-            const bName = encodeURIComponent(item.beneficiaryName || item.name || "");
-            const vName = encodeURIComponent(item.village || "");
-            const res = await fetch(`/api/materials/query?id=${encodeURIComponent(benId)}&name=${bName}&village=${vName}`);
+            const benId = item.beneficiaryId || item.beneficiaryAdhaar || "";
+            const farmerId = item.farmerId || item.hhId || "";
+            const bName = item.beneficiaryName || item.name || "";
+            const vName = item.village || "";
+            const params = new URLSearchParams({
+                beneficiaryId: benId,
+                farmerId: farmerId,
+                hhId: item.hhId || "",
+                name: bName,
+                village: vName
+            });
+            const res = await fetch(`/api/materials/query?${params.toString()}`);
             const data = await res.json();
             if (data.success && Array.isArray(data.materials) && data.materials.length > 0) {
                 setModalMaterials(data.materials);
@@ -548,14 +578,14 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             console.warn("Failed to query materials:", e);
         }
     };
-
     const getIssuedMaterials = (item: any) => {
         if (!item) return [];
         const candidates = [
-            item.beneficiaryId,
             item.farmerId,
+            item.beneficiaryId,
             item.hhId,
             item.beneficiaryAdhaar,
+            item.adhaar,
             item.id
         ].filter(Boolean).map(s => String(s).toLowerCase().trim());
 
@@ -564,10 +594,14 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                 return materialsMap.get(cid)!;
             }
         }
-        const bName = (item.beneficiaryName || item.name || "").toLowerCase().trim();
-        const vName = (item.village || "").toLowerCase().trim();
-        if (bName && vName && materialsMap.has(`${bName}_${vName}`)) {
-            return materialsMap.get(`${bName}_${vName}`)!;
+
+        const rawName = (item.beneficiaryName || item.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const rawVillage = (item.village || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (rawName && rawVillage && materialsMap.has(`${rawName}_${rawVillage}`)) {
+            return materialsMap.get(`${rawName}_${rawVillage}`)!;
+        }
+        if (rawName && materialsMap.has(rawName)) {
+            return materialsMap.get(rawName)!;
         }
 
         // If not found in recorded distribution, look up from activity catalog!
@@ -578,7 +612,6 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             }
         }
 
-        // Clean default for any unmapped activity
         const actDisplay = item.activity || item.activityName || "NS";
         return [
             {
@@ -590,7 +623,6 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             }
         ];
     };
-
     const handleBulkGenerateSelected = async () => {
         const selected = eligibleBeneficiaries.filter(b => bulkSelected.has(b.id || b.farmerId));
         if (selected.length === 0) {

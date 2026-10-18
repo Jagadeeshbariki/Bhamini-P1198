@@ -991,6 +991,17 @@ export async function createApp() {
             if (!map.has(combo)) map.set(combo, []);
             map.get(combo)!.push(item);
           }
+          const cleanName = bName.replace(/[^a-z0-9]/g, "");
+          const cleanVillage = vName.replace(/[^a-z0-9]/g, "");
+          if (cleanName) {
+            if (!map.has(cleanName)) map.set(cleanName, []);
+            map.get(cleanName)!.push(item);
+            if (cleanVillage) {
+              const comboClean = `${cleanName}_${cleanVillage}`;
+              if (!map.has(comboClean)) map.set(comboClean, []);
+              map.get(comboClean)!.push(item);
+            }
+          }
         }
       });
 
@@ -1006,21 +1017,51 @@ export async function createApp() {
   refreshMaterialsCache();
   setInterval(refreshMaterialsCache, 10 * 60 * 1000);
 
+  app.get("/api/materials/all", async (req, res) => {
+    try {
+      if (Date.now() - lastMaterialsFetch > 10 * 60 * 1000 || cachedMaterialsMap.size === 0) {
+        await refreshMaterialsCache();
+      }
+      const obj: Record<string, any[]> = {};
+      cachedMaterialsMap.forEach((val, key) => {
+        obj[key] = val;
+      });
+      res.json({ success: true, count: cachedMaterialsMap.size, map: obj });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message, map: {} });
+    }
+  });
+
   app.get("/api/materials/query", async (req, res) => {
     try {
       if (Date.now() - lastMaterialsFetch > 10 * 60 * 1000 || cachedMaterialsMap.size === 0) {
         await refreshMaterialsCache();
       }
 
-      const id = String(req.query.id || "").toLowerCase().trim();
-      const name = String(req.query.name || "").toLowerCase().trim();
-      const village = String(req.query.village || "").toLowerCase().trim();
+      const candidates: string[] = [
+        String(req.query.id || ""),
+        String(req.query.beneficiaryId || ""),
+        String(req.query.farmerId || ""),
+        String(req.query.hhId || ""),
+        String(req.query.adhaar || "")
+      ].filter(Boolean).map(s => s.toLowerCase().trim());
 
       let matched: any[] = [];
-      if (id && cachedMaterialsMap.has(id)) {
-        matched = cachedMaterialsMap.get(id)!;
-      } else if (name && village && cachedMaterialsMap.has(`${name}_${village}`)) {
-        matched = cachedMaterialsMap.get(`${name}_${village}`)!;
+      for (const cid of candidates) {
+        if (cachedMaterialsMap.has(cid)) {
+          matched = cachedMaterialsMap.get(cid)!;
+          break;
+        }
+      }
+
+      if (matched.length === 0) {
+        const rawName = String(req.query.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const rawVillage = String(req.query.village || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (rawName && rawVillage && cachedMaterialsMap.has(`${rawName}_${rawVillage}`)) {
+          matched = cachedMaterialsMap.get(`${rawName}_${rawVillage}`)!;
+        } else if (rawName && cachedMaterialsMap.has(rawName)) {
+          matched = cachedMaterialsMap.get(rawName)!;
+        }
       }
 
       res.json({ success: true, count: matched.length, materials: matched });
@@ -1028,7 +1069,6 @@ export async function createApp() {
       res.status(500).json({ success: false, error: err.message, materials: [] });
     }
   });
-
 
   // ============================================================================
   // BENEFICIARY ACKNOWLEDGEMENT & TRACKING API ROUTES
