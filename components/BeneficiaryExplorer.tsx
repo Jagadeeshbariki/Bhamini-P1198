@@ -213,6 +213,47 @@ const BeneficiaryExpandedDetails: React.FC<{ b: Beneficiary, setPreviewImage: (u
 
     return (
         <div className="animate-fade-in flex flex-col gap-4">
+            {/* Beneficiary Details Slide Summary */}
+            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/30 dark:to-blue-950/30 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-indigo-100 dark:border-indigo-900/50 pb-4">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 bg-indigo-600 text-white rounded-md text-[9px] font-black uppercase tracking-wider">
+                                Farmer ID: {b.hhId || b.beneficiaryId || 'N/A'}
+                            </span>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase">Beneficiary ID: {b.beneficiaryId || 'N/A'}</span>
+                        </div>
+                        <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight mt-1">
+                            {b.beneficiaryName || 'Unnamed Beneficiary'}
+                        </h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="px-3 py-1 bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm border border-indigo-100 dark:border-indigo-800">
+                            {b.activity || 'General Activity'}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-bold text-gray-600 dark:text-gray-300">
+                    <div>
+                        <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">HH Head Name</p>
+                        <p className="text-gray-900 dark:text-white uppercase mt-0.5">{b.hhHeadName || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Age / Gender</p>
+                        <p className="text-gray-900 dark:text-white uppercase mt-0.5">{b.age || '-'} Yrs / {b.gender || '-'}</p>
+                    </div>
+                    <div>
+                        <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Phone Number</p>
+                        <p className="text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">{b.phoneNumber || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Location</p>
+                        <p className="text-gray-900 dark:text-white uppercase mt-0.5">{b.village || 'N/A'}, {b.gp || 'N/A'} ({b.cluster || 'N/A'})</p>
+                    </div>
+                </div>
+            </div>
+
             {/* Material Distribution */}
             <div className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-100 dark:border-gray-700">
                 <div className="w-full flex items-center justify-between p-4 bg-gray-50/50 dark:bg-gray-900/50">

@@ -3,7 +3,7 @@ import React from 'react';
 import { 
     LayoutDashboard, Users, Database, Package, 
     ChevronRight, Info, TrendingUp,
-    Activity, Globe, Search, Filter, Landmark
+    Activity, Globe, Search, Filter, Landmark, CheckCircle2, FileText
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -16,6 +16,28 @@ const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
     const isProjectRole = user?.role === 'admin' || user?.role === 'da' || user?.role === 'project';
 
     const dashboards = [
+        {
+            id: 'beneficiary-acknowledgement' as const,
+            title: 'Beneficiary Acknowledgement',
+            description: 'Telugu acknowledgement letters, HDFC Bank Parivartan-WASSAN letterhead, hard-copy receipt tracking, and photography consent.',
+            icon: FileText,
+            color: 'bg-purple-600',
+            lightColor: 'bg-purple-50',
+            textColor: 'text-purple-600',
+            borderColor: 'border-purple-100',
+            allowed: true
+        },
+        {
+            id: 'activity-status' as const,
+            title: 'Activity Status',
+            description: 'Real-time progress tracking, completion status, cluster-wise breakdown, and field photo evidence.',
+            icon: CheckCircle2,
+            color: 'bg-emerald-600',
+            lightColor: 'bg-emerald-50',
+            textColor: 'text-emerald-600',
+            borderColor: 'border-emerald-100',
+            allowed: true
+        },
         {
             id: 'activity-dashboards' as const,
             title: 'Activity Dashboards',

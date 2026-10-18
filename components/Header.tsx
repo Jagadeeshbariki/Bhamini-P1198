@@ -104,7 +104,10 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                             )}
 
                             {hasAnyDashboardAccess && !isTLOnlyRole && (
-                                <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
+                                <>
+                                    <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
+                                    <NavLink {...navLinkProps} page="beneficiary-acknowledgement">Acknowledgements</NavLink>
+                                </>
                             )}
 
                             {isProjectRole && (
@@ -175,7 +178,10 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                             </>
                         )}
                         {hasAnyDashboardAccess && !isTLOnlyRole && (
-                            <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
+                            <>
+                              <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
+                              <NavLink {...navLinkProps} page="beneficiary-acknowledgement">Acknowledgements</NavLink>
+                            </>
                         )}
                         {isProjectRole && (
                             <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>

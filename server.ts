@@ -1,5 +1,8 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
+import { build } from "vite";
+
 
 export async function createApp() {
   const app = express();
@@ -906,6 +909,116 @@ export async function createApp() {
     }
   });
 
+  // ============================================================================
+  // BENEFICIARY ACKNOWLEDGEMENT & TRACKING API ROUTES
+  // ============================================================================
+  const memoryAcknowledgements: any[] = [];
+  let ackCounter = 1001;
+
+  app.get('/api/acknowledgements/list', (req, res) => {
+      res.json({ success: true, acknowledgements: memoryAcknowledgements });
+  });
+
+  app.post('/api/acknowledgements/generate', (req, res) => {
+      const { activityUuid, beneficiaryId, activityName, beneficiaryName, cluster, gp, village, remarks } = req.body;
+      if (!activityUuid || !beneficiaryId) {
+          return res.status(400).json({ error: 'Missing activityUuid or beneficiaryId' });
+      }
+      const existing = memoryAcknowledgements.find(a => a.activity_uuid === activityUuid && a.beneficiary_id === beneficiaryId);
+      if (existing) {
+          return res.json({ success: true, acknowledgement: existing, message: 'Acknowledgement already exists' });
+      }
+
+      const ackNum = `P1198-BHM-2026-${String(ackCounter++).padStart(6, '0')}`;
+      const newRecord = {
+          id: 'ack_' + Math.random().toString(36).substring(2, 11),
+          acknowledgement_number: ackNum,
+          activity_uuid: activityUuid,
+          beneficiary_id: beneficiaryId,
+          activity_name: activityName || 'NS',
+          beneficiary_name: beneficiaryName || 'Beneficiary',
+          cluster: cluster || 'Cluster 1',
+          gp: gp || 'GP',
+          village: village || 'Village',
+          generation_status: 'GENERATED',
+          pdf_storage_path: `/acknowledgements/${ackNum}.pdf`,
+          pdf_version: 1,
+          hard_copy_status: 'PENDING',
+          received_date: null,
+          received_by: null,
+          photography_consent: 'NOT_RECORDED',
+          remarks: remarks || 'Generated successfully',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+      };
+
+      memoryAcknowledgements.unshift(newRecord);
+      res.json({ success: true, acknowledgement: newRecord });
+  });
+
+  app.post('/api/acknowledgements/hardcopy', (req, res) => {
+      const { id, status, receivedBy, remarks } = req.body;
+      const record = memoryAcknowledgements.find(a => a.id === id || a.acknowledgement_number === id);
+      if (!record) {
+          return res.status(404).json({ error: 'Acknowledgement record not found' });
+      }
+      record.hard_copy_status = status || 'RECEIVED';
+      record.received_date = new Date().toISOString();
+      record.received_by = receivedBy || 'Office Staff';
+      if (remarks) record.remarks = remarks;
+      record.updated_at = new Date().toISOString();
+      res.json({ success: true, acknowledgement: record });
+  });
+
+  app.post('/api/acknowledgements/consent', (req, res) => {
+      const { id, consent } = req.body;
+      const record = memoryAcknowledgements.find(a => a.id === id || a.acknowledgement_number === id);
+      if (!record) {
+          return res.status(404).json({ error: 'Acknowledgement record not found' });
+      }
+      record.photography_consent = consent || 'YES';
+      record.updated_at = new Date().toISOString();
+      res.json({ success: true, acknowledgement: record });
+  });
+
+  app.post('/api/acknowledgements/bulk', (req, res) => {
+      const { items } = req.body;
+      if (!Array.isArray(items) || items.length === 0) {
+          return res.status(400).json({ error: 'Invalid items array for bulk generation' });
+      }
+      const generated = [];
+      for (const item of items) {
+          let existing = memoryAcknowledgements.find(a => a.activity_uuid === item.activityUuid && a.beneficiary_id === item.beneficiaryId);
+          if (!existing) {
+              const ackNum = `P1198-BHM-2026-${String(ackCounter++).padStart(6, '0')}`;
+              existing = {
+                  id: 'ack_' + Math.random().toString(36).substring(2, 11),
+                  acknowledgement_number: ackNum,
+                  activity_uuid: item.activityUuid,
+                  beneficiary_id: item.beneficiaryId,
+                  activity_name: item.activityName || 'NS',
+                  beneficiary_name: item.beneficiaryName || 'Beneficiary',
+                  cluster: item.cluster || 'Cluster 1',
+                  gp: item.gp || 'GP',
+                  village: item.village || 'Village',
+                  generation_status: 'GENERATED',
+                  pdf_storage_path: `/acknowledgements/${ackNum}.pdf`,
+                  pdf_version: 1,
+                  hard_copy_status: 'PENDING',
+                  received_date: null,
+                  received_by: null,
+                  photography_consent: 'NOT_RECORDED',
+                  remarks: 'Bulk generated successfully',
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+              };
+              memoryAcknowledgements.unshift(existing);
+          }
+          generated.push(existing);
+      }
+      res.json({ success: true, count: generated.length, acknowledgements: generated });
+  });
+
   // API 404 Handler (prevent falling through to HTML)
   app.all(/^\/api\/.*/, (req, res) => {
     res.status(404).json({ 
@@ -918,6 +1031,16 @@ export async function createApp() {
   // Serve static files and SPA fallback
   const distPath = path.join(process.cwd(), 'dist');
   const indexPath = path.join(distPath, 'index.html');
+
+  if (!fs.existsSync(indexPath)) {
+    console.log('[SERVER] index.html not found in dist/. Triggering automatic build...');
+    try {
+      await build();
+      console.log('[SERVER] Automatic build completed successfully.');
+    } catch (buildErr: any) {
+      console.error('[SERVER] Automatic build failed:', buildErr);
+    }
+  }
   
   if (!isProduction) {
     console.log("[SERVER] Initializing Vite for development...");
@@ -969,13 +1092,17 @@ export async function createApp() {
     });
   }
 
+
+  
+
   return app;
 }
+
 
 // Start server
 const PORT = process.env.PORT || 3000;
 createApp().then(app => {
-  app.listen(Number(PORT), '0.0.0.0', () => {
+  app.listen(Number(PORT), "0.0.0.0", () => {
     console.log(`[SERVER] Listening on port ${PORT}`);
   });
 }).catch(err => {

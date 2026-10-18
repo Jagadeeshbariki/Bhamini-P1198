@@ -19,6 +19,8 @@ import ODKAssetDistribution from './components/ODKAssetDistribution';
 import ODKDashboardSection from './components/ODKDashboardSection';
 import CapacityBuildingDashboard from './components/CapacityBuildingDashboard';
 import InstitutionDashboard from './components/InstitutionDashboard';
+import ActivityStatusDashboard from './components/ActivityStatusDashboard';
+import BeneficiaryAcknowledgementPortal from './components/BeneficiaryAcknowledgementPortal';
 import DashboardsPortal from './components/DashboardsPortal';
 import AutoInstallBanner from './components/AutoInstallBanner';
 import MarkStaffAttendance from './components/MarkStaffAttendance';
@@ -26,12 +28,12 @@ import AttendanceMonitoring from './components/AttendanceMonitoring';
 import { APP_VERSION } from './config';
 import { ArrowLeft } from 'lucide-react';
 
-type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution' | 'odk-dashboard' | 'staff-attendance' | 'attendance-monitoring' | 'capacity-building' | 'institution-dashboard';
+type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution' | 'odk-dashboard' | 'staff-attendance' | 'attendance-monitoring' | 'capacity-building' | 'institution-dashboard' | 'activity-status' | 'beneficiary-acknowledgement';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>(() => {
         const hash = window.location.hash.replace('#', '') as Page;
-        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard'];
+        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'activity-status', 'beneficiary-acknowledgement'];
         return validPages.includes(hash) ? hash : 'home';
     });
     const { user, logout } = useAuth();
@@ -41,7 +43,7 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         const handleHashChange = () => {
             const hash = window.location.hash.replace('#', '') as Page;
-            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard'];
+            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'activity-status', 'beneficiary-acknowledgement'];
             if (validPages.includes(hash)) {
                 setPage(hash);
             }
@@ -201,6 +203,19 @@ const AppContent: React.FC = () => {
                             Back to Dashboards
                         </button>
                         <InstitutionDashboard />
+                    </div>
+                );
+            case 'activity-status', 'beneficiary-acknowledgement':
+                return (
+                    <div className="space-y-6">
+                        <button 
+                            onClick={() => handleNavigate('dashboards')}
+                            className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors group"
+                        >
+                            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                            Back to Dashboards
+                        </button>
+                        <ActivityStatusDashboard onBack={() => handleNavigate('dashboards')} />
                     </div>
                 );
             case 'login':
