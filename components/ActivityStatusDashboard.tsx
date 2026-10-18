@@ -1734,17 +1734,18 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                         వస్తువుల స్వీకరణ, పనుల నిర్మాణం పూర్తి మరియు ఫోటోగ్రఫీ సమ్మతి పత్రం
                                     </h2>
                                     <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest" style={{ fontSize: "9px", fontWeight: "bold", color: "#4b5563", letterSpacing: "1px", margin: "2px 0 0 0", textTransform: "uppercase" }}>
-                                        HDFC Bank Parivartan – WASSAN Livelihood Initiative (Project Bhamini-P1198)
+                                        HDFC Bank Parivartan - P1198
                                     </p>
                                 </div>
 
                                 {/* Beneficiary Information Grid */}
-                                <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-2.5 rounded-xl border border-gray-200 a4-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 14px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "8px 12px", fontSize: "11px" }}>
+                                <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-2.5 rounded-xl border border-gray-200 a4-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px 14px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "7px 12px", fontSize: "11px" }}>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని పేరు (Name):</span> <span style={{ fontWeight: 900, color: "#111827", marginLeft: "4px" }}>{ackLetterData.beneficiaryName || ackLetterData.name}</span></div>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.beneficiaryId || ackLetterData.farmerId}</span></div>
+                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గృహ ఐడి (Household ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.farmerId || ackLetterData.hhId || "-"}</span></div>
+                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.beneficiaryAdhaar || (ackLetterData.beneficiaryId !== ackLetterData.farmerId ? ackLetterData.beneficiaryId : "-") || "-"}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గ్రామం / పంచాయతీ (Village/GP):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.village} / {ackLetterData.gp}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>క్లస్టర్ (Cluster):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.cluster}</span></div>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>కార్యాచరణ (Activity Name):</span> <span style={{ fontWeight: 900, color: "#312e81", marginLeft: "4px" }}>{ackLetterData.activity || 'NS'}</span></div>
+                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>కార్యాచరణ (Activity Name):</span> <span style={{ fontWeight: 900, color: "#312e81", marginLeft: "4px" }}>{ackLetterData.activity || NS}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>పూర్తయిన తేదీ (Completion Date):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.benefitDate ? new Date(ackLetterData.benefitDate).toLocaleDateString() : new Date().toLocaleDateString()}</span></div>
                                 </div>
 
@@ -1765,19 +1766,21 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                         <tbody>
                                             {(() => {
                                                 const mats = modalMaterials.length > 0 ? modalMaterials : getIssuedMaterials(ackLetterData);
+                                                const rowPad = mats.length > 7 ? "2px 5px" : mats.length > 4 ? "3px 6px" : "4px 8px";
+                                                const rowFontSize = mats.length > 7 ? "9.5px" : mats.length > 4 ? "10.5px" : "11px";
                                                 return mats.map((mat: any, idx: number) => {
                                                     const display = getAssetDisplayLabel(mat);
                                                     return (
-                                                        <tr key={idx} style={{ background: idx % 2 === 0 ? "#ffffff" : "#fcfcfd" }}>
-                                                            <td style={{ border: "1px solid #9ca3af", padding: "4px 6px", textAlign: "center", fontWeight: "bold", color: "#374151" }}>{idx + 1}</td>
-                                                            <td style={{ border: "1px solid #9ca3af", padding: "4px 8px" }}>
+                                                        <tr key={idx} style={{ background: idx % 2 === 0 ? "#ffffff" : "#fcfcfd", fontSize: rowFontSize }}>
+                                                            <td style={{ border: "1px solid #9ca3af", padding: rowPad, textAlign: "center", fontWeight: "bold", color: "#374151" }}>{idx + 1}</td>
+                                                            <td style={{ border: "1px solid #9ca3af", padding: rowPad }}>
                                                                 <span style={{ fontWeight: "bold", color: "#111827", display: "block" }}>{display.title}</span>
                                                                 {display.subtitle && display.subtitle !== display.title && (
-                                                                    <span style={{ fontSize: "9.5px", color: "#6b7280", display: "block", marginTop: "1px" }}>{display.subtitle}</span>
+                                                                    <span style={{ fontSize: "9px", color: "#6b7280", display: "block", marginTop: "1px" }}>{display.subtitle}</span>
                                                                 )}
                                                             </td>
-                                                            <td style={{ border: "1px solid #9ca3af", padding: "4px 6px", textAlign: "center", fontWeight: "bold", color: "#111827" }}>{mat.count || 1}</td>
-                                                            <td style={{ border: "1px solid #9ca3af", padding: "4px 6px", textAlign: "center", color: "#374151", fontWeight: 500 }}>{mat.unit || "Unit"}</td>
+                                                            <td style={{ border: "1px solid #9ca3af", padding: rowPad, textAlign: "center", fontWeight: "bold", color: "#111827" }}>{mat.count || 1}</td>
+                                                            <td style={{ border: "1px solid #9ca3af", padding: rowPad, textAlign: "center", color: "#374151", fontWeight: 500 }}>{mat.unit || "Unit"}</td>
                                                         </tr>
                                                     );
                                                 });

@@ -57,13 +57,13 @@ export function printA4Letter(elementId: string) {
             height: 297mm !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
             color: #111827 !important;
-            overflow: hidden !important;
+            overflow: visible !important;
         }
         .a4-print-sheet {
             width: 210mm !important;
             height: 297mm !important;
             min-height: 297mm !important;
-            max-height: 297mm !important;
+            /* auto height for multi-page if materials list is large */
             margin: 0 auto !important;
             padding: 0 !important;
             display: flex !important;
