@@ -1707,58 +1707,59 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                         </div>
 
                         {/* Letterhead Container with Header, Content and Footer */}
-                        <div id="activity-status-ack-sheet" className="mx-auto bg-white border border-gray-300 rounded-xl shadow-lg flex flex-col justify-between overflow-hidden a4-print-sheet print:border-none print:shadow-none print:m-0" style={{ width: "100%", maxWidth: "794px", minHeight: "1123px" }}>
+                        <div id="activity-status-ack-sheet" className="mx-auto bg-white border border-gray-300 rounded-xl shadow-lg flex flex-col justify-between overflow-hidden a4-print-sheet print:border-none print:shadow-none print:m-0" style={{ width: "100%", maxWidth: "794px", minHeight: "1123px", boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "space-between", background: "#ffffff" }}>
                             {/* 1. Official Google Docs Letterhead Header */}
-                            <div className="w-full bg-white flex-shrink-0">
+                            <div className="w-full bg-white flex-shrink-0" style={{ width: "100%", margin: 0, padding: 0 }}>
                                 <img 
                                     src={LETTERHEAD_HEADER_BASE64} 
                                     alt="HDFC Bank Parivartan – WASSAN Letterhead" 
                                     className="w-full block select-none" 
+                                    style={{ width: "100%", maxWidth: "100%", height: "auto", display: "block", border: 0 }}
                                 />
                             </div>
 
                             {/* 2. Letter Content Area */}
-                            <div className="p-8 py-3 space-y-3.5 a4-content-area text-gray-900 font-sans flex-1">
+                            <div className="p-8 py-3 space-y-3.5 a4-content-area text-gray-900 font-sans flex-1" style={{ padding: "8px 45px 6px 45px", display: "flex", flexDirection: "column", flex: 1, justifyContent: "space-between", boxSizing: "border-box" }}>
                                 {/* Ack Number and Date Header */}
-                                <div className="flex justify-between items-center text-xs font-bold border-b border-gray-300 pb-1.5">
-                                    <span className="font-mono text-indigo-900 font-black">
+                                <div className="flex justify-between items-center text-xs font-bold border-b border-gray-300 pb-1.5" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #d1d5db", paddingBottom: "6px", fontSize: "11px" }}>
+                                    <span className="font-mono text-indigo-900 font-black" style={{ fontFamily: "monospace", color: "#1e1b4b", fontWeight: 900 }}>
                                         రసీదు సంఖ్య (ACK NO): P1198-BHM-2026-{Math.abs((ackLetterData.beneficiaryId || ackLetterData.farmerId || '0').split('').reduce((a,b)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,6)}
                                     </span>
-                                    <span>తేదీ (Date): {new Date().toLocaleDateString("te-IN")}</span>
+                                    <span style={{ fontSize: "11px", fontWeight: "bold" }}>తేదీ (Date): {new Date().toLocaleDateString("te-IN")}</span>
                                 </div>
 
                                 {/* Telugu Letter Title */}
-                                <div className="text-center space-y-0.5 a4-title">
-                                    <h2 className="text-lg font-black text-gray-900 tracking-wide">
+                                <div className="text-center space-y-0.5 a4-title" style={{ textAlign: "center", margin: "4px 0" }}>
+                                    <h2 className="text-lg font-black text-gray-900 tracking-wide" style={{ fontSize: "15px", fontWeight: 900, color: "#111827", margin: 0 }}>
                                         వస్తువుల స్వీకరణ, పనుల నిర్మాణం పూర్తి మరియు ఫోటోగ్రఫీ సమ్మతి పత్రం
                                     </h2>
-                                    <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">
+                                    <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest" style={{ fontSize: "9px", fontWeight: "bold", color: "#4b5563", letterSpacing: "1px", margin: "2px 0 0 0", textTransform: "uppercase" }}>
                                         HDFC Bank Parivartan – WASSAN Livelihood Initiative (Project Bhamini-P1198)
                                     </p>
                                 </div>
 
                                 {/* Beneficiary Information Grid */}
-                                <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-2.5 rounded-xl border border-gray-200 a4-grid">
-                                    <div><span className="font-bold text-gray-600">లబ్ధిదారుని పేరు (Name):</span> <span className="font-black text-gray-900">{ackLetterData.beneficiaryName || ackLetterData.name}</span></div>
-                                    <div><span className="font-bold text-gray-600">లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span className="font-mono font-bold text-gray-900">{ackLetterData.beneficiaryId || ackLetterData.farmerId}</span></div>
-                                    <div><span className="font-bold text-gray-600">గ్రామం / పంచాయతీ (Village/GP):</span> <span className="font-bold text-gray-900">{ackLetterData.village} / {ackLetterData.gp}</span></div>
-                                    <div><span className="font-bold text-gray-600">క్లస్టర్ (Cluster):</span> <span className="font-bold text-gray-900">{ackLetterData.cluster}</span></div>
-                                    <div><span className="font-bold text-gray-600">కార్యాచరణ (Activity Name):</span> <span className="font-black text-indigo-900">{ackLetterData.activity || 'NS'}</span></div>
-                                    <div><span className="font-bold text-gray-600">పూర్తయిన తేదీ (Completion Date):</span> <span className="font-bold text-gray-900">{ackLetterData.benefitDate ? new Date(ackLetterData.benefitDate).toLocaleDateString() : new Date().toLocaleDateString()}</span></div>
+                                <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-2.5 rounded-xl border border-gray-200 a4-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 14px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "8px 12px", fontSize: "11px" }}>
+                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని పేరు (Name):</span> <span style={{ fontWeight: 900, color: "#111827", marginLeft: "4px" }}>{ackLetterData.beneficiaryName || ackLetterData.name}</span></div>
+                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.beneficiaryId || ackLetterData.farmerId}</span></div>
+                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గ్రామం / పంచాయతీ (Village/GP):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.village} / {ackLetterData.gp}</span></div>
+                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>క్లస్టర్ (Cluster):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.cluster}</span></div>
+                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>కార్యాచరణ (Activity Name):</span> <span style={{ fontWeight: 900, color: "#312e81", marginLeft: "4px" }}>{ackLetterData.activity || 'NS'}</span></div>
+                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>పూర్తయిన తేదీ (Completion Date):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.benefitDate ? new Date(ackLetterData.benefitDate).toLocaleDateString() : new Date().toLocaleDateString()}</span></div>
                                 </div>
 
                                 {/* Material Details Table */}
-                                <div className="space-y-1">
-                                    <h3 className="text-[11px] font-black uppercase text-gray-800 tracking-wider">
+                                <div style={{ margin: "4px 0" }}>
+                                    <h3 style={{ fontSize: "10.5px", fontWeight: 900, textTransform: "uppercase", color: "#1f2937", letterSpacing: "0.5px", margin: "0 0 4px 0" }}>
                                         అందజేయబడిన వస్తువులు / సహాయ వివరాలు (ISSUED MATERIALS & ASSETS)
                                     </h3>
-                                    <table className="w-full text-xs border-collapse border border-gray-400 bg-white a4-table">
+                                    <table className="w-full text-xs border-collapse border border-gray-400 bg-white a4-table" style={{ width: "100%", borderCollapse: "collapse", background: "#ffffff", fontSize: "11px" }}>
                                         <thead>
-                                            <tr className="bg-gray-100 text-gray-900 font-black">
-                                                <th className="border border-gray-400 p-2 text-center w-12">క్రమ సంఖ్య</th>
-                                                <th className="border border-gray-400 p-2 text-left">వస్తువు పేరు (Material / Asset Name)</th>
-                                                <th className="border border-gray-400 p-2 text-center w-20">పరిమాణం</th>
-                                                <th className="border border-gray-400 p-2 text-center w-20">యూనిట్</th>
+                                            <tr style={{ background: "#f3f4f6", color: "#111827", fontWeight: 900 }}>
+                                                <th style={{ border: "1px solid #9ca3af", padding: "4px 6px", textAlign: "center", width: "45px" }}>క్రమ సంఖ్య</th>
+                                                <th style={{ border: "1px solid #9ca3af", padding: "4px 8px", textAlign: "left" }}>వస్తువు పేరు (Material / Asset Name)</th>
+                                                <th style={{ border: "1px solid #9ca3af", padding: "4px 6px", textAlign: "center", width: "70px" }}>పరిమాణం</th>
+                                                <th style={{ border: "1px solid #9ca3af", padding: "4px 6px", textAlign: "center", width: "70px" }}>యూనిట్</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -1767,16 +1768,16 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                                 return mats.map((mat: any, idx: number) => {
                                                     const display = getAssetDisplayLabel(mat);
                                                     return (
-                                                        <tr key={idx} className="hover:bg-gray-50/50">
-                                                            <td className="border border-gray-400 p-1.5 text-center font-bold text-gray-700">{idx + 1}</td>
-                                                            <td className="border border-gray-400 p-1.5">
-                                                                <span className="font-bold text-gray-900 block">{display.title}</span>
+                                                        <tr key={idx} style={{ background: idx % 2 === 0 ? "#ffffff" : "#fcfcfd" }}>
+                                                            <td style={{ border: "1px solid #9ca3af", padding: "4px 6px", textAlign: "center", fontWeight: "bold", color: "#374151" }}>{idx + 1}</td>
+                                                            <td style={{ border: "1px solid #9ca3af", padding: "4px 8px" }}>
+                                                                <span style={{ fontWeight: "bold", color: "#111827", display: "block" }}>{display.title}</span>
                                                                 {display.subtitle && display.subtitle !== display.title && (
-                                                                    <span className="text-[10px] text-gray-500 font-medium block">{display.subtitle}</span>
+                                                                    <span style={{ fontSize: "9.5px", color: "#6b7280", display: "block", marginTop: "1px" }}>{display.subtitle}</span>
                                                                 )}
                                                             </td>
-                                                            <td className="border border-gray-400 p-1.5 text-center font-bold text-gray-900">{mat.count || 1}</td>
-                                                            <td className="border border-gray-400 p-1.5 text-center text-gray-700 font-medium">{mat.unit || "Unit"}</td>
+                                                            <td style={{ border: "1px solid #9ca3af", padding: "4px 6px", textAlign: "center", fontWeight: "bold", color: "#111827" }}>{mat.count || 1}</td>
+                                                            <td style={{ border: "1px solid #9ca3af", padding: "4px 6px", textAlign: "center", color: "#374151", fontWeight: 500 }}>{mat.unit || "Unit"}</td>
                                                         </tr>
                                                     );
                                                 });
@@ -1786,63 +1787,64 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 </div>
 
                                 {/* Beneficiary Acknowledgement & Declarations (All 3 Key Points) */}
-                                <div className="text-xs space-y-1.5 bg-gray-50/90 p-2.5 rounded-xl border border-gray-200 a4-decl">
-                                    <h4 className="text-[10.5px] font-black uppercase text-indigo-950 tracking-wider">
+                                <div className="text-xs bg-gray-50/90 p-2.5 rounded-xl border border-gray-200 a4-decl" style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "8px 12px", fontSize: "10.5px", display: "flex", flexDirection: "column", gap: "5px" }}>
+                                    <h4 style={{ fontSize: "10.5px", fontWeight: 900, textTransform: "uppercase", color: "#1e1b4b", letterSpacing: "0.5px", margin: "0 0 2px 0" }}>
                                         లబ్ధిదారుని స్వీకృతి & ధృవీకరణ పత్రం (BENEFICIARY ACKNOWLEDGEMENT & DECLARATIONS)
                                     </h4>
                                     
                                     {/* Point 1: Receipt of Materials */}
-                                    <div className="flex items-start gap-1.5">
-                                        <span className="font-bold text-indigo-700">1.</span>
-                                        <p className="leading-snug">
+                                    <div style={{ display: "flex", alignItems: "flex-start", gap: "6px" }}>
+                                        <span style={{ fontWeight: "bold", color: "#4338ca" }}>1.</span>
+                                        <p style={{ margin: 0, lineHeight: 1.35 }}>
                                             <strong>వస్తువుల స్వీకరణ (Receipt of Materials):</strong> పైన పట్టికలో పేర్కొన్న వస్తువులు / సహాయ సామాగ్రిని నా జీవనోపాధి అభివృద్ధి కొరకు వాసన్ (WASSAN) ద్వారా సరైన స్థితిలో పూర్తిగా స్వీకరించాను.
                                         </p>
                                     </div>
 
                                     {/* Point 2: Construction / Installation Completion */}
-                                    <div className="flex items-start gap-1.5 bg-indigo-50/80 p-1.5 rounded-lg border border-indigo-200">
-                                        <span className="font-black text-indigo-800">2.</span>
-                                        <p className="leading-snug text-indigo-950">
+                                    <div className="a4-decl-highlight" style={{ display: "flex", alignItems: "flex-start", gap: "6px", background: "#eef2ff", padding: "5px 8px", borderRadius: "6px", border: "1px solid #c7d2fe" }}>
+                                        <span style={{ fontWeight: 900, color: "#3730a3" }}>2.</span>
+                                        <p style={{ margin: 0, lineHeight: 1.35, color: "#1e1b4b" }}>
                                             <strong>పనుల నిర్మాణం / సంస్థాపన పూర్తి (Completion of Work / Installation):</strong> HDFC బ్యాంక్ పరివర్తన్ (HDFC Bank Parivartan) వారి ఆర్థిక సహాయంతో, వాసన్ (WASSAN) సంస్థ ద్వారా నాకు మంజూరు చేయబడిన పనుల నిర్మాణం / వస్తువుల సంస్థాపన (Construction of work / Installation) ను నేను క్షేత్రస్థాయిలో విజయవంతంగా మరియు సంతృప్తికరంగా పూర్తి చేశానని దీనిద్వారా ధృవీకరిస్తున్నాను / అంగీకరిస్తున్నాను.
                                         </p>
                                     </div>
 
                                     {/* Point 3: Photography Consent */}
-                                    <div className="flex items-start gap-1.5 pt-1 border-t border-gray-200">
-                                        <span className="font-bold text-gray-700">3.</span>
-                                        <div className="space-y-0.5">
-                                            <p className="leading-snug text-[10.5px] text-gray-700">
+                                    <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", borderTop: "1px solid #e5e7eb", paddingTop: "4px" }}>
+                                        <span style={{ fontWeight: "bold", color: "#4b5563" }}>3.</span>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "2px", width: "100%" }}>
+                                            <p style={{ margin: 0, lineHeight: 1.35, fontSize: "10px", color: "#374151" }}>
                                                 <strong>ఫోటోగ్రఫీ సమ్మతి (Photography Consent):</strong> ప్రాజెక్ట్ డాక్యుమెంటేషన్, పర్యవేక్షణ కొరకు నా ఫోటో / పూర్తయిన పనుల ఫోటోల వినియోగానికి స్వచ్ఛందంగా సమ్మతిస్తున్నాను (ఫోటోగ్రఫీ సమ్మతి నిరాకరించడం వలన ప్రాజెక్ట్ ప్రయోజనాలపై ఎటువంటి ప్రభావం ఉండదు).
                                             </p>
-                                            <div className="flex items-center gap-6 text-[10.5px] font-bold pt-0.5">
-                                                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 border border-gray-500 inline-block rounded bg-white"></span> సమ్మతిస్తున్నాను (Yes)</span>
-                                                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 border border-gray-500 inline-block rounded bg-white"></span> సమ్మతించడం లేదు (No)</span>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "24px", fontSize: "10.5px", fontWeight: "bold", paddingTop: "2px" }}>
+                                                <span style={{ display: "flex", alignItems: "center", gap: "5px" }}><span style={{ width: "13px", height: "13px", border: "1px solid #6b7280", display: "inline-block", borderRadius: "3px", background: "#ffffff" }}></span> సమ్మతిస్తున్నాను (Yes)</span>
+                                                <span style={{ display: "flex", alignItems: "center", gap: "5px" }}><span style={{ width: "13px", height: "13px", border: "1px solid #6b7280", display: "inline-block", borderRadius: "3px", background: "#ffffff" }}></span> సమ్మతించడం లేదు (No)</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Signatures */}
-                                <div className="flex justify-between items-end pt-3 pb-1 text-xs font-bold text-gray-900 a4-sig">
-                                    <div className="text-center">
-                                        <div className="h-8 border-b border-dashed border-gray-500 w-44 mb-1 a4-sig-line"></div>
-                                        <p>లబ్ధిదారుని సంతకం / వేలిముద్ర</p>
-                                        <p className="text-[9px] text-gray-500 font-normal">Beneficiary Signature / Thumb Impression</p>
+                                <div className="a4-sig" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", paddingTop: "12px", paddingBottom: "2px", fontSize: "11px", fontWeight: "bold", color: "#111827" }}>
+                                    <div style={{ textAlign: "center" }}>
+                                        <div className="a4-sig-line" style={{ height: "28px", borderBottom: "1px dashed #6b7280", width: "170px", marginBottom: "4px" }}></div>
+                                        <p style={{ margin: 0 }}>లబ్ధిదారుని సంతకం / వేలిముద్ర</p>
+                                        <p style={{ margin: "2px 0 0 0", fontSize: "9px", color: "#6b7280", fontWeight: "normal" }}>Beneficiary Signature / Thumb Impression</p>
                                     </div>
-                                    <div className="text-center">
-                                        <div className="h-8 border-b border-dashed border-gray-500 w-44 mb-1 a4-sig-line"></div>
-                                        <p>అధికారిక సంతకం</p>
-                                        <p className="text-[9px] text-gray-500 font-normal">WASSAN / HDFC Parivartan Project Team</p>
+                                    <div style={{ textAlign: "center" }}>
+                                        <div className="a4-sig-line" style={{ height: "28px", borderBottom: "1px dashed #6b7280", width: "170px", marginBottom: "4px" }}></div>
+                                        <p style={{ margin: 0 }}>అధికారిక సంతకం</p>
+                                        <p style={{ margin: "2px 0 0 0", fontSize: "9px", color: "#6b7280", fontWeight: "normal" }}>WASSAN / HDFC Parivartan Project Team</p>
                                     </div>
                                 </div>
                             </div>
 
                             {/* 3. Official Google Docs Letterhead Footer */}
-                            <div className="w-full bg-white mt-auto flex-shrink-0">
+                            <div className="w-full bg-white mt-auto flex-shrink-0" style={{ width: "100%", marginTop: "auto", margin: 0, padding: 0 }}>
                                 <img 
                                     src={LETTERHEAD_FOOTER_BASE64} 
                                     alt="HDFC Bank Parivartan – WASSAN Letterhead Footer" 
                                     className="w-full block select-none" 
+                                    style={{ width: "100%", maxWidth: "100%", height: "auto", display: "block", border: 0 }}
                                 />
                             </div>
                         </div>
