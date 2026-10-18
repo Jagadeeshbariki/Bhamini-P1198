@@ -1,3 +1,5 @@
+import { LETTERHEAD_HEADER_BASE64, LETTERHEAD_FOOTER_BASE64 } from "../utils/letterheadImages";
+import { printA4Letter } from "../utils/printLetter";
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Activity, Calendar, Users, CheckCircle2, AlertCircle, 
@@ -1697,7 +1699,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 <span className="text-xs font-black uppercase tracking-wider text-gray-700">Official Telugu Letterhead Preview</span>
                             </div>
                             <div className="flex items-center gap-3">
-                                <button onClick={() => window.print()} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-indigo-700 shadow-md">
+                                <button onClick={() => printA4Letter("activity-status-ack-sheet")} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-indigo-700 shadow-md">
                                     <Printer size={14} /> Print / Download PDF
                                 </button>
                                 <button onClick={() => setAckLetterData(null)} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:text-gray-900"><X size={18} /></button>
@@ -1705,11 +1707,11 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                         </div>
 
                         {/* Letterhead Container with Header, Content and Footer */}
-                        <div className="mx-auto bg-white border border-gray-300 rounded-xl shadow-lg flex flex-col justify-between overflow-hidden a4-print-sheet print:border-none print:shadow-none print:m-0" style={{ width: "100%", maxWidth: "794px", minHeight: "1123px" }}>
+                        <div id="activity-status-ack-sheet" className="mx-auto bg-white border border-gray-300 rounded-xl shadow-lg flex flex-col justify-between overflow-hidden a4-print-sheet print:border-none print:shadow-none print:m-0" style={{ width: "100%", maxWidth: "794px", minHeight: "1123px" }}>
                             {/* 1. Official Google Docs Letterhead Header */}
                             <div className="w-full bg-white flex-shrink-0">
                                 <img 
-                                    src="/letterhead_header.png" 
+                                    src={LETTERHEAD_HEADER_BASE64} 
                                     alt="HDFC Bank Parivartan – WASSAN Letterhead" 
                                     className="w-full block select-none" 
                                 />
@@ -1838,7 +1840,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                             {/* 3. Official Google Docs Letterhead Footer */}
                             <div className="w-full bg-white mt-auto flex-shrink-0">
                                 <img 
-                                    src="/letterhead_footer.png" 
+                                    src={LETTERHEAD_FOOTER_BASE64} 
                                     alt="HDFC Bank Parivartan – WASSAN Letterhead Footer" 
                                     className="w-full block select-none" 
                                 />
