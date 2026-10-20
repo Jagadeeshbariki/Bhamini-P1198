@@ -526,11 +526,50 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
 
     const handleBatchDownload = async (items: any[], type: 'combined' | 'zip' | 'print') => {
         if (!items || items.length === 0) return;
-        setBatchStagingItems(items);
+        setBatchProgress({ current: 0, total: items.length, statusText: 'Resolving materials & asset catalogs...' });
+
+        const resolvedItems = await Promise.all(items.map(async (item) => {
+            let mats = getIssuedMaterials(item);
+            if (!mats || mats.length === 0) {
+                try {
+                    const benId = item.beneficiary_id || item.beneficiaryId || "";
+                    const farmerId = item.farmerId || item.hhId || "";
+                    const bName = item.beneficiary_name || item.beneficiaryName || "";
+                    const vName = item.village || "";
+                    const params = new URLSearchParams({ beneficiaryId: benId, farmerId, hhId: item.hhId || "", name: bName, village: vName });
+                    const res = await fetch(`/api/materials/query?${params.toString()}`);
+                    const data = await safeJson(res);
+                    if (data.success && Array.isArray(data.materials) && data.materials.length > 0) {
+                        mats = data.materials;
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+            if (!mats || mats.length === 0) {
+                const actKey = String(item.activity_name || item.activityName || item.activity || "ns").toLowerCase().trim();
+                let catalogKey = "ns";
+                if (actKey.includes("goat") || actKey.includes("shed")) catalogKey = "elevated goat shed";
+                else if (actKey.includes("farmpond") || actKey.includes("rk")) catalogKey = "eco farmpond";
+                else if (actKey.includes("processing") || actKey.includes("hub") || actKey.includes("hammer")) catalogKey = "processing_hubs";
+                else if (actKey.includes("crop") || actKey.includes("seed") || actKey.includes("npm")) catalogKey = "crops";
+                else if (actKey.includes("kitchen")) catalogKey = "kitchen garden";
+                else if (actKey.includes("biomass")) catalogKey = "biomass plantation";
+                else if (actKey.includes("vermi")) catalogKey = "vermi compost";
+                else if (actKey.includes("livestock")) catalogKey = "livestock health";
+                mats = ACTIVITY_ASSET_CATALOG[catalogKey] || ACTIVITY_ASSET_CATALOG["ns"];
+            }
+            return {
+                ...item,
+                materials: mats
+            };
+        }));
+
+        setBatchStagingItems(resolvedItems);
         setBatchProgress({ current: 0, total: items.length, statusText: 'Preparing letterhead templates...' });
 
         // Allow React to mount staging sheets into DOM
-        await new Promise(resolve => setTimeout(resolve, 350));
+        await new Promise(resolve => setTimeout(resolve, 400));
 
         const elementIds = items.map((_, idx) => `portal-batch-sheet-${idx}`);
 
@@ -548,7 +587,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                 setBatchProgress({ current, total, statusText: `Generating letter ${current} of ${total}...` });
             });
         } else if (type === 'zip') {
-            const zipItems = items.map((item, idx) => {
+            const zipItems = resolvedItems.map((item, idx) => {
                 const bName = (item.beneficiary_name || item.beneficiaryName || item.name || 'beneficiary').replace(/[^a-zA-Z0-9]/g, '_');
                 const ackNum = item.acknowledgement_number || `P1198-BHM-2026-${Math.abs(String(item.beneficiary_id || item.beneficiaryId || item.farmerId || '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`;
                 return {

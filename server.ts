@@ -1100,7 +1100,10 @@ export async function createApp() {
     try {
       const gasUrl = process.env.ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL || process.env.UPLOAD_LETTERS_SCRIPT_URL || DEFAULT_ACK_MAPPING_URL;
       if (gasUrl && gasUrl.startsWith('http')) {
-        const gasRes = await fetch(gasUrl, { redirect: 'follow' });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const gasRes = await fetch(gasUrl, { redirect: 'follow', signal: controller.signal });
+        clearTimeout(timeoutId);
         const gasText = await gasRes.text();
         const gasData = JSON.parse(gasText);
         if (gasData.success && Array.isArray(gasData.records)) {
@@ -1162,13 +1165,15 @@ export async function createApp() {
           }
         }
       }
-    } catch (e) {
-      console.warn("Background sheet sync notice:", e);
+    } catch (e: any) {
+      if (e.name !== 'AbortError') {
+        console.warn("Background sheet sync notice:", e.message || e);
+      }
     }
   }
 
-  app.get('/api/acknowledgements/list', async (req, res) => {
-      await ensureSheetSynced();
+  app.get('/api/acknowledgements/list', (req, res) => {
+      ensureSheetSynced().catch(e => console.warn('Background sync error:', e));
       res.json({ success: true, acknowledgements: memoryAcknowledgements });
   });
 
@@ -1459,7 +1464,10 @@ export async function createApp() {
       const gasUrl = process.env.ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL || process.env.UPLOAD_LETTERS_SCRIPT_URL || DEFAULT_ACK_MAPPING_URL;
       if (gasUrl && gasUrl.startsWith('http')) {
         try {
-          const gasRes = await fetch(gasUrl, { redirect: 'follow' });
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+          const gasRes = await fetch(gasUrl, { redirect: 'follow', signal: controller.signal });
+          clearTimeout(timeoutId);
           const gasText = await gasRes.text();
           const gasData = JSON.parse(gasText);
           if (gasData.success && Array.isArray(gasData.records)) {
@@ -1486,8 +1494,10 @@ export async function createApp() {
               }
             }
           }
-        } catch (fetchErr) {
-          console.warn("Could not fetch Ack_UUID_Mapping from GAS:", fetchErr);
+        } catch (fetchErr: any) {
+          if (fetchErr.name !== 'AbortError') {
+            console.warn("Could not fetch Ack_UUID_Mapping from GAS:", fetchErr.message || fetchErr);
+          }
         }
       }
     } catch (e) {
