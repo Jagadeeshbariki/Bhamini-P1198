@@ -833,8 +833,22 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                 ))}
             </div>
 
+            {loading && (
+                <div className="space-y-6 animate-pulse py-12">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        {[1, 2, 3, 4].map(i => (
+                            <div key={i} className="bg-gray-100 dark:bg-gray-800 rounded-3xl p-6 h-32" />
+                        ))}
+                    </div>
+                    <div className="bg-gray-100 dark:bg-gray-800 rounded-3xl p-12 h-96 flex flex-col items-center justify-center space-y-4 shadow-sm border border-gray-100 dark:border-gray-800">
+                        <div className="w-12 h-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin" />
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Loading Beneficiary Acknowledgements & Sheet Data...</p>
+                    </div>
+                </div>
+            )}
+
             {/* TAB 1: DASHBOARD */}
-            {selectedTab === "dashboard" && (
+            {!loading && selectedTab === "dashboard" && (
                 <div className="space-y-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center gap-6">
@@ -903,7 +917,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
             )}
 
             {/* TAB 2: ELIGIBLE BENEFICIARIES */}
-            {selectedTab === "eligible" && (
+            {!loading && selectedTab === "eligible" && (
                 <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-6">
                     <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
                         <div className="relative w-full lg:w-72">
@@ -1120,7 +1134,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
             )}
 
             {/* TAB 3: GENERATED LETTERS */}
-            {selectedTab === "generate" && (
+            {!loading && selectedTab === "generate" && (
                 <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
@@ -1333,7 +1347,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
             )}
 
             {/* TAB 4: TRACKING */}
-            {selectedTab === "tracking" && (
+            {!loading && selectedTab === "tracking" && (
                 <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-6">
                     <div>
                         <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">Hard-Copy Office Receipt & Consent Tracker</h3>

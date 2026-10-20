@@ -1375,7 +1375,45 @@ export async function createApp() {
     }
   });
 
-  app.get('/api/acknowledgement-mapping/list', (req, res) => {
+  app.get('/api/acknowledgement-mapping/list', async (req, res) => {
+    try {
+      const gasUrl = process.env.ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL || process.env.UPLOAD_LETTERS_SCRIPT_URL || DEFAULT_ACK_MAPPING_URL;
+      if (gasUrl && gasUrl.startsWith('http')) {
+        try {
+          const gasRes = await fetch(gasUrl);
+          const gasText = await gasRes.text();
+          const gasData = JSON.parse(gasText);
+          if (gasData.success && Array.isArray(gasData.records)) {
+            for (const rec of gasData.records) {
+              const uuid = String(rec.uuid || '').trim();
+              const ackId = String(rec.acknowledgementId || rec.acknowledgement_number || '').trim();
+              if (uuid || ackId) {
+                const exists = memoryAckMappings.find(m => (uuid && m.uuid === uuid) || (ackId && m.acknowledgementId === ackId));
+                if (!exists) {
+                  memoryAckMappings.push({
+                    timestamp: rec.timestamp || new Date().toISOString(),
+                    uuid: uuid,
+                    acknowledgementId: ackId,
+                    beneficiaryId: rec.beneficiaryId || '-',
+                    beneficiaryName: rec.beneficiaryName || 'Beneficiary',
+                    activityName: rec.activity || rec.activityName || '-',
+                    cluster: rec.cluster || '-',
+                    gp: rec.gp || '-',
+                    village: rec.village || '-',
+                    generatedBy: rec.generatedBy || 'System',
+                    remarks: rec.remarks || 'Synced from Sheet'
+                  });
+                }
+              }
+            }
+          }
+        } catch (fetchErr) {
+          console.warn("Could not fetch Ack_UUID_Mapping from GAS:", fetchErr);
+        }
+      }
+    } catch (e) {
+      console.warn("Error in acknowledgement-mapping/list sync:", e);
+    }
     res.json({ success: true, count: memoryAckMappings.length, records: memoryAckMappings });
   });
 
