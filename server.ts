@@ -1086,6 +1086,7 @@ export async function createApp() {
       try {
         fetch(gasUrl, {
           method: 'POST',
+          redirect: 'follow',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ items: records })
         }).catch(e => console.warn('GAS mapping sync background notice:', e.message));
@@ -1099,7 +1100,7 @@ export async function createApp() {
     try {
       const gasUrl = process.env.ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL || process.env.UPLOAD_LETTERS_SCRIPT_URL || DEFAULT_ACK_MAPPING_URL;
       if (gasUrl && gasUrl.startsWith('http')) {
-        const gasRes = await fetch(gasUrl);
+        const gasRes = await fetch(gasUrl, { redirect: 'follow' });
         const gasText = await gasRes.text();
         const gasData = JSON.parse(gasText);
         if (gasData.success && Array.isArray(gasData.records)) {
@@ -1458,7 +1459,7 @@ export async function createApp() {
       const gasUrl = process.env.ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL || process.env.UPLOAD_LETTERS_SCRIPT_URL || DEFAULT_ACK_MAPPING_URL;
       if (gasUrl && gasUrl.startsWith('http')) {
         try {
-          const gasRes = await fetch(gasUrl);
+          const gasRes = await fetch(gasUrl, { redirect: 'follow' });
           const gasText = await gasRes.text();
           const gasData = JSON.parse(gasText);
           if (gasData.success && Array.isArray(gasData.records)) {
