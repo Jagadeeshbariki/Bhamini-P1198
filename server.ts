@@ -939,12 +939,17 @@ export async function createApp() {
   async function refreshMaterialsCache() {
     try {
       console.log("[MATERIALS] Refreshing material distribution cache...");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       const res = await fetch(ASSET_DISTRIBUTION_URL, {
+        redirect: 'follow',
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "Accept": "text/csv,text/plain,*/*"
-        }
+        },
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       if (!res.ok) {
         console.error("[MATERIALS] Failed to fetch distribution sheet:", res.status);
         return;
@@ -1009,18 +1014,16 @@ export async function createApp() {
       lastMaterialsFetch = Date.now();
       console.log(`[MATERIALS] Cached ${map.size} unique keys from ${lines.length - 1} distribution rows.`);
     } catch (e: any) {
-      console.error("[MATERIALS] Cache refresh error:", e.message);
+      if (e.name !== 'AbortError') {
+        console.error("[MATERIALS] Cache refresh error:", e.message);
+      }
     }
   }
 
-  // Preload cache
-  refreshMaterialsCache();
-  setInterval(refreshMaterialsCache, 10 * 60 * 1000);
-
   app.get("/api/materials/all", async (req, res) => {
     try {
-      if (Date.now() - lastMaterialsFetch > 10 * 60 * 1000 || cachedMaterialsMap.size === 0) {
-        await refreshMaterialsCache();
+      if (cachedMaterialsMap.size === 0) {
+        await refreshMaterialsCache().catch(() => {});
       }
       const obj: Record<string, any[]> = {};
       cachedMaterialsMap.forEach((val, key) => {
@@ -1028,7 +1031,7 @@ export async function createApp() {
       });
       res.json({ success: true, count: cachedMaterialsMap.size, map: obj });
     } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message, map: {} });
+      res.json({ success: true, count: 0, map: {} });
     }
   });
 
@@ -1459,50 +1462,53 @@ export async function createApp() {
     }
   });
 
-  app.get('/api/acknowledgement-mapping/list', async (req, res) => {
-    try {
-      const gasUrl = process.env.ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL || process.env.UPLOAD_LETTERS_SCRIPT_URL || DEFAULT_ACK_MAPPING_URL;
-      if (gasUrl && gasUrl.startsWith('http')) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000);
-          const gasRes = await fetch(gasUrl, { redirect: 'follow', signal: controller.signal });
-          clearTimeout(timeoutId);
-          const gasText = await gasRes.text();
-          const gasData = JSON.parse(gasText);
-          if (gasData.success && Array.isArray(gasData.records)) {
-            for (const rec of gasData.records) {
-              const uuid = String(rec.uuid || '').trim();
-              const ackId = String(rec.acknowledgementId || rec.acknowledgement_number || '').trim();
-              if (uuid || ackId) {
-                const exists = memoryAckMappings.find(m => (uuid && m.uuid === uuid) || (ackId && m.acknowledgementId === ackId));
-                if (!exists) {
-                  memoryAckMappings.push({
-                    timestamp: rec.timestamp || new Date().toISOString(),
-                    uuid: uuid,
-                    acknowledgementId: ackId,
-                    beneficiaryId: rec.beneficiaryId || '-',
-                    beneficiaryName: rec.beneficiaryName || 'Beneficiary',
-                    activityName: rec.activity || rec.activityName || '-',
-                    cluster: rec.cluster || '-',
-                    gp: rec.gp || '-',
-                    village: rec.village || '-',
-                    generatedBy: rec.generatedBy || 'System',
-                    remarks: rec.remarks || 'Synced from Sheet'
-                  });
+  app.get('/api/acknowledgement-mapping/list', (req, res) => {
+    (async () => {
+      try {
+        const gasUrl = process.env.ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL || process.env.UPLOAD_LETTERS_SCRIPT_URL || DEFAULT_ACK_MAPPING_URL;
+        if (gasUrl && gasUrl.startsWith('http')) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            const gasRes = await fetch(gasUrl, { redirect: 'follow', signal: controller.signal });
+            clearTimeout(timeoutId);
+            const gasText = await gasRes.text();
+            const gasData = JSON.parse(gasText);
+            if (gasData.success && Array.isArray(gasData.records)) {
+              for (const rec of gasData.records) {
+                const uuid = String(rec.uuid || '').trim();
+                const ackId = String(rec.acknowledgementId || rec.acknowledgement_number || '').trim();
+                if (uuid || ackId) {
+                  const exists = memoryAckMappings.find(m => (uuid && m.uuid === uuid) || (ackId && m.acknowledgementId === ackId));
+                  if (!exists) {
+                    memoryAckMappings.push({
+                      timestamp: rec.timestamp || new Date().toISOString(),
+                      uuid: uuid,
+                      acknowledgementId: ackId,
+                      beneficiaryId: rec.beneficiaryId || '-',
+                      beneficiaryName: rec.beneficiaryName || 'Beneficiary',
+                      activityName: rec.activity || rec.activityName || '-',
+                      cluster: rec.cluster || '-',
+                      gp: rec.gp || '-',
+                      village: rec.village || '-',
+                      generatedBy: rec.generatedBy || 'System',
+                      remarks: rec.remarks || 'Synced from Sheet'
+                    });
+                  }
                 }
               }
             }
-          }
-        } catch (fetchErr: any) {
-          if (fetchErr.name !== 'AbortError') {
-            console.warn("Could not fetch Ack_UUID_Mapping from GAS:", fetchErr.message || fetchErr);
+          } catch (fetchErr: any) {
+            if (fetchErr.name !== 'AbortError') {
+              console.warn("Could not fetch Ack_UUID_Mapping from GAS:", fetchErr.message || fetchErr);
+            }
           }
         }
+      } catch (e) {
+        console.warn("Error in acknowledgement-mapping/list sync:", e);
       }
-    } catch (e) {
-      console.warn("Error in acknowledgement-mapping/list sync:", e);
-    }
+    })().catch(e => console.warn("Background mapping sync error:", e));
+
     res.json({ success: true, count: memoryAckMappings.length, records: memoryAckMappings });
   });
 
