@@ -530,7 +530,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
 
             // Fetch uploaded letters matching by UUID
             try {
-                const ulRes = await fetch(UPLOAD_LETTERS_SCRIPT_URL).then(safeJson).catch(() => ({ success: false, records: [] }));
+                const ulRes = await fetch(`/api/gas-proxy?url=${encodeURIComponent(UPLOAD_LETTERS_SCRIPT_URL)}`).then(safeJson).catch(() => ({ success: false, records: [] }));
                 if (ulRes.success && Array.isArray(ulRes.records)) {
                     const ulMap = new Map<string, any>();
                     ulRes.records.forEach((rec: any) => {

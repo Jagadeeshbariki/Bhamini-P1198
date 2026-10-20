@@ -227,7 +227,7 @@ export const UploadLettersDashboard: React.FC<UploadLettersDashboardProps> = ({ 
             const [odkRes, benRes, sheetRes] = await Promise.all([
                 fetch('/api/odk/data?formId=Status&projectId=3').catch(() => ({ ok: false, text: async () => '{}' } as any)),
                 fetch(getProxyUrl(BENEFICIARY_DATA_URL)).catch(() => ({ ok: false, text: async () => '' } as any)),
-                fetch(UPLOAD_LETTERS_SCRIPT_URL).catch(() => ({ ok: false, text: async () => '{}' } as any))
+                fetch(`/api/gas-proxy?url=${encodeURIComponent(UPLOAD_LETTERS_SCRIPT_URL)}`).catch(() => ({ ok: false, text: async () => '{}' } as any))
             ]);
 
             const beneficiaryMapByBenId = new Map<string, any>();
@@ -480,11 +480,13 @@ export const UploadLettersDashboard: React.FC<UploadLettersDashboardProps> = ({ 
         };
 
         try {
-            await fetch(UPLOAD_LETTERS_SCRIPT_URL, {
+            await fetch('/api/gas-proxy', {
                 method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify(payload)
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: UPLOAD_LETTERS_SCRIPT_URL,
+                    payload: payload
+                })
             });
 
             // Sync to Acknowledgement ID & UUID mapping spreadsheet tab
