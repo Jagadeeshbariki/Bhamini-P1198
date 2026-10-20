@@ -7,7 +7,6 @@ import {
     printMultipleA4Letters 
 } from "../utils/printLetter";
 import AcknowledgementLetterSheet from "./AcknowledgementLetterSheet";
-import AcknowledgementMappingScriptModal from "./AcknowledgementMappingScriptModal";
 import React, { useState, useEffect, useMemo } from "react";
 import { 
     FileText, CheckCircle2, Search, RefreshCw, 
@@ -418,37 +417,39 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
             return;
         }
         try {
-            const res = await fetch("/api/acknowledgements/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    activityStatusUuid: item.uuid,
-                    beneficiaryId: item.beneficiaryId,
-                    activityName: item.activityName,
-                    beneficiaryName: item.beneficiaryName,
-                    cluster: item.cluster,
-                    gp: item.gp,
-                    village: item.village
-                })
-            });
-            const data = await safeJson(res);
-            if (data.success) {
-                // Sync UUID <-> Acknowledgement ID mapping to tracking sheet
-                fetch("/api/acknowledgement-mapping", {
+                const currentUserName = user?.name || user?.username || 'Admin';
+                const res = await fetch("/api/acknowledgements/generate", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        uuid: item.uuid || item.beneficiaryId,
-                        acknowledgementId: data.acknowledgement.acknowledgement_number,
+                        activityStatusUuid: item.uuid,
                         beneficiaryId: item.beneficiaryId,
-                        beneficiaryName: item.beneficiaryName,
                         activityName: item.activityName,
+                        beneficiaryName: item.beneficiaryName,
                         cluster: item.cluster,
                         gp: item.gp,
                         village: item.village,
-                        generatedBy: 'User'
+                        generatedBy: currentUserName
                     })
-                }).catch(e => console.warn("Mapping sync notice:", e.message));
+                });
+                const data = await safeJson(res);
+                if (data.success) {
+                    // Sync UUID <-> Acknowledgement ID mapping to tracking sheet
+                    fetch("/api/acknowledgement-mapping", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            uuid: item.uuid || item.beneficiaryId,
+                            acknowledgementId: data.acknowledgement.acknowledgement_number,
+                            beneficiaryId: item.beneficiaryId,
+                            beneficiaryName: item.beneficiaryName,
+                            activityName: item.activityName,
+                            cluster: item.cluster,
+                            gp: item.gp,
+                            village: item.village,
+                            generatedBy: currentUserName
+                        })
+                    }).catch(e => console.warn("Mapping sync notice:", e.message));
 
                 setSuccessMessage(`Acknowledgement generated: ${data.acknowledgement.acknowledgement_number}`);
                 fetchData();
@@ -474,6 +475,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
         }
 
         try {
+            const currentUserName = user?.name || user?.username || 'Admin';
             const res = await fetch("/api/acknowledgements/bulk", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -486,7 +488,8 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                         cluster: item.cluster,
                         gp: item.gp,
                         village: item.village
-                    }))
+                    })),
+                    generatedBy: currentUserName
                 })
             });
             const data = await safeJson(res);
@@ -789,14 +792,6 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                     </p>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
-                    <button 
-                        onClick={() => setShowAppsScriptModal(true)}
-                        className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 shadow-sm border border-indigo-100 dark:border-indigo-900/40 transition-all flex items-center gap-2 text-xs font-bold uppercase tracking-wider px-5"
-                        title="View & copy separate Google Apps Script for UUID & Acknowledgement ID tracking tab"
-                    >
-                        <Code size={16} />
-                        Apps Script Setup
-                    </button>
                     <button 
                         onClick={fetchData}
                         className="p-3 rounded-2xl bg-white dark:bg-gray-800 text-gray-400 hover:text-indigo-600 shadow-sm border border-gray-100 dark:border-gray-700 transition-all flex items-center gap-2 text-xs font-bold uppercase tracking-wider px-5"
@@ -1740,11 +1735,6 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                 </div>
             )}
 
-            {/* Google Apps Script Mapping Setup Modal */}
-            <AcknowledgementMappingScriptModal
-                isOpen={showAppsScriptModal}
-                onClose={() => setShowAppsScriptModal(false)}
-            />
         </div>
     );
 };

@@ -2,14 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     FileText, Upload, CheckCircle2, AlertCircle, RefreshCw, 
     ArrowLeft, User, MapPin, Building2, Activity as ActivityIcon, Check, X,
-    Eye, Download, Printer, Archive, Search, Copy, Code
+    Eye, Download, Printer, Archive, Search, Copy
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { BENEFICIARY_DATA_URL, UPLOAD_LETTERS_SCRIPT_URL, getProxyUrl } from '../config';
 import { LETTERHEAD_HEADER_BASE64, LETTERHEAD_FOOTER_BASE64 } from "../utils/letterheadImages";
 import { printA4Letter, downloadA4LetterPdf, downloadCombinedA4LettersPdf, downloadZipA4LettersPdf, printMultipleA4Letters } from "../utils/printLetter";
 import AcknowledgementLetterSheet from "./AcknowledgementLetterSheet";
-import AcknowledgementMappingScriptModal from "./AcknowledgementMappingScriptModal";
 
 interface UploadLettersDashboardProps {
     onBack: () => void;
@@ -62,9 +61,8 @@ export const UploadLettersDashboard: React.FC<UploadLettersDashboardProps> = ({ 
     const [batchStagingItems, setBatchStagingItems] = useState<any[]>([]);
     const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; statusText: string } | null>(null);
 
-    // Search & Apps Script modal state
+    // Search state
     const [searchTrackingQuery, setSearchTrackingQuery] = useState('');
-    const [showAppsScriptModal, setShowAppsScriptModal] = useState(false);
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
     const copyToClipboard = (text: string, key: string) => {
@@ -958,13 +956,6 @@ export const UploadLettersDashboard: React.FC<UploadLettersDashboardProps> = ({ 
                                     </>
                                 ) : (
                                     <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => setShowAppsScriptModal(true)}
-                                            className="px-3 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs"
-                                            title="View and copy the separate Google Apps Script for UUID & Acknowledgement ID tracking tab"
-                                        >
-                                            <Code size={13} /> Apps Script Setup
-                                        </button>
                                         <span className="px-3.5 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-black uppercase tracking-wider">
                                             {searchTrackingQuery ? `Found: ${filteredSubmittedRecords.length} / ${submittedRecords.length}` : `Total: ${submittedRecords.length}`}
                                         </span>
@@ -1482,11 +1473,6 @@ export const UploadLettersDashboard: React.FC<UploadLettersDashboardProps> = ({ 
                 </div>
             )}
 
-            {/* Google Apps Script Mapping Setup Modal */}
-            <AcknowledgementMappingScriptModal
-                isOpen={showAppsScriptModal}
-                onClose={() => setShowAppsScriptModal(false)}
-            />
         </div>
     );
 };
