@@ -138,6 +138,15 @@ const parseCSVLine = (line: string): string[] => {
     return vals;
 };
 
+const safeJson = async (res: Response) => {
+    const text = await res.text();
+    try {
+        return JSON.parse(text);
+    } catch {
+        throw new Error(text || `Server error (${res.status})`);
+    }
+};
+
 const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPortalProps> = ({ onBack }) => {
     const [acknowledgements, setAcknowledgements] = useState<AcknowledgementRecord[]>([]);
     const [odkSubmissions, setOdkSubmissions] = useState<any[]>([]);
@@ -174,15 +183,15 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
         setError(null);
         try {
             const [ackRes, mapRes, odkRes, benRes] = await Promise.all([
-                fetch("/api/acknowledgements/list").then(r => r.json()).catch(() => ({ success: false, acknowledgements: [] })),
-                fetch("/api/acknowledgement-mapping/list").then(r => r.json()).catch(() => ({ success: false, records: [] })),
-                fetch("/api/odk/data?formId=Status&projectId=3").then(r => r.json()).catch(() => ({ value: [] })),
+                fetch("/api/acknowledgements/list").then(safeJson).catch(() => ({ success: false, acknowledgements: [] })),
+                fetch("/api/acknowledgement-mapping/list").then(safeJson).catch(() => ({ success: false, records: [] })),
+                fetch("/api/odk/data?formId=Status&projectId=3").then(safeJson).catch(() => ({ value: [] })),
                 fetch(getProxyUrl(BENEFICIARY_DATA_URL)).then(r => r.text()).catch(() => "")
             ]);
 
             // Preload complete materials map from server
             try {
-                const matAllRes = await fetch("/api/materials/all").then(r => r.json()).catch(() => ({ success: false, map: {} }));
+                const matAllRes = await fetch("/api/materials/all").then(safeJson).catch(() => ({ success: false, map: {} }));
                 if (matAllRes.success && matAllRes.map) {
                     const loadedMap = new Map<string, any[]>();
                     for (const [k, v] of Object.entries(matAllRes.map)) {
@@ -422,7 +431,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                     village: item.village
                 })
             });
-            const data = await res.json();
+            const data = await safeJson(res);
             if (data.success) {
                 // Sync UUID <-> Acknowledgement ID mapping to tracking sheet
                 fetch("/api/acknowledgement-mapping", {
@@ -480,7 +489,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                     }))
                 })
             });
-            const data = await res.json();
+            const data = await safeJson(res);
             if (data.success) {
                 // Sync bulk mappings to tracking sheet
                 if (Array.isArray(data.acknowledgements)) {
@@ -583,7 +592,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                 village: vName
             });
             const res = await fetch(`/api/materials/query?${params.toString()}`);
-            const data = await res.json();
+            const data = await safeJson(res);
             if (data.success && Array.isArray(data.materials) && data.materials.length > 0) {
                 setModalMaterials(data.materials);
             }
@@ -695,7 +704,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id, status })
             });
-            const data = await res.json();
+            const data = await safeJson(res);
             if (data.success) {
                 setSuccessMessage("Hard-copy status updated.");
                 fetchData();
@@ -712,7 +721,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id, consent })
             });
-            const data = await res.json();
+            const data = await safeJson(res);
             if (data.success) {
                 setSuccessMessage("Photography consent updated.");
                 fetchData();

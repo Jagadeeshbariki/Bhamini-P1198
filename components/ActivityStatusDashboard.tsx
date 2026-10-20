@@ -149,6 +149,15 @@ const parseCSVLine = (line: string): string[] => {
     return vals;
 };
 
+const safeJson = async (res: Response) => {
+    const text = await res.text();
+    try {
+        return JSON.parse(text);
+    } catch {
+        throw new Error(text || `Server error (${res.status})`);
+    }
+};
+
 const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBack }) => {
     const { user } = useAuth();
     const role = user?.role?.toLowerCase()?.trim() || '';
@@ -507,7 +516,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             
             // Preload complete materials map from server
             try {
-                const matAllRes = await fetch("/api/materials/all").then(r => r.json()).catch(() => ({ success: false, map: {} }));
+                const matAllRes = await fetch("/api/materials/all").then(safeJson).catch(() => ({ success: false, map: {} }));
                 if (matAllRes.success && matAllRes.map) {
                     const loadedMap = new Map<string, any[]>();
                     for (const [k, v] of Object.entries(matAllRes.map)) {
@@ -521,7 +530,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
 
             // Fetch uploaded letters matching by UUID
             try {
-                const ulRes = await fetch(UPLOAD_LETTERS_SCRIPT_URL).then(r => r.json()).catch(() => ({ success: false, records: [] }));
+                const ulRes = await fetch(UPLOAD_LETTERS_SCRIPT_URL).then(safeJson).catch(() => ({ success: false, records: [] }));
                 if (ulRes.success && Array.isArray(ulRes.records)) {
                     const ulMap = new Map<string, any>();
                     ulRes.records.forEach((rec: any) => {
@@ -614,7 +623,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                 village: vName
             });
             const res = await fetch(`/api/materials/query?${params.toString()}`);
-            const data = await res.json();
+            const data = await safeJson(res);
             if (data.success && Array.isArray(data.materials) && data.materials.length > 0) {
                 setModalMaterials(data.materials);
             }
@@ -745,7 +754,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                     }))
                 })
             });
-            const d = await res.json();
+            const d = await safeJson(res);
             if (d.success) {
                 // Sync to UUID <-> Acknowledgement mapping tracking sheet
                 if (Array.isArray(d.acknowledgements)) {

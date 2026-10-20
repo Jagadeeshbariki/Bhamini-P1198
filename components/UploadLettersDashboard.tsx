@@ -218,9 +218,9 @@ export const UploadLettersDashboard: React.FC<UploadLettersDashboardProps> = ({ 
     }, [selectedAckLetterForPreview, autoDownloadAck]);
 
     useEffect(() => {
-        if (!isDaOrAdmin) return;
+        if (!isAdminOrProject) return;
         fetchData();
-    }, [isDaOrAdmin]);
+    }, [isAdminOrProject]);
 
     const fetchData = async () => {
         setLoading(true);
