@@ -1,17 +1,26 @@
 import { LETTERHEAD_HEADER_BASE64, LETTERHEAD_FOOTER_BASE64 } from "../utils/letterheadImages";
-import { printA4Letter } from "../utils/printLetter";
+import { 
+    printA4Letter, 
+    downloadA4LetterPdf, 
+    downloadCombinedA4LettersPdf, 
+    downloadZipA4LettersPdf, 
+    printMultipleA4Letters 
+} from "../utils/printLetter";
+import AcknowledgementLetterSheet from "./AcknowledgementLetterSheet";
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Activity, Calendar, Users, CheckCircle2, AlertCircle, 
     Search, RefreshCw, LayoutGrid, List, Image as ImageIcon,
-    ArrowLeft, X, ChevronDown, ChevronUp, Filter, Printer, FileText
+    ArrowLeft, X, ChevronDown, ChevronUp, Filter, Printer, FileText,
+    Download, Eye, Archive, Layers
 } from 'lucide-react';
 import { 
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
     CartesianGrid, Tooltip, Legend 
 } from 'recharts';
 import PhotoGallery from './PhotoGallery';
-import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, getProxyUrl } from '../config';
+import { useAuth } from '../hooks/useAuth';
+import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, UPLOAD_LETTERS_SCRIPT_URL, getProxyUrl } from '../config';
 
 interface StatusRecord {
     id: string;
@@ -110,25 +119,15 @@ const ACTIVITY_ASSET_CATALOG: Record<string, { label: string; labelTe: string; u
 };
 
 
-const getAssetDisplayLabel = (mat: any): { title: string; subtitle?: string } => {
+const getAssetDisplayLabel = (mat: any): { title: string } => {
     const rawLabel = (mat.label || "").trim();
     const lower = rawLabel.toLowerCase();
-    
-    // Check known Telugu label mapping
     if (TELUGU_ASSET_LABELS[lower]) {
-        return {
-            title: TELUGU_ASSET_LABELS[lower],
-            subtitle: rawLabel !== TELUGU_ASSET_LABELS[lower] ? rawLabel : undefined
-        };
+        return { title: TELUGU_ASSET_LABELS[lower] };
     }
-    
     if (mat.labelTe && mat.labelTe !== rawLabel) {
-        return {
-            title: mat.labelTe,
-            subtitle: rawLabel
-        };
+        return { title: mat.labelTe };
     }
-    
     return { title: rawLabel };
 };
 
@@ -151,6 +150,31 @@ const parseCSVLine = (line: string): string[] => {
 };
 
 const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBack }) => {
+    const { user } = useAuth();
+    const role = user?.role?.toLowerCase()?.trim() || '';
+    const isAdminOrProject = role === 'admin' || role === 'project';
+    const isAdmin = role === 'admin';
+
+    if (!isAdminOrProject) {
+        return (
+            <div className="max-w-4xl mx-auto py-20 text-center space-y-6">
+                <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                    <AlertCircle className="w-10 h-10" />
+                </div>
+                <h1 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Access Restricted</h1>
+                <p className="text-gray-500 font-medium">The Activity Status section is restricted to 'Admin' and 'Project' roles only.</p>
+                {onBack && (
+                    <button
+                        onClick={onBack}
+                        className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-lg"
+                    >
+                        Back to Dashboards
+                    </button>
+                )}
+            </div>
+        );
+    }
+
     const [data, setData] = useState<StatusRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -162,6 +186,10 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
     const [ackLetterData, setAckLetterData] = useState<any | null>(null);
     const [modalMaterials, setModalMaterials] = useState<any[]>([]);
     const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+    const [selectedLettersIds, setSelectedLettersIds] = useState<Set<string>>(new Set());
+    const [selectedCompletedIds, setSelectedCompletedIds] = useState<Set<string>>(new Set());
+    const [batchStagingItems, setBatchStagingItems] = useState<any[]>([]);
+    const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; statusText: string } | null>(null);
     const [activeTab, setActiveTab] = useState<"overview" | "eligible" | "letters" | "tracking">("overview");
     const [selectedFY, setSelectedFY] = useState('ALL');
     const [viewMode, setViewMode] = useState<'grid' | 'table' | 'gallery'>('grid');
@@ -171,6 +199,10 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
     const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
     const [beneficiaries, setBeneficiaries] = useState<any[]>([]);
     const [materialsMap, setMaterialsMap] = useState<Map<string, any[]>>(new Map());
+    const [uploadedLettersMap, setUploadedLettersMap] = useState<Map<string, any>>(new Map());
+    const [previewDocUrl, setPreviewDocUrl] = useState<string | null>(null);
+    const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+    const [autoDownloadAck, setAutoDownloadAck] = useState(false);
 
     // Escape key listener for photo preview modal
     useEffect(() => {
@@ -487,6 +519,22 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                 console.warn("Failed to preload materials map:", matLoadErr);
             }
 
+            // Fetch uploaded letters matching by UUID
+            try {
+                const ulRes = await fetch(UPLOAD_LETTERS_SCRIPT_URL).then(r => r.json()).catch(() => ({ success: false, records: [] }));
+                if (ulRes.success && Array.isArray(ulRes.records)) {
+                    const ulMap = new Map<string, any>();
+                    ulRes.records.forEach((rec: any) => {
+                        if (rec.submissionId) {
+                            ulMap.set(String(rec.submissionId).toLowerCase().trim(), rec);
+                        }
+                    });
+                    setUploadedLettersMap(ulMap);
+                }
+            } catch (ulErr) {
+                console.warn("Failed to fetch uploaded letters:", ulErr);
+            }
+
             const sortedRecords = records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
             setData(sortedRecords);
 
@@ -540,8 +588,11 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
     
     
     
-        const openAckLetter = async (item: any) => {
+    const openAckLetter = async (item: any, autoDownload = false) => {
         setAckLetterData(item);
+        if (autoDownload) {
+            setAutoDownloadAck(true);
+        }
         // Pre-fill synchronously if available
         const instantMats = getIssuedMaterials(item);
         if (instantMats && instantMats.length > 0) {
@@ -571,6 +622,33 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             console.warn("Failed to query materials:", e);
         }
     };
+
+    const downloadAckLetterDirect = (item: any) => {
+        openAckLetter(item, true);
+    };
+
+    const handleDownloadCurrentModalPdf = async () => {
+        if (!ackLetterData) return;
+        setIsDownloadingPdf(true);
+        const ackNum = `P1198-BHM-2026-${Math.abs((ackLetterData.beneficiaryId || ackLetterData.farmerId || '0').split('').reduce((a: number, b: string)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,6)}`;
+        const bName = (ackLetterData.beneficiaryName || ackLetterData.name || 'beneficiary').replace(/[^a-zA-Z0-9]/g, '_');
+        await downloadA4LetterPdf("activity-status-ack-sheet", `Acknowledgement_${ackNum}_${bName}.pdf`);
+        setIsDownloadingPdf(false);
+    };
+
+    useEffect(() => {
+        if (ackLetterData && autoDownloadAck) {
+            const timer = setTimeout(async () => {
+                setIsDownloadingPdf(true);
+                const ackNum = `P1198-BHM-2026-${Math.abs((ackLetterData.beneficiaryId || ackLetterData.farmerId || '0').split('').reduce((a: number, b: string)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,6)}`;
+                const bName = (ackLetterData.beneficiaryName || ackLetterData.name || 'beneficiary').replace(/[^a-zA-Z0-9]/g, '_');
+                await downloadA4LetterPdf("activity-status-ack-sheet", `Acknowledgement_${ackNum}_${bName}.pdf`);
+                setIsDownloadingPdf(false);
+                setAutoDownloadAck(false);
+            }, 350);
+            return () => clearTimeout(timer);
+        }
+    }, [ackLetterData, autoDownloadAck]);
     const getIssuedMaterials = (item: any) => {
         if (!item) return [];
         const candidates = [
@@ -597,12 +675,37 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             return materialsMap.get(rawName)!;
         }
 
-        // If not found in recorded distribution, look up from activity catalog!
+        // If not found in recorded distribution, look up from activity catalog with precise matching!
         const rawAct = String(item.activity || item.activityName || "NS").toLowerCase().trim();
-        for (const [catKey, catItems] of Object.entries(ACTIVITY_ASSET_CATALOG)) {
-            if (rawAct === catKey || rawAct.includes(catKey) || catKey.includes(rawAct)) {
-                return catItems;
+        let matchedKey = "";
+        if (rawAct === "ns" || rawAct.includes("nursery") || rawAct.includes("net shed") || (rawAct.includes("ns") && !rawAct.includes("nutri") && !rawAct.includes("van"))) {
+            matchedKey = "ns";
+        } else if (rawAct.includes("goat") || rawAct.includes("shed")) {
+            matchedKey = "elevated goat shed";
+        } else if (rawAct.includes("farmpond") || rawAct.includes("rk") || rawAct.includes("కుంట")) {
+            matchedKey = "eco farmpond";
+        } else if (rawAct.includes("processing") || rawAct.includes("hub") || rawAct.includes("hammer")) {
+            matchedKey = "processing_hubs";
+        } else if (rawAct.includes("crop") || rawAct.includes("seed") || rawAct.includes("npm")) {
+            matchedKey = "crops";
+        } else if (rawAct.includes("kitchen") || rawAct.includes("nutri") || rawAct.includes("vegetable")) {
+            matchedKey = "kitchen garden";
+        } else if (rawAct.includes("biomass") || rawAct.includes("plantation") || rawAct.includes("sapling")) {
+            matchedKey = "biomass plantation";
+        } else if (rawAct.includes("vermi") || rawAct.includes("compost")) {
+            matchedKey = "vermi compost";
+        } else if (rawAct.includes("livestock") || rawAct.includes("veterinary") || rawAct.includes("health")) {
+            matchedKey = "livestock health";
+        } else {
+            for (const catKey of Object.keys(ACTIVITY_ASSET_CATALOG)) {
+                if (rawAct === catKey) {
+                    matchedKey = catKey;
+                    break;
+                }
             }
+        }
+        if (matchedKey && ACTIVITY_ASSET_CATALOG[matchedKey]) {
+            return ACTIVITY_ASSET_CATALOG[matchedKey];
         }
 
         const actDisplay = item.activity || item.activityName || "NS";
@@ -617,6 +720,10 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
         ];
     };
     const handleBulkGenerateSelected = async () => {
+        if (!isAdmin) {
+            alert("Only Admin users are authorized to generate acknowledgment letters.");
+            return;
+        }
         const selected = eligibleBeneficiaries.filter(b => bulkSelected.has(b.id || b.farmerId));
         if (selected.length === 0) {
             alert("Please select eligible beneficiaries using the checkboxes first.");
@@ -628,7 +735,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     items: selected.map(s => ({
-                        activityUuid: s.id,
+                        activityStatusUuid: s.id,
                         beneficiaryId: s.farmerId || s.hhId || "BEN",
                         activityName: s.activity,
                         beneficiaryName: s.beneficiaryName,
@@ -640,6 +747,26 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             });
             const d = await res.json();
             if (d.success) {
+                // Sync to UUID <-> Acknowledgement mapping tracking sheet
+                if (Array.isArray(d.acknowledgements)) {
+                    fetch("/api/acknowledgement-mapping", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            items: d.acknowledgements.map((a: any) => ({
+                                uuid: a.activity_status_UUID || a.beneficiary_id,
+                                acknowledgementId: a.acknowledgement_number,
+                                beneficiaryId: a.beneficiary_id,
+                                beneficiaryName: a.beneficiary_name,
+                                activityName: a.activity_name,
+                                cluster: a.cluster,
+                                gp: a.gp,
+                                village: a.village,
+                                generatedBy: 'User'
+                            }))
+                        })
+                    }).catch(err => console.warn("Mapping sync error:", err));
+                }
                 alert(`Successfully generated ${d.count} acknowledgements!`);
                 setBulkSelected(new Set());
                 setActiveTab("letters");
@@ -649,8 +776,71 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
         }
     };
 
+    const handleBatchDownload = async (items: any[], type: 'combined' | 'zip' | 'print') => {
+        if (!items || items.length === 0) return;
+        setBatchStagingItems(items);
+        setBatchProgress({ current: 0, total: items.length, statusText: 'Preparing letterhead templates...' });
+
+        await new Promise(resolve => setTimeout(resolve, 350));
+
+        const elementIds = items.map((_, idx) => `activity-batch-sheet-${idx}`);
+
+        if (type === 'print') {
+            setBatchProgress(null);
+            setBatchStagingItems([]);
+            printMultipleA4Letters(elementIds);
+            return;
+        }
+
+        const timestamp = new Date().toISOString().slice(0, 10);
+        if (type === 'combined') {
+            const filename = `Combined_Acknowledgement_Letters_${items.length}_Beneficiaries_${timestamp}.pdf`;
+            await downloadCombinedA4LettersPdf(elementIds, filename, (current, total) => {
+                setBatchProgress({ current, total, statusText: `Generating letter ${current} of ${total}...` });
+            });
+        } else if (type === 'zip') {
+            const zipItems = items.map((item, idx) => {
+                const bName = (item.beneficiary_name || item.beneficiaryName || item.name || 'beneficiary').replace(/[^a-zA-Z0-9]/g, '_');
+                const ackNum = item.acknowledgement_number || `P1198-BHM-2026-${Math.abs(String(item.beneficiary_id || item.beneficiaryId || item.farmerId || '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`;
+                return {
+                    id: `activity-batch-sheet-${idx}`,
+                    filename: `Acknowledgement_${ackNum}_${bName}.pdf`
+                };
+            });
+            await downloadZipA4LettersPdf(zipItems, `Acknowledgement_Letters_${items.length}_Files_${timestamp}.zip`, (current, total) => {
+                setBatchProgress({ current, total, statusText: `Compressing letter ${current} of ${total}...` });
+            });
+        }
+
+        setBatchProgress(null);
+        setBatchStagingItems([]);
+
+        // Sync batch Acknowledgement ID <-> UUID mappings to tracking sheet
+        try {
+            fetch("/api/acknowledgement-mapping", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    items: items.map(item => ({
+                        uuid: item.activityStatusUuid || item.uuid || item.id || item.beneficiary_id || item.farmerId || item.hhId,
+                        acknowledgementId: item.acknowledgement_number || `P1198-BHM-2026-${Math.abs(String(item.beneficiary_id || item.beneficiaryId || item.farmerId || '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`,
+                        beneficiaryId: item.beneficiary_id || item.beneficiaryId || item.farmerId || item.hhId || '-',
+                        beneficiaryName: item.beneficiary_name || item.beneficiaryName || item.name || 'Beneficiary',
+                        activityName: item.activity_name || item.activity || '-',
+                        cluster: item.cluster || '-',
+                        gp: item.gp || '-',
+                        village: item.village || '-',
+                        generatedBy: 'User',
+                        remarks: 'Batch Download'
+                    }))
+                })
+            }).catch(e => console.warn("Mapping sync notice:", e));
+        } catch { /* ignore */ }
+    };
+
     const filteredData = useMemo(() => {
         return data.filter(d => {
+            const computedAckNum = `P1198-BHM-2026-${Math.abs(String(d.farmerId || d.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`;
             const matchesSearch = 
                 d.activity.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 d.village.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -658,7 +848,10 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                 d.beneficiaryName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 d.beneficiaryAdhaar.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 d.hhId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                d.farmerId.toLowerCase().includes(searchQuery.toLowerCase());
+                d.farmerId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (d.uuid && d.uuid.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                (d.id && d.id.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                computedAckNum.toLowerCase().includes(searchQuery.toLowerCase());
             
             const matchesCluster = selectedCluster === 'ALL' || d.cluster === selectedCluster;
             const matchesActivity = selectedActivity === 'ALL' || d.activity === selectedActivity;
@@ -933,12 +1126,90 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 {activitiesList.map(a => <option key={a} value={a}>{a}</option>)}
                             </select>
                             {bulkSelected.size > 0 && (
-                                <button
-                                    onClick={handleBulkGenerateSelected}
-                                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2"
-                                >
-                                    <FileText size={14} /> Generate Selected ({bulkSelected.size})
-                                </button>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <button
+                                        onClick={handleBulkGenerateSelected}
+                                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+                                        title="Generate acknowledgement records"
+                                    >
+                                        <FileText size={13} /> Generate Selected ({bulkSelected.size})
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const selectedItems = eligibleBeneficiaries
+                                                .filter(b => bulkSelected.has(b.id || b.farmerId))
+                                                .map(b => ({
+                                                    acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(b.farmerId || b.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                    beneficiary_name: b.beneficiaryName,
+                                                    beneficiary_id: b.farmerId || b.hhId,
+                                                    farmerId: b.farmerId,
+                                                    hhId: b.hhId,
+                                                    village: b.village,
+                                                    gp: b.gp,
+                                                    cluster: b.cluster,
+                                                    activity_name: b.activity,
+                                                    created_at: b.benefitDate || new Date().toISOString()
+                                                }));
+                                            handleBatchDownload(selectedItems, 'combined');
+                                        }}
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+                                        title="Download all selected letters in one multi-page PDF"
+                                    >
+                                        <Download size={13} /> Combined PDF ({bulkSelected.size})
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const selectedItems = eligibleBeneficiaries
+                                                .filter(b => bulkSelected.has(b.id || b.farmerId))
+                                                .map(b => ({
+                                                    acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(b.farmerId || b.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                    beneficiary_name: b.beneficiaryName,
+                                                    beneficiary_id: b.farmerId || b.hhId,
+                                                    farmerId: b.farmerId,
+                                                    hhId: b.hhId,
+                                                    village: b.village,
+                                                    gp: b.gp,
+                                                    cluster: b.cluster,
+                                                    activity_name: b.activity,
+                                                    created_at: b.benefitDate || new Date().toISOString()
+                                                }));
+                                            handleBatchDownload(selectedItems, 'zip');
+                                        }}
+                                        className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+                                        title="Download all selected letters as individual PDFs in a ZIP archive"
+                                    >
+                                        <Archive size={13} /> ZIP ({bulkSelected.size})
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const selectedItems = eligibleBeneficiaries
+                                                .filter(b => bulkSelected.has(b.id || b.farmerId))
+                                                .map(b => ({
+                                                    acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(b.farmerId || b.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                    beneficiary_name: b.beneficiaryName,
+                                                    beneficiary_id: b.farmerId || b.hhId,
+                                                    farmerId: b.farmerId,
+                                                    hhId: b.hhId,
+                                                    village: b.village,
+                                                    gp: b.gp,
+                                                    cluster: b.cluster,
+                                                    activity_name: b.activity,
+                                                    created_at: b.benefitDate || new Date().toISOString()
+                                                }));
+                                            handleBatchDownload(selectedItems, 'print');
+                                        }}
+                                        className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-1.5"
+                                        title="Print all selected letters"
+                                    >
+                                        <Printer size={13} /> Print ({bulkSelected.size})
+                                    </button>
+                                    <button
+                                        onClick={() => setBulkSelected(new Set())}
+                                        className="px-3 py-2 text-xs font-bold text-gray-400 hover:text-red-500 uppercase transition-colors"
+                                    >
+                                        Clear
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -1009,12 +1280,21 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                                     </span>
                                                 </td>
                                                 <td className="py-4 px-6 text-right">
-                                                    <button
-                                                        onClick={() => openAckLetter(item)}
-                                                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1.5 ml-auto"
-                                                    >
-                                                        <Printer size={13} /> Generate Letter
-                                                    </button>
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button
+                                                            onClick={() => openAckLetter(item)}
+                                                            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1.5 shadow-sm"
+                                                        >
+                                                            <Printer size={13} /> Generate Letter
+                                                        </button>
+                                                        <button
+                                                            onClick={() => downloadAckLetterDirect(item)}
+                                                            className="px-3 py-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1.5 shadow-sm"
+                                                            title="Direct Download Official PDF"
+                                                        >
+                                                            <Download size={13} /> Download PDF
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );
@@ -1333,11 +1613,116 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
 
                                 {isExpanded && (
                                     <div className="p-6 sm:p-8 pt-0 border-t border-gray-100 dark:border-gray-700 bg-gray-50/30 dark:bg-gray-900/10 space-y-6">
-                                        <div className="pt-6">
+                                        <div className="pt-6 space-y-4">
+                                            {selectedCompletedIds.size > 0 && (
+                                                <div className="p-4 bg-indigo-50/90 dark:bg-indigo-950/50 rounded-2xl border border-indigo-200 dark:border-indigo-800 flex flex-wrap items-center justify-between gap-3 animate-fade-in shadow-sm">
+                                                    <div className="flex items-center gap-2">
+                                                        <FileText className="text-indigo-600" size={18} />
+                                                        <span className="text-xs font-black uppercase text-gray-800 dark:text-white">
+                                                            {selectedCompletedIds.size} Completed Beneficiar{selectedCompletedIds.size === 1 ? 'y' : 'ies'} Selected
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <button
+                                                            onClick={() => {
+                                                                const selectedRecords = data.filter(d => selectedCompletedIds.has(d.id));
+                                                                const selectedItems = selectedRecords.map(r => ({
+                                                                    acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(r.farmerId || r.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                                    beneficiary_name: r.beneficiaryName,
+                                                                    beneficiary_id: r.farmerId || r.hhId,
+                                                                    farmerId: r.farmerId,
+                                                                    hhId: r.hhId,
+                                                                    village: r.village,
+                                                                    gp: r.gp,
+                                                                    cluster: r.cluster,
+                                                                    activity_name: r.activity,
+                                                                    created_at: r.benefitDate || new Date().toISOString(),
+                                                                    materials: materialsMap.get(r.farmerId?.toLowerCase().trim()) || materialsMap.get(r.hhId?.toLowerCase().trim())
+                                                                }));
+                                                                handleBatchDownload(selectedItems, 'combined');
+                                                            }}
+                                                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+                                                            title="Download all selected letters in one multi-page PDF"
+                                                        >
+                                                            <Download size={13} /> Combined PDF ({selectedCompletedIds.size})
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const selectedRecords = data.filter(d => selectedCompletedIds.has(d.id));
+                                                                const selectedItems = selectedRecords.map(r => ({
+                                                                    acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(r.farmerId || r.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                                    beneficiary_name: r.beneficiaryName,
+                                                                    beneficiary_id: r.farmerId || r.hhId,
+                                                                    farmerId: r.farmerId,
+                                                                    hhId: r.hhId,
+                                                                    village: r.village,
+                                                                    gp: r.gp,
+                                                                    cluster: r.cluster,
+                                                                    activity_name: r.activity,
+                                                                    created_at: r.benefitDate || new Date().toISOString(),
+                                                                    materials: materialsMap.get(r.farmerId?.toLowerCase().trim()) || materialsMap.get(r.hhId?.toLowerCase().trim())
+                                                                }));
+                                                                handleBatchDownload(selectedItems, 'zip');
+                                                            }}
+                                                            className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+                                                            title="Download all selected letters as individual PDFs in a ZIP archive"
+                                                        >
+                                                            <Archive size={13} /> ZIP ({selectedCompletedIds.size})
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const selectedRecords = data.filter(d => selectedCompletedIds.has(d.id));
+                                                                const selectedItems = selectedRecords.map(r => ({
+                                                                    acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(r.farmerId || r.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                                    beneficiary_name: r.beneficiaryName,
+                                                                    beneficiary_id: r.farmerId || r.hhId,
+                                                                    farmerId: r.farmerId,
+                                                                    hhId: r.hhId,
+                                                                    village: r.village,
+                                                                    gp: r.gp,
+                                                                    cluster: r.cluster,
+                                                                    activity_name: r.activity,
+                                                                    created_at: r.benefitDate || new Date().toISOString(),
+                                                                    materials: materialsMap.get(r.farmerId?.toLowerCase().trim()) || materialsMap.get(r.hhId?.toLowerCase().trim())
+                                                                }));
+                                                                handleBatchDownload(selectedItems, 'print');
+                                                            }}
+                                                            className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-1.5"
+                                                            title="Print all selected letters"
+                                                        >
+                                                            <Printer size={13} /> Print ({selectedCompletedIds.size})
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setSelectedCompletedIds(new Set())}
+                                                            className="px-3 py-2 text-xs font-bold text-gray-400 hover:text-red-500 uppercase transition-colors"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             {viewMode === 'grid' ? (
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                                     {records.map((record) => (
-                                                        <div key={record.id} className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all group flex flex-col">
+                                                        <div key={record.id} className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all group flex flex-col relative">
+                                                            {record.status === 'Completed' && (
+                                                                <div className="absolute top-3 left-3 z-20">
+                                                                    <input 
+                                                                        type="checkbox"
+                                                                        checked={selectedCompletedIds.has(record.id)}
+                                                                        onChange={(e) => {
+                                                                            e.stopPropagation();
+                                                                            const next = new Set(selectedCompletedIds);
+                                                                            if (next.has(record.id)) next.delete(record.id);
+                                                                            else next.add(record.id);
+                                                                            setSelectedCompletedIds(next);
+                                                                        }}
+                                                                        className="w-5 h-5 rounded-md border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-white/90 shadow-md cursor-pointer"
+                                                                        title="Select beneficiary for batch letter download"
+                                                                    />
+                                                                </div>
+                                                            )}
                                                             <div 
                                                                 className="relative h-48 overflow-hidden bg-gray-50 dark:bg-gray-950 cursor-pointer"
                                                                 onClick={() => record.photo && setPreviewImage(record.photo)}
@@ -1350,7 +1735,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                                                         <span className="text-[10px] font-black uppercase tracking-widest opacity-40">No Photo</span>
                                                                     </div>
                                                                 )}
-                                                                <div className="absolute top-4 left-4 flex gap-2 flex-wrap">
+                                                                <div className="absolute top-4 left-10 flex gap-2 flex-wrap">
                                                                     <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider text-white shadow-sm ${record.status === 'Completed' ? 'bg-emerald-600' : 'bg-amber-600'}`}>
                                                                         {record.status}
                                                                     </span>
@@ -1403,6 +1788,64 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                                                         </div>
                                                                     )}
                                                                 </div>
+
+                                                                <div className="pt-3 border-t border-gray-100 dark:border-gray-800 mt-auto space-y-2">
+                                                                    {(() => {
+                                                                        const uploadedLetter = uploadedLettersMap.get(record.id?.toLowerCase().trim());
+                                                                        if (uploadedLetter) {
+                                                                            return (
+                                                                                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-1">
+                                                                                    <div className="flex items-center justify-between text-xs font-black text-emerald-800 dark:text-emerald-300">
+                                                                                        <span className="flex items-center gap-1.5">
+                                                                                            <CheckCircle2 size={14} className="text-emerald-600" /> Hard Copy Received
+                                                                                        </span>
+                                                                                        {uploadedLetter.fileUrl && uploadedLetter.fileUrl !== '#' && (
+                                                                                            <button 
+                                                                                                onClick={() => setPreviewDocUrl(uploadedLetter.fileUrl)}
+                                                                                                className="text-[10px] uppercase underline text-indigo-600 font-bold bg-transparent border-none cursor-pointer p-0"
+                                                                                            >
+                                                                                                View Letter
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <p className="text-[10px] text-gray-500 font-medium">
+                                                                                        Uploaded by: {uploadedLetter.uploadedBy || 'Admin/DA'}
+                                                                                    </p>
+                                                                                </div>
+                                                                            );
+                                                                        }
+                                                                        return (
+                                                                            <div className="p-2.5 bg-gray-50 dark:bg-gray-900/50 rounded-xl text-[10px] font-bold text-gray-400 flex items-center justify-between">
+                                                                                <span>Hard Copy Status:</span>
+                                                                                <span className="text-amber-600 font-black uppercase">Pending Return</span>
+                                                                            </div>
+                                                                        );
+                                                                    })()}
+
+                                                                    {record.status === 'Completed' && (
+                                                                        <div className="p-2.5 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 rounded-xl flex items-center justify-between">
+                                                                            <span className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1">
+                                                                                <FileText size={12} className="text-indigo-600" /> Ack Letter (PDF)
+                                                                            </span>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <button
+                                                                                    onClick={() => openAckLetter(record)}
+                                                                                    className="px-2 py-1 bg-white dark:bg-gray-800 text-indigo-600 hover:bg-indigo-50 rounded-lg text-[9px] font-black uppercase transition-colors shadow-xs flex items-center gap-1 border border-indigo-200 dark:border-indigo-800"
+                                                                                    title="View Telugu Letter Preview"
+                                                                                >
+                                                                                    <Eye size={11} /> View
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => downloadAckLetterDirect(record)}
+                                                                                    className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[9px] font-black uppercase transition-colors shadow-xs flex items-center gap-1"
+                                                                                    title="Download Official A4 PDF"
+                                                                                >
+                                                                                    <Download size={11} /> PDF
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     ))}
@@ -1413,56 +1856,138 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                                         <table className="w-full text-left border-collapse">
                                                             <thead>
                                                                 <tr className="bg-gray-50/50 dark:bg-gray-900/50 border-b dark:border-gray-700">
+                                                                    <th className="px-4 py-4 w-10">
+                                                                        <input 
+                                                                            type="checkbox"
+                                                                            onChange={(e) => {
+                                                                                const completedInThisGroup = records.filter(r => r.status === 'Completed').map(r => r.id);
+                                                                                if (e.target.checked) {
+                                                                                    const next = new Set(selectedCompletedIds);
+                                                                                    completedInThisGroup.forEach(id => next.add(id));
+                                                                                    setSelectedCompletedIds(next);
+                                                                                } else {
+                                                                                    const next = new Set(selectedCompletedIds);
+                                                                                    completedInThisGroup.forEach(id => next.delete(id));
+                                                                                    setSelectedCompletedIds(next);
+                                                                                }
+                                                                            }}
+                                                                            checked={records.filter(r => r.status === 'Completed').length > 0 && records.filter(r => r.status === 'Completed').every(r => selectedCompletedIds.has(r.id))}
+                                                                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                                            title="Select all completed beneficiaries for batch acknowledgement download"
+                                                                        />
+                                                                    </th>
                                                                     <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Benefitted Date / FY</th>
                                                                     <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Location & Beneficiary Details</th>
                                                                     <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status / Reason</th>
                                                                     <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Submitter</th>
                                                                     <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Photo</th>
+                                                                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Acknowledgement Letter (PDF)</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                                                {records.map((record) => (
-                                                                    <tr key={record.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors">
-                                                                        <td className="px-6 py-4 text-xs font-bold text-gray-500 tabular-nums">
-                                                                            <div>{record.benefitDate ? new Date(record.benefitDate).toLocaleDateString() : '-'}</div>
-                                                                            <div className="text-[9px] font-black text-indigo-600 mt-0.5">{record.financialYear}</div>
-                                                                        </td>
-                                                                        <td className="px-6 py-4 text-xs font-bold text-gray-500 space-y-1">
-                                                                            <div>{record.cluster} · {record.village} ({record.gp})</div>
-                                                                            <div className="text-[10px] text-gray-400">
-                                                                                Ben ID: <span className="font-mono text-gray-700 dark:text-gray-300">{record.farmerId}</span> | Aadhaar: <span className="font-mono text-gray-700 dark:text-gray-300">{record.beneficiaryAdhaar}</span>
-                                                                            </div>
-                                                                            <div className="text-[10px] text-gray-800 dark:text-gray-200 font-black">
-                                                                                {record.beneficiaryName} · Head: {record.hhHeadName} ({record.age}y, {record.gender}) · Ph: {record.phoneNumber}
-                                                                            </div>
-                                                                        </td>
-                                                                        <td className="px-6 py-4">
-                                                                            <div className="space-y-1">
-                                                                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider text-white inline-block ${record.status === 'Completed' ? 'bg-emerald-600' : 'bg-amber-600'}`}>
-                                                                                    {record.status}
-                                                                                </span>
-                                                                                {record.status !== 'Completed' && record.reason && (
-                                                                                    <p className="text-[10px] text-amber-600 dark:text-amber-400 italic font-medium">Reason: {record.reason}</p>
-                                                                                )}
-                                                                            </div>
-                                                                        </td>
-                                                                        <td className="px-6 py-4 text-xs font-bold text-indigo-600">{record.submitter}</td>
-                                                                        <td className="px-6 py-4">
-                                                                            <div className="flex justify-center">
-                                                                                {record.photo ? (
-                                                                                    <div 
-                                                                                        className="w-10 h-10 rounded-xl overflow-hidden border border-gray-100 dark:border-gray-700 cursor-pointer hover:scale-110 transition-transform shadow-sm"
-                                                                                        onClick={() => setPreviewImage(record.photo)}
-                                                                                    >
-                                                                                        <img src={record.photo} alt="" className="w-full h-full object-cover" />
-                                                                                    </div>
+                                                                {records.map((record) => {
+                                                                    const benId = (record.id || record.farmerId || '').toLowerCase().trim();
+                                                                    const uploadedLetter = uploadedLettersMap.get(benId);
+                                                                    return (
+                                                                        <tr key={record.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors">
+                                                                            <td className="px-4 py-4">
+                                                                                {record.status === 'Completed' ? (
+                                                                                    <input 
+                                                                                        type="checkbox"
+                                                                                        checked={selectedCompletedIds.has(record.id)}
+                                                                                        onChange={() => {
+                                                                                            const next = new Set(selectedCompletedIds);
+                                                                                            if (next.has(record.id)) next.delete(record.id);
+                                                                                            else next.add(record.id);
+                                                                                            setSelectedCompletedIds(next);
+                                                                                        }}
+                                                                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                                                        title="Select beneficiary for batch download"
+                                                                                    />
                                                                                 ) : (
-                                                                                    <span className="text-gray-300 text-[10px]">None</span>
+                                                                                    <span className="w-4 h-4 block" />
                                                                                 )}
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
+                                                                            </td>
+                                                                            <td className="px-6 py-4 text-xs font-bold text-gray-500 tabular-nums">
+                                                                                <div>{record.benefitDate ? new Date(record.benefitDate).toLocaleDateString() : '-'}</div>
+                                                                                <div className="text-[9px] font-black text-indigo-600 mt-0.5">{record.financialYear}</div>
+                                                                            </td>
+                                                                            <td className="px-6 py-4 text-xs font-bold text-gray-500 space-y-1">
+                                                                                <div>{record.cluster} · {record.village} ({record.gp})</div>
+                                                                                <div className="text-[10px] text-gray-400">
+                                                                                    Ben ID: <span className="font-mono text-gray-700 dark:text-gray-300">{record.farmerId}</span> | Aadhaar: <span className="font-mono text-gray-700 dark:text-gray-300">{record.beneficiaryAdhaar}</span>
+                                                                                </div>
+                                                                                <div className="text-[10px] text-gray-800 dark:text-gray-200 font-black">
+                                                                                    {record.beneficiaryName} · Head: {record.hhHeadName} ({record.age}y, {record.gender}) · Ph: {record.phoneNumber}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-6 py-4">
+                                                                                <div className="space-y-1">
+                                                                                    <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider text-white inline-block ${record.status === 'Completed' ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+                                                                                        {record.status}
+                                                                                    </span>
+                                                                                    {record.status !== 'Completed' && record.reason && (
+                                                                                        <p className="text-[10px] text-amber-600 dark:text-amber-400 italic font-medium">Reason: {record.reason}</p>
+                                                                                    )}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-6 py-4 text-xs font-bold text-indigo-600">{record.submitter}</td>
+                                                                            <td className="px-6 py-4">
+                                                                                <div className="flex justify-center">
+                                                                                    {record.photo ? (
+                                                                                        <div 
+                                                                                            className="w-10 h-10 rounded-xl overflow-hidden border border-gray-100 dark:border-gray-700 cursor-pointer hover:scale-110 transition-transform shadow-sm"
+                                                                                            onClick={() => setPreviewImage(record.photo)}
+                                                                                        >
+                                                                                            <img src={record.photo} alt="" className="w-full h-full object-cover" />
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <span className="text-gray-300 text-[10px]">None</span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-6 py-4 text-right">
+                                                                                <div className="flex flex-col items-end gap-1.5">
+                                                                                    {uploadedLetter ? (
+                                                                                        <div className="flex items-center gap-1">
+                                                                                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase rounded-md flex items-center gap-1">
+                                                                                                <CheckCircle2 size={10} /> Hard Copy Received
+                                                                                            </span>
+                                                                                            {uploadedLetter.fileUrl && uploadedLetter.fileUrl !== '#' && (
+                                                                                                <button
+                                                                                                    onClick={() => setPreviewDocUrl(uploadedLetter.fileUrl)}
+                                                                                                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[9px] font-black uppercase tracking-wider"
+                                                                                                >
+                                                                                                    View Scan
+                                                                                                </button>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <span className="text-[9px] font-bold text-amber-600 uppercase">Hard Copy Pending</span>
+                                                                                    )}
+                                                                                    {record.status === 'Completed' && (
+                                                                                        <div className="flex items-center gap-1.5">
+                                                                                            <button
+                                                                                                onClick={() => openAckLetter(record)}
+                                                                                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
+                                                                                                title="View Generated Telugu Acknowledgement Letter"
+                                                                                            >
+                                                                                                <Eye size={11} /> Letter PDF
+                                                                                            </button>
+                                                                                            <button
+                                                                                                onClick={() => downloadAckLetterDirect(record)}
+                                                                                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer shadow-xs transition-colors"
+                                                                                                title="Download Official A4 Letterhead PDF"
+                                                                                            >
+                                                                                                <Download size={11} /> PDF
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
                                                             </tbody>
                                                         </table>
                                                     </div>
@@ -1485,7 +2010,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             {/* TAB 3: GENERATED ACKNOWLEDGEMENTS VIEW */}
             {activeTab === "letters" && (
                 <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-6">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
                             <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">
                                 Generated Acknowledgement Records
@@ -1494,14 +2019,158 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 Official Telugu letters generated with Google Docs letterhead
                             </p>
                         </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {selectedLettersIds.size > 0 ? (
+                                <>
+                                    <button
+                                        onClick={() => {
+                                            const selectedItems = eligibleBeneficiaries
+                                                .filter(b => selectedLettersIds.has(b.id || b.farmerId))
+                                                .map(b => ({
+                                                    acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(b.farmerId || b.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                    beneficiary_name: b.beneficiaryName,
+                                                    beneficiary_id: b.farmerId || b.hhId,
+                                                    farmerId: b.farmerId,
+                                                    hhId: b.hhId,
+                                                    village: b.village,
+                                                    gp: b.gp,
+                                                    cluster: b.cluster,
+                                                    activity_name: b.activity,
+                                                    created_at: b.benefitDate || new Date().toISOString()
+                                                }));
+                                            handleBatchDownload(selectedItems, 'combined');
+                                        }}
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+                                        title="Download all selected letters in one multi-page PDF"
+                                    >
+                                        <Download size={13} /> Combined PDF ({selectedLettersIds.size})
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const selectedItems = eligibleBeneficiaries
+                                                .filter(b => selectedLettersIds.has(b.id || b.farmerId))
+                                                .map(b => ({
+                                                    acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(b.farmerId || b.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                    beneficiary_name: b.beneficiaryName,
+                                                    beneficiary_id: b.farmerId || b.hhId,
+                                                    farmerId: b.farmerId,
+                                                    hhId: b.hhId,
+                                                    village: b.village,
+                                                    gp: b.gp,
+                                                    cluster: b.cluster,
+                                                    activity_name: b.activity,
+                                                    created_at: b.benefitDate || new Date().toISOString()
+                                                }));
+                                            handleBatchDownload(selectedItems, 'zip');
+                                        }}
+                                        className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+                                        title="Download all selected letters as individual PDFs in a ZIP archive"
+                                    >
+                                        <Archive size={13} /> ZIP ({selectedLettersIds.size})
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const selectedItems = eligibleBeneficiaries
+                                                .filter(b => selectedLettersIds.has(b.id || b.farmerId))
+                                                .map(b => ({
+                                                    acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(b.farmerId || b.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                    beneficiary_name: b.beneficiaryName,
+                                                    beneficiary_id: b.farmerId || b.hhId,
+                                                    farmerId: b.farmerId,
+                                                    hhId: b.hhId,
+                                                    village: b.village,
+                                                    gp: b.gp,
+                                                    cluster: b.cluster,
+                                                    activity_name: b.activity,
+                                                    created_at: b.benefitDate || new Date().toISOString()
+                                                }));
+                                            handleBatchDownload(selectedItems, 'print');
+                                        }}
+                                        className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-1.5"
+                                        title="Print all selected letters"
+                                    >
+                                        <Printer size={13} /> Print ({selectedLettersIds.size})
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedLettersIds(new Set())}
+                                        className="px-3 py-2 text-xs font-bold text-gray-400 hover:text-red-500 uppercase transition-colors"
+                                    >
+                                        Clear
+                                    </button>
+                                </>
+                            ) : eligibleBeneficiaries.length > 0 ? (
+                                <>
+                                    <button
+                                        onClick={() => {
+                                            const allItems = eligibleBeneficiaries.map(b => ({
+                                                acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(b.farmerId || b.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                beneficiary_name: b.beneficiaryName,
+                                                beneficiary_id: b.farmerId || b.hhId,
+                                                farmerId: b.farmerId,
+                                                hhId: b.hhId,
+                                                village: b.village,
+                                                gp: b.gp,
+                                                cluster: b.cluster,
+                                                activity_name: b.activity,
+                                                created_at: b.benefitDate || new Date().toISOString()
+                                            }));
+                                            handleBatchDownload(allItems, 'combined');
+                                        }}
+                                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+                                        title="Download all letters in one multi-page PDF"
+                                    >
+                                        <Download size={13} /> Download All ({eligibleBeneficiaries.length}) Combined PDF
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const allItems = eligibleBeneficiaries.map(b => ({
+                                                acknowledgement_number: `P1198-BHM-2026-${Math.abs(String(b.farmerId || b.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`,
+                                                beneficiary_name: b.beneficiaryName,
+                                                beneficiary_id: b.farmerId || b.hhId,
+                                                farmerId: b.farmerId,
+                                                hhId: b.hhId,
+                                                village: b.village,
+                                                gp: b.gp,
+                                                cluster: b.cluster,
+                                                activity_name: b.activity,
+                                                created_at: b.benefitDate || new Date().toISOString()
+                                            }));
+                                            handleBatchDownload(allItems, 'zip');
+                                        }}
+                                        className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+                                        title="Download all letters as a ZIP archive"
+                                    >
+                                        <Archive size={13} /> Download All ZIP
+                                    </button>
+                                    <span className="px-3 py-2 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-wider">
+                                        Total: {eligibleBeneficiaries.length}
+                                    </span>
+                                </>
+                            ) : null}
+                        </div>
                     </div>
 
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-gray-100 dark:border-gray-700 text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                                    <th className="py-4 px-4 w-10">
+                                        <input 
+                                            type="checkbox"
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedLettersIds(new Set(eligibleBeneficiaries.map(b => b.id || b.farmerId)));
+                                                } else {
+                                                    setSelectedLettersIds(new Set());
+                                                }
+                                            }}
+                                            checked={selectedLettersIds.size === eligibleBeneficiaries.length && eligibleBeneficiaries.length > 0}
+                                            className="rounded border-gray-300"
+                                        />
+                                    </th>
                                     <th className="py-4 px-6">Beneficiary Name</th>
                                     <th className="py-4 px-6">Beneficiary ID</th>
+                                    <th className="py-4 px-6">Linked UUID</th>
                                     <th className="py-4 px-6">Activity</th>
                                     <th className="py-4 px-6">Village / GP</th>
                                     <th className="py-4 px-6">Generated Letter</th>
@@ -1509,29 +2178,57 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800 text-xs font-medium">
-                                {eligibleBeneficiaries.slice(0, 15).map(item => (
-                                    <tr key={item.id || item.farmerId} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30 transition-colors">
-                                        <td className="py-4 px-6 font-bold text-gray-900 dark:text-white">{item.beneficiaryName || "Beneficiary"}</td>
-                                        <td className="py-4 px-6 font-mono text-gray-500">{item.farmerId || item.hhId}</td>
-                                        <td className="py-4 px-6">
-                                            <span className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 rounded-lg text-[10px] font-black uppercase">
-                                                {item.activity}
-                                            </span>
-                                        </td>
-                                        <td className="py-4 px-6 text-gray-500">{item.village} ({item.gp})</td>
-                                        <td className="py-4 px-6 font-mono font-bold text-indigo-600">
-                                            P1198-BHM-2026-{Math.abs((item.farmerId || item.hhId || "0").split("").reduce((a,b)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,6)}
-                                        </td>
-                                        <td className="py-4 px-6 text-right">
-                                            <button
-                                                onClick={() => openAckLetter(item)}
-                                                className="px-4 py-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1.5 ml-auto"
-                                            >
-                                                <Printer size={13} /> View Telugu Letter
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {eligibleBeneficiaries.map(item => {
+                                    const key = item.id || item.farmerId;
+                                    const isSelected = selectedLettersIds.has(key);
+                                    return (
+                                        <tr key={key} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30 transition-colors">
+                                            <td className="py-4 px-4">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={() => {
+                                                        const next = new Set(selectedLettersIds);
+                                                        if (next.has(key)) next.delete(key);
+                                                        else next.add(key);
+                                                        setSelectedLettersIds(next);
+                                                    }}
+                                                    className="rounded border-gray-300"
+                                                />
+                                            </td>
+                                            <td className="py-4 px-6 font-bold text-gray-900 dark:text-white">{item.beneficiaryName || "Beneficiary"}</td>
+                                            <td className="py-4 px-6 font-mono text-gray-500">{item.farmerId || item.hhId}</td>
+                                            <td className="py-4 px-6 font-mono text-[11px] text-gray-400 max-w-[140px] truncate" title={item.id}>{item.id || item.farmerId}</td>
+                                            <td className="py-4 px-6">
+                                                <span className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 rounded-lg text-[10px] font-black uppercase">
+                                                    {item.activity}
+                                                </span>
+                                            </td>
+                                            <td className="py-4 px-6 text-gray-500">{item.village} ({item.gp})</td>
+                                            <td className="py-4 px-6 font-mono font-bold text-indigo-600">
+                                                P1198-BHM-2026-{Math.abs((item.farmerId || item.hhId || "0").split("").reduce((a,b)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,6)}
+                                            </td>
+                                            <td className="py-4 px-6 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => openAckLetter(item)}
+                                                        className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1.5"
+                                                        title="View Telugu Letter Preview"
+                                                    >
+                                                        <Eye size={13} /> View Letter
+                                                    </button>
+                                                    <button
+                                                        onClick={() => downloadAckLetterDirect(item)}
+                                                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1.5 shadow-sm"
+                                                        title="Direct Download Official PDF"
+                                                    >
+                                                        <Download size={13} /> Download PDF
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -1577,9 +2274,59 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 )}
                             </div>
                         </div>
-                        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-                            <button onClick={() => { setAckLetterData(selectedProfile); setSelectedProfile(null); }} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase hover:bg-indigo-700 transition-colors flex items-center gap-2">
-                                <Printer size={14} /> Generate Acknowledgement
+
+                        {/* Signed Letter Hard Copy Status from Upload Letters Spreadsheet */}
+                        <div className="space-y-3">
+                            <h4 className="text-xs font-black uppercase text-gray-400 tracking-widest">Signed Hard Copy Acknowledgement</h4>
+                            {uploadedLettersMap.has((selectedProfile.id || '').toLowerCase().trim()) ? (
+                                (() => {
+                                    const letterRec = uploadedLettersMap.get((selectedProfile.id || '').toLowerCase().trim());
+                                    return (
+                                        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/50 rounded-2xl border border-emerald-200 dark:border-emerald-800 space-y-2">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Hard Copy Received & Uploaded
+                                                </span>
+                                                <span className="text-[10px] text-gray-500 font-mono">
+                                                    {new Date(letterRec.timestamp || Date.now()).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-gray-600 dark:text-gray-400">
+                                                Uploaded by: <strong className="text-gray-800 dark:text-white">{letterRec.uploadedBy || 'Admin/DA'}</strong>
+                                            </p>
+                                            {letterRec.fileUrl && letterRec.fileUrl !== '#' && (
+                                                <button 
+                                                    onClick={() => setPreviewDocUrl(letterRec.fileUrl)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-colors mt-1 cursor-pointer border-none"
+                                                >
+                                                    <FileText className="w-3.5 h-3.5" /> View Signed Letter Scan
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })()
+                            ) : (
+                                <div className="p-4 bg-amber-50 dark:bg-amber-950/50 rounded-2xl border border-amber-200 dark:border-amber-800 flex items-center justify-between text-xs">
+                                    <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                                        <AlertCircle className="w-4 h-4 text-amber-600" /> Hard Copy Not Yet Uploaded
+                                    </span>
+                                    <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">Pending return from field staff</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex flex-wrap justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                            <button 
+                                onClick={() => { openAckLetter(selectedProfile); setSelectedProfile(null); }} 
+                                className="px-4 py-2.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 rounded-xl text-xs font-bold uppercase hover:bg-indigo-100 transition-colors flex items-center gap-2"
+                            >
+                                <Eye size={14} /> View Generated Letter
+                            </button>
+                            <button 
+                                onClick={() => { downloadAckLetterDirect(selectedProfile); setSelectedProfile(null); }} 
+                                className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm"
+                            >
+                                <Download size={14} /> Download Letter (PDF)
                             </button>
                             <button onClick={() => setSelectedProfile(null)} className="px-5 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold uppercase">Close</button>
                         </div>
@@ -1699,8 +2446,19 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 <span className="text-xs font-black uppercase tracking-wider text-gray-700">Official Telugu Letterhead Preview</span>
                             </div>
                             <div className="flex items-center gap-3">
-                                <button onClick={() => printA4Letter("activity-status-ack-sheet")} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-indigo-700 shadow-md">
-                                    <Printer size={14} /> Print / Download PDF
+                                <button 
+                                    onClick={handleDownloadCurrentModalPdf} 
+                                    disabled={isDownloadingPdf}
+                                    className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-indigo-700 shadow-md disabled:opacity-50"
+                                >
+                                    <Download size={14} className={isDownloadingPdf ? "animate-bounce" : ""} /> 
+                                    {isDownloadingPdf ? "Generating PDF..." : "Download PDF"}
+                                </button>
+                                <button 
+                                    onClick={() => printA4Letter("activity-status-ack-sheet")} 
+                                    className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold uppercase flex items-center gap-2 shadow-sm"
+                                >
+                                    <Printer size={14} /> Print Letter
                                 </button>
                                 <button onClick={() => setAckLetterData(null)} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:text-gray-900"><X size={18} /></button>
                             </div>
@@ -1745,7 +2503,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.beneficiaryAdhaar || (ackLetterData.beneficiaryId !== ackLetterData.farmerId ? ackLetterData.beneficiaryId : "-") || "-"}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గ్రామం / పంచాయతీ (Village/GP):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.village} / {ackLetterData.gp}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>క్లస్టర్ (Cluster):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.cluster}</span></div>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>కార్యాచరణ (Activity Name):</span> <span style={{ fontWeight: 900, color: "#312e81", marginLeft: "4px" }}>{ackLetterData.activity || NS}</span></div>
+                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>కార్యాచరణ (Activity Name):</span> <span style={{ fontWeight: 900, color: "#312e81", marginLeft: "4px" }}>{ackLetterData.activity || "NS"}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>పూర్తయిన తేదీ (Completion Date):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.benefitDate ? new Date(ackLetterData.benefitDate).toLocaleDateString() : new Date().toLocaleDateString()}</span></div>
                                 </div>
 
@@ -1775,9 +2533,6 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                                             <td style={{ border: "1px solid #9ca3af", padding: rowPad, textAlign: "center", fontWeight: "bold", color: "#374151" }}>{idx + 1}</td>
                                                             <td style={{ border: "1px solid #9ca3af", padding: rowPad }}>
                                                                 <span style={{ fontWeight: "bold", color: "#111827", display: "block" }}>{display.title}</span>
-                                                                {display.subtitle && display.subtitle !== display.title && (
-                                                                    <span style={{ fontSize: "9px", color: "#6b7280", display: "block", marginTop: "1px" }}>{display.subtitle}</span>
-                                                                )}
                                                             </td>
                                                             <td style={{ border: "1px solid #9ca3af", padding: rowPad, textAlign: "center", fontWeight: "bold", color: "#111827" }}>{mat.count || 1}</td>
                                                             <td style={{ border: "1px solid #9ca3af", padding: rowPad, textAlign: "center", color: "#374151", fontWeight: 500 }}>{mat.unit || "Unit"}</td>
@@ -1870,6 +2625,109 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                             <X className="w-5 h-5" />
                         </button>
                         <img src={previewImage} alt="Preview" className="max-w-full max-h-[85vh] object-contain rounded-2xl mx-auto" />
+                    </div>
+                </div>
+            )}
+            {/* In-App Document Preview Modal */}
+            {previewDocUrl && (
+                <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" onClick={() => setPreviewDocUrl(null)}>
+                    <div className="bg-white dark:bg-gray-900 rounded-3xl p-6 max-w-4xl w-full h-[85vh] flex flex-col shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center pb-4 border-b border-gray-100 dark:border-gray-800">
+                            <div className="flex items-center gap-2">
+                                <FileText className="text-indigo-600" size={20} />
+                                <h3 className="text-sm font-black uppercase tracking-tight text-gray-900 dark:text-white">In-App Document & Letter Preview</h3>
+                            </div>
+                            <button onClick={() => setPreviewDocUrl(null)} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500 hover:text-gray-900 transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="flex-1 w-full bg-gray-50 dark:bg-gray-950 rounded-2xl overflow-hidden mt-4 border border-gray-200 dark:border-gray-800 flex items-center justify-center">
+                            {previewDocUrl.match(/\.(jpeg|jpg|png|gif|webp)$/i) || previewDocUrl.startsWith('data:image/') ? (
+                                <img src={previewDocUrl} alt="Preview" className="max-w-full max-h-full object-contain" />
+                            ) : (
+                                <iframe 
+                                    src={(() => {
+                                        const url = previewDocUrl;
+                                        if (url.includes('/preview') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+                                        const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+                                        if (fileMatch && fileMatch[1]) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+                                        const docMatch = url.match(/\/(document|spreadsheets|presentation)\/d\/([a-zA-Z0-9_-]+)/);
+                                        if (docMatch && docMatch[2]) return `https://docs.google.com/${docMatch[1]}/d/${docMatch[2]}/preview`;
+                                        const openMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                                        if (openMatch && openMatch[1]) return `https://drive.google.com/file/d/${openMatch[1]}/preview`;
+                                        return url;
+                                    })()} 
+                                    title="Document Preview" 
+                                    className="w-full h-full border-none" 
+                                />
+                            )}
+                        </div>
+                        <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-gray-800">
+                            <button onClick={() => setPreviewDocUrl(null)} className="px-6 py-2.5 bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-white rounded-xl text-xs font-bold uppercase hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors">
+                                Close Preview
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Hidden Batch Render Staging Container */}
+            {batchStagingItems.length > 0 && (
+                <div 
+                    id="activity-batch-render-container"
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: '-9999px',
+                        width: '794px',
+                        zIndex: -9999,
+                        background: '#ffffff',
+                        pointerEvents: 'none'
+                    }}
+                >
+                    {batchStagingItems.map((item, idx) => (
+                        <AcknowledgementLetterSheet
+                            key={idx}
+                            id={`activity-batch-sheet-${idx}`}
+                            item={item}
+                            materials={item.materials}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {/* Batch Generation Progress Modal */}
+            {batchProgress && (
+                <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+                    <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-800 text-center space-y-6">
+                        <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/60 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 animate-bounce">
+                            <FileText className="w-8 h-8" />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                                Generating A4 Acknowledgement Letters
+                            </h3>
+                            <p className="text-xs text-gray-500 font-medium mt-1">
+                                {batchProgress.statusText}
+                            </p>
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-xs font-bold text-gray-400">
+                                <span>Progress</span>
+                                <span className="tabular-nums font-mono text-indigo-600 font-black">
+                                    {batchProgress.current} / {batchProgress.total}
+                                </span>
+                            </div>
+                            <div className="w-full bg-gray-100 dark:bg-gray-800 h-3 rounded-full overflow-hidden">
+                                <div 
+                                    className="bg-indigo-600 h-full rounded-full transition-all duration-300"
+                                    style={{ width: `${(batchProgress.current / Math.max(1, batchProgress.total)) * 100}%` }}
+                                />
+                            </div>
+                        </div>
+                        <p className="text-[11px] text-gray-400 font-medium">
+                            Compiling sharp official letters in A4 print layout with Telugu content and letterhead. Please do not close this window.
+                        </p>
                     </div>
                 </div>
             )}

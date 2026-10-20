@@ -25,15 +25,16 @@ import DashboardsPortal from './components/DashboardsPortal';
 import AutoInstallBanner from './components/AutoInstallBanner';
 import MarkStaffAttendance from './components/MarkStaffAttendance';
 import AttendanceMonitoring from './components/AttendanceMonitoring';
+import UploadLettersDashboard from './components/UploadLettersDashboard';
 import { APP_VERSION } from './config';
 import { ArrowLeft } from 'lucide-react';
 
-type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution' | 'odk-dashboard' | 'staff-attendance' | 'attendance-monitoring' | 'capacity-building' | 'institution-dashboard' | 'activity-status' | 'beneficiary-acknowledgement';
+type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution' | 'odk-dashboard' | 'staff-attendance' | 'attendance-monitoring' | 'capacity-building' | 'institution-dashboard' | 'activity-status' | 'beneficiary-acknowledgement' | 'upload-letters';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>(() => {
         const hash = window.location.hash.replace('#', '') as Page;
-        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'activity-status', 'beneficiary-acknowledgement'];
+        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'activity-status', 'beneficiary-acknowledgement', 'upload-letters'];
         return validPages.includes(hash) ? hash : 'home';
     });
     const { user, logout } = useAuth();
@@ -43,7 +44,7 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         const handleHashChange = () => {
             const hash = window.location.hash.replace('#', '') as Page;
-            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'activity-status', 'beneficiary-acknowledgement'];
+            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'activity-status', 'beneficiary-acknowledgement', 'upload-letters'];
             if (validPages.includes(hash)) {
                 setPage(hash);
             }
@@ -88,7 +89,7 @@ const AppContent: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const protectedPages: Page[] = ['attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard'];
+        const protectedPages: Page[] = ['attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'upload-letters'];
         
         // Handle unauthenticated access to protected pages
         if (!user && protectedPages.includes(page)) {
@@ -105,25 +106,19 @@ const AppContent: React.FC = () => {
             const isProject = user.role === 'project';
             const isDA = user.role === 'da';
             const isTL = user.role === 'tl';
+            const isAdmin = user.role === 'admin';
 
-            if (isField) {
-                // Field staff: Allow Gallery, Attendance, Reports, MIS, Baseline, Contribution
-                const restrictedPages: Page[] = ['budget-tracker', 'admin', 'beneficiary-explorer', 'asset-tracking', 'staff-attendance', 'attendance-monitoring'];
-                if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
-            } else if (isProject) {
-                // Project staff: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution, Staff Attendance
-                const restrictedPages: Page[] = ['mark-attendance', 'attendance-report', 'admin', 'attendance-monitoring'];
-                if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
-            } else if (isDA) {
-                // DA: Allow Gallery, Dashboards, Budget, MIS, Baseline, Contribution, Admin
-                const restrictedPages: Page[] = ['staff-attendance', 'attendance-monitoring'];
-                if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
-            } else if (isTL) {
-                // TL: Monitoring and basic dashboards
-                const restrictedPages: Page[] = ['admin', 'staff-attendance'];
-                if (restrictedPages.includes(page)) setTimeout(() => setPage('home'), 0);
+            // Only DA and Admin can access Upload Letters and Beneficiary Acknowledgement
+            if ((page === 'upload-letters' || page === 'beneficiary-acknowledgement') && !isAdmin && !isDA) {
+                setTimeout(() => setPage('home'), 0);
+                return;
             }
-            // Admin has no restrictions
+
+            // Only Admin can access Admin console
+            if (page === 'admin' && !isAdmin) {
+                setTimeout(() => setPage('home'), 0);
+                return;
+            }
         }
     }, [user, page]);
 
@@ -205,7 +200,20 @@ const AppContent: React.FC = () => {
                         <InstitutionDashboard />
                     </div>
                 );
-            case 'activity-status', 'beneficiary-acknowledgement':
+            case 'beneficiary-acknowledgement':
+                return (
+                    <div className="space-y-6">
+                        <button 
+                            onClick={() => handleNavigate('dashboards')}
+                            className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors group"
+                        >
+                            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                            Back to Dashboards
+                        </button>
+                        <BeneficiaryAcknowledgementPortal />
+                    </div>
+                );
+            case 'activity-status':
                 return (
                     <div className="space-y-6">
                         <button 
@@ -218,6 +226,8 @@ const AppContent: React.FC = () => {
                         <ActivityStatusDashboard onBack={() => handleNavigate('dashboards')} />
                     </div>
                 );
+            case 'upload-letters':
+                return <UploadLettersDashboard onBack={() => handleNavigate('dashboards')} />;
             case 'login':
                 return <LoginPage onLoginSuccess={handleLoginSuccess} />;
             default:

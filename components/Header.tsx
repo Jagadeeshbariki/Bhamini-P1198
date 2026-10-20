@@ -63,14 +63,9 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
 
     const navLinkProps = { currentPage, onNavigate, setIsMenuOpen };
 
-    // Permission Logic based on User Roles
-    const isFieldRole = user?.role === 'field' || user?.role === 'admin' || user?.role === 'da';
-    const isProjectRole = user?.role === 'project' || user?.role === 'admin' || user?.role === 'da';
-    const canAccessAdmin = user?.role === 'admin';
-    const isStaffMarkingRole = user?.role === 'project' || user?.role === 'admin';
-    const isTLOnlyRole = user?.role === 'tl';
-    const isTLOrAdmin = user?.role === 'tl' || user?.role === 'admin';
-    const hasAnyDashboardAccess = user && (user.role === 'admin' || user.role === 'da' || user.role === 'project' || user.role === 'field');
+    // User Role Permission Logic
+    const role = user?.role?.toLowerCase()?.trim() || '';
+    const canAccessAdmin = role === 'admin';
 
     return (
         <header className={`bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 fixed w-full top-0 z-50 transition-transform duration-300 ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
@@ -100,36 +95,15 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                     <NavLink {...navLinkProps} page="baseline">Baseline Explorer</NavLink>
                                     <NavLink {...navLinkProps} page="contribution">Contributions</NavLink>
                                     <NavLink {...navLinkProps} page="field-mis" primary>Target vs Achievements</NavLink>
-                                </>
-                            )}
-
-                            {hasAnyDashboardAccess && !isTLOnlyRole && (
-                                <>
+                                    <NavLink {...navLinkProps} page="budget-tracker">Budget Tracker</NavLink>
+                                    <NavLink {...navLinkProps} page="mark-attendance">Mark Attendance</NavLink>
+                                    <NavLink {...navLinkProps} page="attendance-report">Attendance Report</NavLink>
+                                    <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
+                                    <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
                                     <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
-                                    <NavLink {...navLinkProps} page="beneficiary-acknowledgement">Acknowledgements</NavLink>
                                 </>
                             )}
 
-                            {isProjectRole && (
-                                <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>
-                            )}
-
-                            {isFieldRole && (
-                                <>
-                                    <NavLink {...navLinkProps} page="mark-attendance">Log Work</NavLink>
-                                    <NavLink {...navLinkProps} page="attendance-report">My Reports</NavLink>
-                                </>
-                            )}
-
-                            {isStaffMarkingRole && (
-                                <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
-                            )}
-
-                            {isTLOrAdmin && (
-                                <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
-                            )}
-
-                            {canAccessAdmin && <NavLink {...navLinkProps} page="odk-dashboard">Data Submission Hub</NavLink>}
                             {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Panel</NavLink>}
                             
                             <div className="h-6 w-px bg-gray-100 dark:bg-gray-800 mx-2"></div>
@@ -167,7 +141,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
 
             {/* Mobile Menu */}
             {isMenuOpen && (
-                <div className="lg:hidden bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 animate-fade-in overflow-hidden">
+                <div className="lg:hidden bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 animate-fade-in overflow-hidden max-h-[80vh] overflow-y-auto">
                     <div className="px-4 py-6 flex flex-col gap-2">
                         <NavLink {...navLinkProps} page="home">Gallery</NavLink>
                         {user && (
@@ -175,31 +149,17 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 <NavLink {...navLinkProps} page="baseline">Baseline Explorer</NavLink>
                                 <NavLink {...navLinkProps} page="contribution">Contributions</NavLink>
                                 <NavLink {...navLinkProps} page="field-mis" primary>Target vs Achievements</NavLink>
+                                <NavLink {...navLinkProps} page="budget-tracker">Budget Tracker</NavLink>
+                                <NavLink {...navLinkProps} page="mark-attendance">Mark Attendance</NavLink>
+                                <NavLink {...navLinkProps} page="attendance-report">Attendance Report</NavLink>
+                                <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
+                                <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
+                                <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
+
                             </>
                         )}
-                        {hasAnyDashboardAccess && !isTLOnlyRole && (
-                            <>
-                              <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
-                              <NavLink {...navLinkProps} page="beneficiary-acknowledgement">Acknowledgements</NavLink>
-                            </>
-                        )}
-                        {isProjectRole && (
-                            <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>
-                        )}
-                        {isFieldRole && (
-                            <>
-                                <NavLink {...navLinkProps} page="mark-attendance">Log Work</NavLink>
-                                <NavLink {...navLinkProps} page="attendance-report">Monthly Reports</NavLink>
-                            </>
-                        )}
-                        {isStaffMarkingRole && (
-                            <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
-                        )}
-                        {isTLOrAdmin && (
-                            <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
-                        )}
-                        {canAccessAdmin && <NavLink {...navLinkProps} page="odk-dashboard">Data Submission Hub</NavLink>}
-                        {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Console</NavLink>}
+                        
+                        {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Panel</NavLink>}
                         {user ? (
                             <button
                                 onClick={() => { onLogout(); setIsMenuOpen(false); }}

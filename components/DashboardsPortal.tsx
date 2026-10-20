@@ -3,7 +3,7 @@ import React from 'react';
 import { 
     LayoutDashboard, Users, Database, Package, 
     ChevronRight, Info, TrendingUp,
-    Activity, Globe, Search, Filter, Landmark, CheckCircle2, FileText
+    Activity, Globe, Search, Filter, Landmark, CheckCircle2, FileText, Upload
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -13,9 +13,22 @@ interface DashboardsPortalProps {
 
 const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
     const { user } = useAuth();
-    const isProjectRole = user?.role === 'admin' || user?.role === 'da' || user?.role === 'project';
+    const role = user?.role?.toLowerCase()?.trim() || '';
+    const isAdminOrProject = role === 'admin' || role === 'project';
+    const isProjectRole = role === 'admin' || role === 'da' || role === 'project';
 
     const dashboards = [
+        {
+            id: 'upload-letters' as const,
+            title: 'Upload Letters',
+            description: 'Upload signed acknowledgement letters returned from field staff, track signed document submissions across villages and activities.',
+            icon: Upload,
+            color: 'bg-emerald-600',
+            lightColor: 'bg-emerald-50',
+            textColor: 'text-emerald-600',
+            borderColor: 'border-emerald-100',
+            allowed: isAdminOrProject
+        },
         {
             id: 'beneficiary-acknowledgement' as const,
             title: 'Beneficiary Acknowledgement',
@@ -25,7 +38,7 @@ const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
             lightColor: 'bg-purple-50',
             textColor: 'text-purple-600',
             borderColor: 'border-purple-100',
-            allowed: true
+            allowed: isAdminOrProject
         },
         {
             id: 'activity-status' as const,
@@ -36,7 +49,7 @@ const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
             lightColor: 'bg-emerald-50',
             textColor: 'text-emerald-600',
             borderColor: 'border-emerald-100',
-            allowed: true
+            allowed: isAdminOrProject
         },
         {
             id: 'activity-dashboards' as const,

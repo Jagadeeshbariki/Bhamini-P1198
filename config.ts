@@ -69,6 +69,9 @@ export const VILLAGES_DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX
 export const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxe1GMW0s18iwtZsvmLjg5Hlf_AuIOVESDx7tqWI3wyUk7dyo5vxx1kDjgmWlFbQNn97w/exec';
 export const ACQUITTANCE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2s0HDWZdwIqvT7UtsCm491PZ3Gqs6aZkRczItIdNsnAUOTPoFAEB0Ylxps-02YAfYbw/exec';
 export const CAPACITY_BUILDING_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwKioQzihe2t2zoyp48VXZ4_YYPXxMfrhjN63ZfoBufzDfkER0zAQaVdvlelfdXagqI4Q/exec'; // REPLACE WITH YOUR DEPLOYED DOCUMENT_UPLOAD_SCRIPT URL
+export const UPLOAD_LETTERS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRuivTRI8pD5VM6Jm1TrPS_HF_v7npP8t9Vpdiw-lv-gwYTpFrWAnMtbg1yZERPzwhpA/exec';
+// 19. ACKNOWLEDGEMENT ID & UUID MAPPING ENDPOINT (Dedicated script on same tracking sheet)
+export const ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRuivTRI8pD5VM6Jm1TrPS_HF_v7npP8t9Vpdiw-lv-gwYTpFrWAnMtbg1yZERPzwhpA/exec';
 
 export const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200';
 

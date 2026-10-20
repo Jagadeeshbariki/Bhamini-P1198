@@ -1076,16 +1076,35 @@ export async function createApp() {
   const memoryAcknowledgements: any[] = [];
   let ackCounter = 1001;
 
+  // Dedicated Acknowledgement ID & UUID Mapping in-memory store
+  const memoryAckMappings: any[] = [];
+  const DEFAULT_ACK_MAPPING_URL = 'https://script.google.com/macros/s/AKfycbzRuivTRI8pD5VM6Jm1TrPS_HF_v7npP8t9Vpdiw-lv-gwYTpFrWAnMtbg1yZERPzwhpA/exec';
+
+  const syncMappingToGoogleSheet = (records: any[]) => {
+    const gasUrl = process.env.ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL || process.env.UPLOAD_LETTERS_SCRIPT_URL || DEFAULT_ACK_MAPPING_URL;
+    if (gasUrl && gasUrl.startsWith('http') && records && records.length > 0) {
+      try {
+        fetch(gasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: records })
+        }).catch(e => console.warn('GAS mapping sync background notice:', e.message));
+      } catch (err: any) {
+        console.warn('Sync to GAS mapping error:', err.message);
+      }
+    }
+  };
+
   app.get('/api/acknowledgements/list', (req, res) => {
       res.json({ success: true, acknowledgements: memoryAcknowledgements });
   });
 
   app.post('/api/acknowledgements/generate', (req, res) => {
-      const { activityUuid, beneficiaryId, activityName, beneficiaryName, cluster, gp, village, remarks } = req.body;
-      if (!activityUuid || !beneficiaryId) {
-          return res.status(400).json({ error: 'Missing activityUuid or beneficiaryId' });
+      const { activityStatusUuid, beneficiaryId, activityName, beneficiaryName, cluster, gp, village, remarks } = req.body;
+      if (!activityStatusUuid || !beneficiaryId) {
+          return res.status(400).json({ error: 'Missing activityStatusUuid or beneficiaryId' });
       }
-      const existing = memoryAcknowledgements.find(a => a.activity_uuid === activityUuid && a.beneficiary_id === beneficiaryId);
+      const existing = memoryAcknowledgements.find(a => a.activity_status_UUID === activityStatusUuid && a.beneficiary_id === beneficiaryId);
       if (existing) {
           return res.json({ success: true, acknowledgement: existing, message: 'Acknowledgement already exists' });
       }
@@ -1094,7 +1113,7 @@ export async function createApp() {
       const newRecord = {
           id: 'ack_' + Math.random().toString(36).substring(2, 11),
           acknowledgement_number: ackNum,
-          activity_uuid: activityUuid,
+          activity_status_UUID: activityStatusUuid,
           beneficiary_id: beneficiaryId,
           activity_name: activityName || 'NS',
           beneficiary_name: beneficiaryName || 'Beneficiary',
@@ -1114,6 +1133,29 @@ export async function createApp() {
       };
 
       memoryAcknowledgements.unshift(newRecord);
+
+      // Auto-record and sync Acknowledgement ID <-> UUID mapping
+      const mappingItem = {
+          timestamp: new Date().toISOString(),
+          uuid: activityStatusUuid,
+          acknowledgementId: ackNum,
+          beneficiaryId: beneficiaryId,
+          beneficiaryName: beneficiaryName || 'Beneficiary',
+          activityName: activityName || 'NS',
+          cluster: cluster || 'Cluster 1',
+          gp: gp || 'GP',
+          village: village || 'Village',
+          generatedBy: 'System',
+          remarks: 'Generated Letter'
+      };
+      const existingMapIdx = memoryAckMappings.findIndex(m => m.uuid === activityStatusUuid || m.acknowledgementId === ackNum);
+      if (existingMapIdx >= 0) {
+          memoryAckMappings[existingMapIdx] = { ...memoryAckMappings[existingMapIdx], ...mappingItem };
+      } else {
+          memoryAckMappings.unshift(mappingItem);
+      }
+      syncMappingToGoogleSheet([mappingItem]);
+
       res.json({ success: true, acknowledgement: newRecord });
   });
 
@@ -1129,6 +1171,71 @@ export async function createApp() {
       if (remarks) record.remarks = remarks;
       record.updated_at = new Date().toISOString();
       res.json({ success: true, acknowledgement: record });
+  });
+
+  const memoryBeneficiaryDocuments: any[] = [];
+  app.get('/api/beneficiary-documents/list', (req, res) => {
+      res.json({ success: true, documents: memoryBeneficiaryDocuments });
+  });
+  app.post('/api/beneficiary-documents/upload', (req, res) => {
+      const { beneficiaryId, beneficiaryName, block, cluster, gp, village, activity, fileBase64, fileName, fileSize, receivedBy, remarks } = req.body;
+      if (!beneficiaryId || !fileBase64) {
+          return res.status(400).json({ error: 'Missing beneficiaryId or fileData' });
+      }
+      if (fileSize && fileSize > 5 * 1024 * 1024) {
+          return res.status(400).json({ error: 'File size exceeds 5MB limit' });
+      }
+      const record = {
+          id: 'doc_' + Math.random().toString(36).substring(2, 11),
+          beneficiaryId,
+          beneficiaryName: beneficiaryName || 'Beneficiary',
+          block: block || 'Block 1',
+          cluster: cluster || 'Cluster 1',
+          gp: gp || 'GP',
+          village: village || 'Village',
+          activity: activity || 'NS',
+          fileName: fileName || 'document.pdf',
+          fileSize: fileSize || 0,
+          fileUrl: fileBase64,
+          receivedBy: receivedBy || 'Data Assistant',
+          remarks: remarks || 'Uploaded by DA',
+          timestamp: new Date().toISOString()
+      };
+      memoryBeneficiaryDocuments.unshift(record);
+
+      const existingAck = memoryAcknowledgements.find(a => a.beneficiary_id === beneficiaryId);
+      if (existingAck) {
+          existingAck.hard_copy_status = 'RECEIVED';
+          existingAck.received_date = new Date().toISOString();
+          existingAck.received_by = receivedBy || 'Data Assistant';
+          existingAck.remarks = remarks || existingAck.remarks;
+          existingAck.updated_at = new Date().toISOString();
+      } else {
+          const ackNum = `P1198-BHM-2026-${String(ackCounter++).padStart(6, '0')}`;
+          memoryAcknowledgements.unshift({
+              id: 'ack_' + Math.random().toString(36).substring(2, 11),
+              acknowledgement_number: ackNum,
+              activity_status_UUID: 'doc_upload_' + beneficiaryId,
+              beneficiary_id: beneficiaryId,
+              activity_name: activity || 'NS',
+              beneficiary_name: beneficiaryName || 'Beneficiary',
+              cluster: cluster || 'Cluster 1',
+              gp: gp || 'GP',
+              village: village || 'Village',
+              generation_status: 'GENERATED',
+              pdf_storage_path: fileBase64,
+              pdf_version: 1,
+              hard_copy_status: 'RECEIVED',
+              received_date: new Date().toISOString(),
+              received_by: receivedBy || 'Data Assistant',
+              photography_consent: 'NOT_RECORDED',
+              remarks: remarks || 'Uploaded via DA Document Portal',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+          });
+      }
+
+      res.json({ success: true, record });
   });
 
   app.post('/api/acknowledgements/consent', (req, res) => {
@@ -1149,13 +1256,13 @@ export async function createApp() {
       }
       const generated = [];
       for (const item of items) {
-          let existing = memoryAcknowledgements.find(a => a.activity_uuid === item.activityUuid && a.beneficiary_id === item.beneficiaryId);
+          let existing = memoryAcknowledgements.find(a => a.activity_status_UUID === item.activityStatusUuid && a.beneficiary_id === item.beneficiaryId);
           if (!existing) {
               const ackNum = `P1198-BHM-2026-${String(ackCounter++).padStart(6, '0')}`;
               existing = {
                   id: 'ack_' + Math.random().toString(36).substring(2, 11),
                   acknowledgement_number: ackNum,
-                  activity_uuid: item.activityUuid,
+                  activity_status_UUID: item.activityStatusUuid,
                   beneficiary_id: item.beneficiaryId,
                   activity_name: item.activityName || 'NS',
                   beneficiary_name: item.beneficiaryName || 'Beneficiary',
@@ -1174,17 +1281,125 @@ export async function createApp() {
                   updated_at: new Date().toISOString()
               };
               memoryAcknowledgements.unshift(existing);
+
+              // Auto-record mapping
+              const mappingItem = {
+                  timestamp: new Date().toISOString(),
+                  uuid: item.activityStatusUuid,
+                  acknowledgementId: ackNum,
+                  beneficiaryId: item.beneficiaryId,
+                  beneficiaryName: item.beneficiaryName || 'Beneficiary',
+                  activityName: item.activityName || 'NS',
+                  cluster: item.cluster || 'Cluster 1',
+                  gp: item.gp || 'GP',
+                  village: item.village || 'Village',
+                  generatedBy: 'System',
+                  remarks: 'Bulk Generated Letter'
+              };
+              memoryAckMappings.unshift(mappingItem);
           }
           generated.push(existing);
       }
+
+      if (generated.length > 0) {
+          syncMappingToGoogleSheet(generated.map(g => ({
+              timestamp: g.created_at,
+              uuid: g.activity_status_UUID,
+              acknowledgementId: g.acknowledgement_number,
+              beneficiaryId: g.beneficiary_id,
+              beneficiaryName: g.beneficiary_name,
+              activityName: g.activity_name,
+              cluster: g.cluster,
+              gp: g.gp,
+              village: g.village,
+              generatedBy: 'System',
+              remarks: 'Bulk Generated Letter'
+          })));
+      }
+
       res.json({ success: true, count: generated.length, acknowledgements: generated });
+  });
+
+  // ============================================================================
+  // ACKNOWLEDGEMENT ID & UUID MAPPING SERVICE (Google Spreadsheet Tab: Ack_UUID_Mapping)
+  // ============================================================================
+  app.post('/api/acknowledgement-mapping', async (req, res) => {
+    try {
+      const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
+      const saved = [];
+
+      for (const item of items) {
+        const uuid = String(item.uuid || item.activityStatusUuid || item.submissionId || item.id || '').trim();
+        const ackId = String(item.acknowledgementId || item.acknowledgement_number || item.ackId || '').trim();
+
+        if (!uuid && !ackId) continue;
+
+        const record = {
+          timestamp: new Date().toISOString(),
+          uuid,
+          acknowledgementId: ackId,
+          beneficiaryId: item.beneficiaryId || item.beneficiary_id || item.farmerId || item.hhId || '-',
+          beneficiaryName: item.beneficiaryName || item.beneficiary_name || item.name || 'Beneficiary',
+          activityName: item.activityName || item.activity_name || item.activity || '-',
+          cluster: item.cluster || '-',
+          gp: item.gp || '-',
+          village: item.village || '-',
+          generatedBy: item.generatedBy || item.uploadedBy || 'System',
+          remarks: item.remarks || 'Generated'
+        };
+
+        const existingIdx = memoryAckMappings.findIndex(m => 
+          (uuid && m.uuid === uuid) || (ackId && m.acknowledgementId === ackId)
+        );
+
+        if (existingIdx >= 0) {
+          memoryAckMappings[existingIdx] = { ...memoryAckMappings[existingIdx], ...record };
+          saved.push(memoryAckMappings[existingIdx]);
+        } else {
+          memoryAckMappings.unshift(record);
+          saved.push(record);
+        }
+      }
+
+      // Forward to Google Apps Script
+      syncMappingToGoogleSheet(saved);
+
+      res.json({
+        success: true,
+        count: saved.length,
+        message: 'UUID and Acknowledgement ID mapping saved',
+        mappings: saved
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/acknowledgement-mapping/list', (req, res) => {
+    res.json({ success: true, count: memoryAckMappings.length, records: memoryAckMappings });
+  });
+
+  app.get('/api/acknowledgement-mapping/search', (req, res) => {
+    const q = String(req.query.q || req.query.query || '').toLowerCase().trim();
+    if (!q) {
+      return res.json({ success: true, count: memoryAckMappings.length, records: memoryAckMappings });
+    }
+    const filtered = memoryAckMappings.filter(m => 
+      (m.acknowledgementId && m.acknowledgementId.toLowerCase().includes(q)) ||
+      (m.uuid && m.uuid.toLowerCase().includes(q)) ||
+      (m.beneficiaryId && m.beneficiaryId.toLowerCase().includes(q)) ||
+      (m.beneficiaryName && m.beneficiaryName.toLowerCase().includes(q)) ||
+      (m.village && m.village.toLowerCase().includes(q)) ||
+      (m.activityName && m.activityName.toLowerCase().includes(q))
+    );
+    res.json({ success: true, count: filtered.length, records: filtered });
   });
 
   // API 404 Handler (prevent falling through to HTML)
   app.all(/^\/api\/.*/, (req, res) => {
     res.status(404).json({ 
       error: "API route not found", 
-      path: req.path,
+      path: req.path, 
       method: req.method 
     });
   });

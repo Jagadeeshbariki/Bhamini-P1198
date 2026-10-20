@@ -1,0 +1,212 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
+
+interface HeaderProps {
+    currentPage: string;
+    onNavigate: (page: any) => void;
+    onLogout: () => void;
+}
+
+interface NavLinkProps {
+    currentPage: string;
+    onNavigate: (page: any) => void;
+    setIsMenuOpen: (open: boolean) => void;
+    page: string;
+    children: React.ReactNode;
+    primary?: boolean;
+}
+
+const NavLink: React.FC<NavLinkProps> = ({ currentPage, onNavigate, setIsMenuOpen, page, children, primary }) => {
+    const isActive = currentPage === page;
+    return (
+        <button
+            onClick={() => {
+                onNavigate(page);
+                setIsMenuOpen(false);
+            }}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-300 ${
+                isActive 
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 scale-105' 
+                    : primary
+                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md hover:opacity-90'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600'
+            }`}
+        >
+            {children}
+        </button>
+    );
+};
+
+const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) => {
+    const { user } = useAuth();
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isVisible, setIsVisible] = useState(true);
+    const [lastScrollY, setLastScrollY] = useState(0);
+
+    useEffect(() => {
+        const controlNavbar = () => {
+            if (typeof window !== 'undefined') {
+                if (window.scrollY > lastScrollY && window.scrollY > 100) {
+                    setIsVisible(false); // scroll down -> hide
+                } else {
+                    setIsVisible(true); // scroll up -> show
+                }
+                setLastScrollY(window.scrollY);
+            }
+        };
+        window.addEventListener('scroll', controlNavbar);
+        return () => window.removeEventListener('scroll', controlNavbar);
+    }, [lastScrollY]);
+
+    const navLinkProps = { currentPage, onNavigate, setIsMenuOpen };
+
+    // Permission Logic based on User Roles
+    const isFieldRole = user?.role === 'field' || user?.role === 'admin' || user?.role === 'da';
+    const isProjectRole = user?.role === 'project' || user?.role === 'admin' || user?.role === 'da';
+    const canAccessAdmin = user?.role === 'admin';
+    const isStaffMarkingRole = user?.role === 'project' || user?.role === 'admin';
+    const isTLOnlyRole = user?.role === 'tl';
+    const isTLOrAdmin = user?.role === 'tl' || user?.role === 'admin';
+    const hasAnyDashboardAccess = user && (user.role === 'admin' || user.role === 'da' || user.role === 'project' || user.role === 'field');
+
+    return (
+        <header className={`bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 fixed w-full top-0 z-50 transition-transform duration-300 ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+            <div className="container mx-auto px-4 lg:px-8">
+                <div className="flex flex-wrap items-center justify-between min-h-[5rem] py-2 gap-4">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => onNavigate('home')}
+                            className="flex items-center gap-2 focus:outline-none group"
+                        >
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-xl transition-all duration-500 ${currentPage === 'home' ? 'bg-indigo-600 rotate-12 scale-110' : 'bg-gray-400 dark:bg-gray-700 group-hover:bg-indigo-500 group-hover:rotate-12'}`}>
+                                <span className="font-black text-xl">B</span>
+                            </div>
+                            <div className="flex flex-col text-left">
+                                <span className="font-black text-lg tracking-tighter text-gray-900 dark:text-white leading-none">BHAMINI</span>
+                                <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">P1198 MIS</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <div className="hidden lg:block flex-1">
+                        <div className="flex items-center justify-center gap-1 flex-wrap py-2">
+                            <NavLink {...navLinkProps} page="home">Gallery</NavLink>
+                            
+                            {user && (
+                                <>
+                                    <NavLink {...navLinkProps} page="baseline">Baseline Explorer</NavLink>
+                                    <NavLink {...navLinkProps} page="contribution">Contributions</NavLink>
+                                    <NavLink {...navLinkProps} page="field-mis" primary>Target vs Achievements</NavLink>
+                                </>
+                            )}
+
+                            {hasAnyDashboardAccess && !isTLOnlyRole && (
+                                <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
+                            )}
+
+                            {isProjectRole && (
+                                <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>
+                            )}
+
+                            {isFieldRole && (
+                                <>
+                                    <NavLink {...navLinkProps} page="mark-attendance">Log Work</NavLink>
+                                    <NavLink {...navLinkProps} page="attendance-report">My Reports</NavLink>
+                                </>
+                            )}
+
+                            {isStaffMarkingRole && (
+                                <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
+                            )}
+
+                            {isTLOrAdmin && (
+                                <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
+                            )}
+
+                            {canAccessAdmin && <NavLink {...navLinkProps} page="odk-dashboard">Data Submission Hub</NavLink>}
+                            {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Panel</NavLink>}
+
+                            <div className="h-6 w-px bg-gray-100 dark:bg-gray-800 mx-2"></div>
+
+                            {user ? (
+                                <button
+                                    onClick={onLogout}
+                                    className="p-2 text-gray-400 hover:text-red-500 transition-colors flex items-center gap-2 group"
+                                    title="Logout"
+                                >
+                                    <span className="text-[9px] font-black uppercase group-hover:text-red-500">{user.username}</span>
+                                    <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                                </button>
+                            ) : (
+                                <NavLink {...navLinkProps} page="login">Sign In</NavLink>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => setIsMenuOpen(!isMenuOpen)}
+                            className="lg:hidden p-2 rounded-2xl bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors hover:bg-gray-100"
+                        >
+                            <svg className="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                                {isMenuOpen ? (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                                ) : (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" />
+                                )}
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Mobile Menu */}
+            {isMenuOpen && (
+                <div className="lg:hidden bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 animate-fade-in overflow-hidden">
+                    <div className="px-4 py-6 flex flex-col gap-2">
+                        <NavLink {...navLinkProps} page="home">Gallery</NavLink>
+                        {user && (
+                            <>
+                                <NavLink {...navLinkProps} page="baseline">Baseline Explorer</NavLink>
+                                <NavLink {...navLinkProps} page="contribution">Contributions</NavLink>
+                                <NavLink {...navLinkProps} page="field-mis" primary>Target vs Achievements</NavLink>
+                            </>
+                        )}
+                        {hasAnyDashboardAccess && !isTLOnlyRole && (
+                            <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
+                        )}
+                        {isProjectRole && (
+                            <NavLink {...navLinkProps} page="budget-tracker">Budget Analysis</NavLink>
+                        )}
+                        {isFieldRole && (
+                            <>
+                                <NavLink {...navLinkProps} page="mark-attendance">Log Work</NavLink>
+                                <NavLink {...navLinkProps} page="attendance-report">Monthly Reports</NavLink>
+                            </>
+                        )}
+                        {isStaffMarkingRole && (
+                            <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
+                        )}
+                        {isTLOrAdmin && (
+                            <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
+                        )}
+                        {canAccessAdmin && <NavLink {...navLinkProps} page="odk-dashboard">Data Submission Hub</NavLink>}
+                        {canAccessAdmin && <NavLink {...navLinkProps} page="admin">Admin Console</NavLink>}
+                        {user ? (
+                            <button
+                                onClick={() => { onLogout(); setIsMenuOpen(false); }}
+                                className="w-full text-center py-4 text-xs font-black uppercase text-red-500 bg-red-50 dark:bg-red-900/10 rounded-2xl mt-4"
+                            >
+                                Logout ({user.username})
+                            </button>
+                        ) : (
+                            <NavLink {...navLinkProps} page="login">Sign In</NavLink>
+                        )}
+                    </div>
+                </div>
+            )}
+        </header>
+    );
+};
+
+export default Header;
