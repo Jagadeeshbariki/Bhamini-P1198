@@ -72,6 +72,7 @@ export const CAPACITY_BUILDING_SCRIPT_URL = 'https://script.google.com/macros/s/
 export const UPLOAD_LETTERS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRuivTRI8pD5VM6Jm1TrPS_HF_v7npP8t9Vpdiw-lv-gwYTpFrWAnMtbg1yZERPzwhpA/exec';
 // 19. ACKNOWLEDGEMENT ID & UUID MAPPING ENDPOINT (Dedicated script on same tracking sheet)
 export const ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRuivTRI8pD5VM6Jm1TrPS_HF_v7npP8t9Vpdiw-lv-gwYTpFrWAnMtbg1yZERPzwhpA/exec';
+export const ACK_UUID_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSAtMtNt7dCKE--k55gA9HTpH_S9d72-iKDGG6nr0UK335mejAJQt8oy1g_1-QmUI5b6lwFDT4XCfj_/pub?gid=842780796&single=true&output=csv';
 
 export const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200';
 
