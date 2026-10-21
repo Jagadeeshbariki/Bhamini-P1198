@@ -212,18 +212,23 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
 
             const mergedAcks = [...existingAcks];
             for (const m of mappedRecords) {
-                if (m.acknowledgementId && m.uuid) {
+                const u = String(m.uuid || m.activityStatusUuid || m.submissionId || '').trim();
+                const ackId = String(m.acknowledgementId || m.acknowledgement_number || m.ackId || '').trim();
+                const bId = String(m.beneficiaryId || m.beneficiary_id || m.farmerId || m.hhId || '').trim();
+                if (ackId || u || bId) {
                     const alreadyExists = mergedAcks.some(a => 
-                        a.acknowledgement_number === m.acknowledgementId || a.activity_status_UUID === m.uuid
+                        (ackId && a.acknowledgement_number === ackId) || 
+                        (u && a.activity_status_UUID === u) ||
+                        (bId && bId !== '-' && a.beneficiary_id === bId)
                     );
                     if (!alreadyExists) {
                         mergedAcks.push({
-                            id: m.uuid || m.acknowledgementId,
-                            acknowledgement_number: m.acknowledgementId,
-                            activity_status_UUID: m.uuid,
-                            beneficiary_id: m.beneficiaryId || '-',
-                            activity_name: m.activity || '-',
-                            beneficiary_name: m.beneficiaryName || 'Beneficiary',
+                            id: u || ackId || ('ack_' + Math.random().toString(36).substring(2, 9)),
+                            acknowledgement_number: ackId || `P1198-BHM-2026-${Math.abs(String(bId || u).split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`,
+                            activity_status_UUID: u || bId,
+                            beneficiary_id: bId || '-',
+                            activity_name: m.activity || m.activityName || m.activity_name || '-',
+                            beneficiary_name: m.beneficiaryName || m.beneficiary_name || m.name || 'Beneficiary',
                             cluster: m.cluster || '-',
                             gp: m.gp || '-',
                             village: m.village || '-',
