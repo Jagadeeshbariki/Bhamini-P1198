@@ -14,7 +14,7 @@ interface DashboardsPortalProps {
 const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
     const { user } = useAuth();
     const role = user?.role?.toLowerCase()?.trim() || '';
-    const isAdminOrProject = role === 'admin' || role === 'project';
+    const isAdminOrProject = role === 'admin' || role === 'project' || role === 'da';
     const isProjectRole = role === 'admin' || role === 'da' || role === 'project';
 
     const dashboards = [
