@@ -29,7 +29,7 @@ interface ActivityRecord {
 export const UploadLettersDashboard: React.FC<UploadLettersDashboardProps> = ({ onBack }) => {
     const { user } = useAuth();
     const role = user?.role?.toLowerCase()?.trim() || '';
-    const isAdminOrProject = role === 'admin' || role === 'project';
+    const isAdminOrProject = role === 'admin' || role === 'project' || role === 'da';
 
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);

@@ -417,8 +417,8 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
 
     // Handle Generation
     const handleGenerate = async (item: any) => {
-        if (!isAdmin) {
-            alert("Only Admin users are authorized to generate acknowledgment letters.");
+        if (!isAdminOrProject) {
+            alert("Only authorized users (Admin, Project, DA) are permitted to generate acknowledgment letters.");
             return;
         }
         try {
@@ -469,8 +469,8 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
 
     // Bulk Generation
     const handleBulkGenerate = async () => {
-        if (!isAdmin) {
-            alert("Only Admin users are authorized to generate acknowledgment letters.");
+        if (!isAdminOrProject) {
+            alert("Only authorized users (Admin, Project, DA) are permitted to generate acknowledgment letters.");
             return;
         }
         const selectedItems = eligibleRecords.filter(r => selectedBeneficiaryIds.has(r.beneficiaryId) && !r.isGenerated);
@@ -788,7 +788,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
 
     const { user } = useAuth();
     const role = user?.role?.toLowerCase()?.trim() || '';
-    const isAdminOrProject = role === "admin" || role === "project";
+    const isAdminOrProject = role === "admin" || role === "project" || role === "da";
     const isAdmin = role === "admin";
 
     if (!isAdminOrProject) {
@@ -798,7 +798,7 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                     <AlertTriangle className="w-10 h-10" />
                 </div>
                 <h1 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Access Restricted</h1>
-                <p className="text-gray-500 font-medium">The Beneficiary Acknowledgement section is restricted to 'Admin' and 'Project' roles only.</p>
+                <p className="text-gray-500 font-medium">The Beneficiary Acknowledgement section is restricted to 'Admin', 'Project', and 'DA' roles only.</p>
                 {onBack && (
                     <button
                         onClick={onBack}
