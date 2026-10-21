@@ -161,7 +161,7 @@ const safeJson = async (res: Response) => {
 const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBack }) => {
     const { user } = useAuth();
     const role = user?.role?.toLowerCase()?.trim() || '';
-    const isAdminOrProject = role === 'admin' || role === 'project';
+    const isAdminOrProject = role === 'admin' || role === 'project' || role === 'da';
     const isAdmin = role === 'admin';
 
     if (!isAdminOrProject) {
@@ -171,7 +171,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                     <AlertCircle className="w-10 h-10" />
                 </div>
                 <h1 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Access Restricted</h1>
-                <p className="text-gray-500 font-medium">The Activity Status section is restricted to 'Admin' and 'Project' roles only.</p>
+                <p className="text-gray-500 font-medium">The Activity Status section is restricted to 'Admin', 'Project', and 'DA' roles only.</p>
                 {onBack && (
                     <button
                         onClick={onBack}
@@ -729,8 +729,8 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
         ];
     };
     const handleBulkGenerateSelected = async () => {
-        if (!isAdmin) {
-            alert("Only Admin users are authorized to generate acknowledgment letters.");
+        if (!isAdminOrProject) {
+            alert("Only authorized users (Admin, Project, DA) are permitted to generate acknowledgment letters.");
             return;
         }
         const selected = eligibleBeneficiaries.filter(b => bulkSelected.has(b.id || b.farmerId));

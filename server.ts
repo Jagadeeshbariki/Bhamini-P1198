@@ -937,10 +937,11 @@ export async function createApp() {
   }
 
   async function refreshMaterialsCache() {
+    if (Date.now() - lastMaterialsFetch < 5 * 60 * 1000 && cachedMaterialsMap.size > 0) return;
     try {
       console.log("[MATERIALS] Refreshing material distribution cache...");
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
       const res = await fetch(ASSET_DISTRIBUTION_URL, {
         redirect: 'follow',
         headers: {
@@ -1037,8 +1038,8 @@ export async function createApp() {
 
   app.get("/api/materials/query", async (req, res) => {
     try {
-      if (Date.now() - lastMaterialsFetch > 10 * 60 * 1000 || cachedMaterialsMap.size === 0) {
-        await refreshMaterialsCache();
+      if (cachedMaterialsMap.size === 0) {
+        await refreshMaterialsCache().catch(() => {});
       }
 
       const candidates: string[] = [
@@ -1069,7 +1070,7 @@ export async function createApp() {
 
       res.json({ success: true, count: matched.length, materials: matched });
     } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message, materials: [] });
+      res.json({ success: true, count: 0, materials: [] });
     }
   });
 
@@ -1083,18 +1084,24 @@ export async function createApp() {
   const memoryAckMappings: any[] = [];
   const DEFAULT_ACK_MAPPING_URL = 'https://script.google.com/macros/s/AKfycbzRuivTRI8pD5VM6Jm1TrPS_HF_v7npP8t9Vpdiw-lv-gwYTpFrWAnMtbg1yZERPzwhpA/exec';
 
-  const syncMappingToGoogleSheet = (records: any[]) => {
+  const syncMappingToGoogleSheet = async (records: any[]) => {
     const gasUrl = process.env.ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL || process.env.UPLOAD_LETTERS_SCRIPT_URL || DEFAULT_ACK_MAPPING_URL;
     if (gasUrl && gasUrl.startsWith('http') && records && records.length > 0) {
       try {
-        fetch(gasUrl, {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        await fetch(gasUrl, {
           method: 'POST',
           redirect: 'follow',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: records })
-        }).catch(e => console.warn('GAS mapping sync background notice:', e.message));
+          body: JSON.stringify({ items: records }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
       } catch (err: any) {
-        console.warn('Sync to GAS mapping error:', err.message);
+        if (err.name !== 'AbortError') {
+          console.warn('Sync to GAS mapping notice:', err.message);
+        }
       }
     }
   };
@@ -1104,67 +1111,73 @@ export async function createApp() {
       const gasUrl = process.env.ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL || process.env.UPLOAD_LETTERS_SCRIPT_URL || DEFAULT_ACK_MAPPING_URL;
       if (gasUrl && gasUrl.startsWith('http')) {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
         const gasRes = await fetch(gasUrl, { redirect: 'follow', signal: controller.signal });
         clearTimeout(timeoutId);
-        const gasText = await gasRes.text();
-        const gasData = JSON.parse(gasText);
-        if (gasData.success && Array.isArray(gasData.records)) {
-          for (const rec of gasData.records) {
-            const uuid = String(rec.uuid || '').trim();
-            const ackId = String(rec.acknowledgementId || rec.acknowledgement_number || '').trim();
-            const benId = String(rec.beneficiaryId || '').trim();
-            const benName = String(rec.beneficiaryName || 'Beneficiary').trim();
-            const activity = String(rec.activity || rec.activityName || 'NS').trim();
-            const cluster = String(rec.cluster || 'Cluster 1').trim();
-            const gp = String(rec.gp || 'GP').trim();
-            const village = String(rec.village || 'Village').trim();
-            const rawGenBy = String(rec.generatedBy || '').trim();
-            const generatedBy = rawGenBy && rawGenBy !== 'System' && rawGenBy !== 'user' ? rawGenBy : 'Admin';
+        if (gasRes.ok) {
+          const gasText = await gasRes.text();
+          try {
+            const gasData = JSON.parse(gasText);
+            if (gasData.success && Array.isArray(gasData.records)) {
+              for (const rec of gasData.records) {
+                const uuid = String(rec.uuid || '').trim();
+                const ackId = String(rec.acknowledgementId || rec.acknowledgement_number || '').trim();
+                const benId = String(rec.beneficiaryId || '').trim();
+                const benName = String(rec.beneficiaryName || 'Beneficiary').trim();
+                const activity = String(rec.activity || rec.activityName || 'NS').trim();
+                const cluster = String(rec.cluster || 'Cluster 1').trim();
+                const gp = String(rec.gp || 'GP').trim();
+                const village = String(rec.village || 'Village').trim();
+                const rawGenBy = String(rec.generatedBy || '').trim();
+                const generatedBy = rawGenBy && rawGenBy !== 'System' && rawGenBy !== 'user' ? rawGenBy : 'Admin';
 
-            if (uuid || ackId) {
-              const existingMap = memoryAckMappings.find(m => (uuid && m.uuid === uuid) || (ackId && m.acknowledgementId === ackId));
-              if (!existingMap) {
-                memoryAckMappings.push({
-                  timestamp: rec.timestamp || new Date().toISOString(),
-                  uuid,
-                  acknowledgementId: ackId,
-                  beneficiaryId: benId,
-                  beneficiaryName: benName,
-                  activityName: activity,
-                  cluster,
-                  gp,
-                  village,
-                  generatedBy,
-                  remarks: rec.remarks || 'Synced from Sheet'
-                });
-              }
+                if (uuid || ackId) {
+                  const existingMap = memoryAckMappings.find(m => (uuid && m.uuid === uuid) || (ackId && m.acknowledgementId === ackId));
+                  if (!existingMap) {
+                    memoryAckMappings.push({
+                      timestamp: rec.timestamp || new Date().toISOString(),
+                      uuid,
+                      acknowledgementId: ackId,
+                      beneficiaryId: benId,
+                      beneficiaryName: benName,
+                      activityName: activity,
+                      cluster,
+                      gp,
+                      village,
+                      generatedBy,
+                      remarks: rec.remarks || 'Synced from Sheet'
+                    });
+                  }
 
-              const existingAck = memoryAcknowledgements.find(a => (uuid && a.activity_status_UUID === uuid) || (ackId && a.acknowledgement_number === ackId));
-              if (!existingAck) {
-                memoryAcknowledgements.unshift({
-                  id: 'ack_' + Math.random().toString(36).substring(2, 11),
-                  acknowledgement_number: ackId || `P1198-BHM-2026-${String(ackCounter++).padStart(6, '0')}`,
-                  activity_status_UUID: uuid || benId,
-                  beneficiary_id: benId || '-',
-                  activity_name: activity,
-                  beneficiary_name: benName,
-                  cluster,
-                  gp,
-                  village,
-                  generation_status: 'GENERATED',
-                  pdf_storage_path: `/acknowledgements/${ackId}.pdf`,
-                  pdf_version: 1,
-                  hard_copy_status: 'PENDING',
-                  received_date: null,
-                  received_by: null,
-                  photography_consent: 'NOT_RECORDED',
-                  remarks: rec.remarks || 'Synced from Sheet',
-                  created_at: rec.timestamp || new Date().toISOString(),
-                  updated_at: rec.timestamp || new Date().toISOString()
-                });
+                  const existingAck = memoryAcknowledgements.find(a => (uuid && a.activity_status_UUID === uuid) || (ackId && a.acknowledgement_number === ackId));
+                  if (!existingAck) {
+                    memoryAcknowledgements.unshift({
+                      id: 'ack_' + Math.random().toString(36).substring(2, 11),
+                      acknowledgement_number: ackId || `P1198-BHM-2026-${String(ackCounter++).padStart(6, '0')}`,
+                      activity_status_UUID: uuid || benId,
+                      beneficiary_id: benId || '-',
+                      activity_name: activity,
+                      beneficiary_name: benName,
+                      cluster,
+                      gp,
+                      village,
+                      generation_status: 'GENERATED',
+                      pdf_storage_path: `/acknowledgements/${ackId}.pdf`,
+                      pdf_version: 1,
+                      hard_copy_status: 'PENDING',
+                      received_date: null,
+                      received_by: null,
+                      photography_consent: 'NOT_RECORDED',
+                      remarks: rec.remarks || 'Synced from Sheet',
+                      created_at: rec.timestamp || new Date().toISOString(),
+                      updated_at: rec.timestamp || new Date().toISOString()
+                    });
+                  }
+                }
               }
             }
+          } catch {
+            // ignore invalid json
           }
         }
       }
@@ -1175,8 +1188,12 @@ export async function createApp() {
     }
   }
 
-  app.get('/api/acknowledgements/list', (req, res) => {
-      ensureSheetSynced().catch(e => console.warn('Background sync error:', e));
+  app.get('/api/acknowledgements/list', async (req, res) => {
+      try {
+        await ensureSheetSynced();
+      } catch (e: any) {
+        console.warn('Sync notice:', e.message);
+      }
       res.json({ success: true, acknowledgements: memoryAcknowledgements });
   });
 
@@ -1238,7 +1255,7 @@ export async function createApp() {
       } else {
           memoryAckMappings.unshift(mappingItem);
       }
-      syncMappingToGoogleSheet([mappingItem]);
+      await syncMappingToGoogleSheet([mappingItem]);
 
       res.json({ success: true, acknowledgement: newRecord });
   });
@@ -1333,7 +1350,7 @@ export async function createApp() {
       res.json({ success: true, acknowledgement: record });
   });
 
-  app.post('/api/acknowledgements/bulk', (req, res) => {
+  app.post('/api/acknowledgements/bulk', async (req, res) => {
       const { items, generatedBy } = req.body;
       if (!Array.isArray(items) || items.length === 0) {
           return res.status(400).json({ error: 'Invalid items array for bulk generation' });
@@ -1389,7 +1406,7 @@ export async function createApp() {
       }
 
       if (generated.length > 0) {
-          syncMappingToGoogleSheet(generated.map(g => ({
+          await syncMappingToGoogleSheet(generated.map(g => ({
               timestamp: g.created_at,
               uuid: g.activity_status_UUID,
               acknowledgementId: g.acknowledgement_number,
