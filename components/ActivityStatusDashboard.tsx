@@ -6,7 +6,7 @@ import {
     downloadZipA4LettersPdf, 
     printMultipleA4Letters 
 } from "../utils/printLetter";
-import AcknowledgementLetterSheet from "./AcknowledgementLetterSheet";
+import AcknowledgementLetterSheet, { resolveSmartIds, enrichWithOdkAdhaar } from "./AcknowledgementLetterSheet";
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Activity, Calendar, Users, CheckCircle2, AlertCircle, 
@@ -388,9 +388,9 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                 const submitterKeywords = ['submittername', 'submitter', 'staff', 'user', 'name_of_reporter', 'created_by', 'Data_sub_by'];
                 const photoKeywords = ['photo', 'image', 'picture', 'pic', 'attachment', 'media', 'file', 'upload'];
                 
-                const benIdKeywords = ['beneficiary_id', 'beneficiaryId', 'ben_id', 'farmer_id', 'id'];
-                const benAdhaarKeywords = ['beneficiary_details-beneficiary_adhaar', 'beneficiary_details/beneficiary_adhaar', 'beneficiary_adhaar', 'beneficiary_aadhaar', 'adhaar', 'aadhaar_number'];
-                const hhIdKeywords = ['hh_id', 'hhid', 'household_id', 'hh_id_number'];
+                const benAdhaarKeywords = ['beneficiary_details-beneficiary_adhaar', 'beneficiary_details/beneficiary_adhaar', 'beneficiary_details_beneficiary_adhaar', 'beneficiary_adhaar', 'beneficiary_aadhaar', 'adhaar', 'aadhaar_number'];
+                const benIdKeywords = ['beneficiary_details-beneficiary_adhaar', 'beneficiary_details/beneficiary_adhaar', 'beneficiary_details_beneficiary_adhaar', 'beneficiary_adhaar', 'beneficiary_aadhaar', 'beneficiary_id', 'beneficiaryId', 'ben_id'];
+                const hhIdKeywords = ['farmer_id', 'farmerId', 'hh_id', 'hhid', 'household_id', 'hh_id_number'];
                 const beneficiaryKeywords = ['beneficiary_details-beneficiary_name', 'beneficiary_name', 'beneficiaryName', 'beneficiary', 'farmer_name'];
                 const reasonKeywords = ['reason', 'incomplete_reason', 'not_completed_reason', 'remarks', 'comment', 'note', 'details', 'why'];
 
@@ -598,7 +598,8 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
     
     
     const openAckLetter = async (item: any, autoDownload = false) => {
-        setAckLetterData(item);
+        const enriched = enrichWithOdkAdhaar(item, data, beneficiaries);
+        setAckLetterData(enriched);
         if (autoDownload) {
             setAutoDownloadAck(true);
         }
@@ -2507,9 +2508,16 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
 
                                 {/* Beneficiary Information Grid */}
                                 <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-2.5 rounded-xl border border-gray-200 a4-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px 14px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "7px 12px", fontSize: "11px" }}>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని పేరు (Name):</span> <span style={{ fontWeight: 900, color: "#111827", marginLeft: "4px" }}>{ackLetterData.beneficiaryName || ackLetterData.name}</span></div>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గృహ ఐడి (Household ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.farmerId || ackLetterData.hhId || "-"}</span></div>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.beneficiaryAdhaar || (ackLetterData.beneficiaryId !== ackLetterData.farmerId ? ackLetterData.beneficiaryId : "-") || "-"}</span></div>
+                                    {(() => {
+                                        const { hhId, benId, benName } = resolveSmartIds(ackLetterData);
+                                        return (
+                                            <>
+                                                <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని పేరు (Name):</span> <span style={{ fontWeight: 900, color: "#111827", marginLeft: "4px" }}>{benName || ackLetterData.beneficiaryName || ackLetterData.name}</span></div>
+                                                <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గృహ ఐడి (Household ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{hhId}</span></div>
+                                                <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{benId}</span></div>
+                                            </>
+                                        );
+                                    })()}
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గ్రామం / పంచాయతీ (Village/GP):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.village} / {ackLetterData.gp}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>క్లస్టర్ (Cluster):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{ackLetterData.cluster}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>కార్యాచరణ (Activity Name):</span> <span style={{ fontWeight: 900, color: "#312e81", marginLeft: "4px" }}>{ackLetterData.activity || "NS"}</span></div>

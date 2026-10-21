@@ -8,7 +8,7 @@ import { useAuth } from '../hooks/useAuth';
 import { BENEFICIARY_DATA_URL, UPLOAD_LETTERS_SCRIPT_URL, getProxyUrl } from '../config';
 import { LETTERHEAD_HEADER_BASE64, LETTERHEAD_FOOTER_BASE64 } from "../utils/letterheadImages";
 import { printA4Letter, downloadA4LetterPdf, downloadCombinedA4LettersPdf, downloadZipA4LettersPdf, printMultipleA4Letters } from "../utils/printLetter";
-import AcknowledgementLetterSheet from "./AcknowledgementLetterSheet";
+import AcknowledgementLetterSheet, { resolveSmartIds } from "./AcknowledgementLetterSheet";
 
 interface UploadLettersDashboardProps {
     onBack: () => void;
@@ -1269,9 +1269,16 @@ export const UploadLettersDashboard: React.FC<UploadLettersDashboardProps> = ({ 
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-2.5 rounded-xl border border-gray-200 a4-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px 14px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "7px 12px", fontSize: "11px" }}>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని పేరు (Name):</span> <span style={{ fontWeight: 900, color: "#111827", marginLeft: "4px" }}>{selectedAckLetterForPreview.beneficiaryName || selectedAckLetterForPreview.beneficiary}</span></div>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గృహ ఐడి (Household ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{selectedAckLetterForPreview.farmerId || selectedAckLetterForPreview.hhId || "-"}</span></div>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{selectedAckLetterForPreview.farmerId || selectedAckLetterForPreview.hhId || "-"}</span></div>
+                                    {(() => {
+                                        const { hhId, benId, benName } = resolveSmartIds(selectedAckLetterForPreview);
+                                        return (
+                                            <>
+                                                <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని పేరు (Name):</span> <span style={{ fontWeight: 900, color: "#111827", marginLeft: "4px" }}>{benName || selectedAckLetterForPreview.beneficiaryName || selectedAckLetterForPreview.beneficiary}</span></div>
+                                                <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గృహ ఐడి (Household ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{hhId}</span></div>
+                                                <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{benId}</span></div>
+                                            </>
+                                        );
+                                    })()}
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గ్రామం / పంచాయతీ (Village/GP):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{selectedAckLetterForPreview.village} / {selectedAckLetterForPreview.gp}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>క్లస్టర్ (Cluster):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{selectedAckLetterForPreview.cluster}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>కార్యాచరణ (Activity Name):</span> <span style={{ fontWeight: 900, color: "#312e81", marginLeft: "4px" }}>{selectedAckLetterForPreview.activity || "NS"}</span></div>

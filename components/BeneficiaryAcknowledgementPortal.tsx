@@ -6,7 +6,7 @@ import {
     downloadZipA4LettersPdf, 
     printMultipleA4Letters 
 } from "../utils/printLetter";
-import AcknowledgementLetterSheet from "./AcknowledgementLetterSheet";
+import AcknowledgementLetterSheet, { resolveSmartIds, enrichWithOdkAdhaar } from "./AcknowledgementLetterSheet";
 import React, { useState, useEffect, useMemo } from "react";
 import { 
     FileText, CheckCircle2, Search, RefreshCw, 
@@ -374,9 +374,25 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
             };
 
             const uuid = sub.__id || sub["meta/instanceID"] || sub.instanceID || sub["KEY"] || ("uuid-" + Math.random().toString(36).substring(2, 8));
-            const rawBenId = String(findInFlat(['farmer_id', 'farmerId', 'beneficiary_id', 'beneficiaryId', 'id', 'ben_id'])).trim();
-            const rawBenName = String(findInFlat(['beneficiary_name', 'name', 'farmer_name'])).trim();
-            const rawStatus = String(findInFlat(['work_status', 'status', 'completion_status', 'completed'])).trim().toLowerCase();
+            const rawBenAdhaar = String(findInFlat([
+                'beneficiary_details-beneficiary_adhaar',
+                'beneficiary_details/beneficiary_adhaar',
+                'beneficiary_details_beneficiary_adhaar',
+                'beneficiary_adhaar',
+                'beneficiary_aadhaar',
+                'adhaar',
+                'aadhaar_number'
+            ])).trim();
+            const rawFarmerId = String(findInFlat([
+                'farmer_id',
+                'farmerId',
+                'hh_id',
+                'hhid',
+                'household_id'
+            ])).trim();
+            const rawBenId = rawBenAdhaar || String(findInFlat(['beneficiary_id', 'beneficiaryId', 'ben_id', 'id'])).trim();
+            const rawBenName = String(findInFlat(['beneficiary_details-beneficiary_name', 'beneficiary_name', 'name', 'farmer_name'])).trim();
+            const rawStatus = String(findInFlat(['activity_works-work_status', 'work_status', 'status', 'completion_status', 'completed'])).trim().toLowerCase();
 
             const isCompleted = 
                 rawStatus.includes('complete') || 
@@ -385,10 +401,11 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
                 rawStatus === 'done' || 
                 rawStatus === 'true';
 
-            const matchedBen = benMap.get(rawBenId.toLowerCase()) || benMap.get(rawBenName.toLowerCase());
-            const benId = rawBenId || matchedBen?.beneficiaryId || ("BEN-" + Math.abs(uuid.split('').reduce((a: number, b: string)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,5));
+            const matchedBen = benMap.get(rawBenAdhaar.toLowerCase()) || benMap.get(rawBenId.toLowerCase()) || benMap.get(rawFarmerId.toLowerCase()) || benMap.get(rawBenName.toLowerCase());
+            const benId = rawBenAdhaar || rawBenId || matchedBen?.beneficiaryId || ("BEN-" + Math.abs(uuid.split('').reduce((a: number, b: string)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,5));
+            const farmerId = rawFarmerId || matchedBen?.hhId || '-';
             const benName = matchedBen?.name || rawBenName || 'Beneficiary';
-            const activityName = String(findInFlat(['activity', 'work', 'project', 'topic']) || matchedBen?.activity || 'NS');
+            const activityName = String(findInFlat(['basic_info-activity', 'activity', 'work', 'project', 'topic']) || matchedBen?.activity || 'NS');
             const cluster = String(findInFlat(['cluster', 'zone']) || matchedBen?.cluster || 'Cluster 1');
             const gp = String(findInFlat(['gp', 'gram_panchayat', 'panchayat']) || matchedBen?.gp || 'GP');
             const village = String(findInFlat(['village', 'habitation']) || matchedBen?.village || 'Village');
@@ -397,10 +414,15 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
             if (isCompleted || rawStatus === '') {
                 const isExplicitlyIncomplete = rawStatus.includes('not') || rawStatus.includes('incomplete') || rawStatus === 'no' || rawStatus === '0' || rawStatus === 'false';
                 if (!isExplicitlyIncomplete) {
-                    const existingAck = acknowledgements.find(a => a.activity_status_UUID === uuid || (a.beneficiary_id && a.beneficiary_id === benId));
+                    const existingAck = acknowledgements.find(a => 
+                        a.activity_status_UUID === uuid || 
+                        (a.beneficiary_id && (a.beneficiary_id === benId || a.beneficiary_id === farmerId))
+                    );
                     list.push({
                         uuid,
                         beneficiaryId: benId,
+                        beneficiaryAdhaar: rawBenAdhaar || benId,
+                        farmerId: farmerId,
                         beneficiaryName: benName,
                         activityName,
                         cluster,
@@ -587,7 +609,8 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
         setBatchProgress({ current: 0, total: items.length, statusText: 'Resolving materials & asset catalogs...' });
 
         const resolvedItems = await Promise.all(items.map(async (item) => {
-            let mats = getIssuedMaterials(item);
+            const enriched = enrichWithOdkAdhaar(item, odkSubmissions, beneficiaries);
+            let mats = getIssuedMaterials(enriched);
             if (!mats || mats.length === 0) {
                 try {
                     const benId = item.beneficiary_id || item.beneficiaryId || "";
@@ -668,7 +691,8 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
     
     
         const openPortalAckLetter = async (item: any, autoDownload = false) => {
-        setSelectedAckForPrint(item);
+        const enriched = enrichWithOdkAdhaar(item, odkSubmissions, beneficiaries);
+        setSelectedAckForPrint(enriched);
         if (autoDownload) {
             setAutoDownloadAck(true);
         }
@@ -1663,9 +1687,16 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
 
                                 {/* Beneficiary Information Grid */}
                                 <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-2.5 rounded-xl border border-gray-200 a4-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px 14px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "7px 12px", fontSize: "11px" }}>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని పేరు (Name):</span> <span style={{ fontWeight: 900, color: "#111827", marginLeft: "4px" }}>{selectedAckForPrint.beneficiary_name}</span></div>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గృహ ఐడి (Household ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{selectedAckForPrint.farmerId || selectedAckForPrint.hhId || "-"}</span></div>
-                                    <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{selectedAckForPrint.beneficiary_id || selectedAckForPrint.beneficiaryAdhaar || "-"}</span></div>
+                                    {(() => {
+                                        const { hhId, benId, benName } = resolveSmartIds(selectedAckForPrint);
+                                        return (
+                                            <>
+                                                <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని పేరు (Name):</span> <span style={{ fontWeight: 900, color: "#111827", marginLeft: "4px" }}>{benName || selectedAckForPrint.beneficiary_name}</span></div>
+                                                <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గృహ ఐడి (Household ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{hhId}</span></div>
+                                                <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని ఐడి (Beneficiary ID):</span> <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{benId}</span></div>
+                                            </>
+                                        );
+                                    })()}
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>గ్రామం / పంచాయతీ (Village/GP):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{selectedAckForPrint.village} / {selectedAckForPrint.gp}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>క్లస్టర్ (Cluster):</span> <span style={{ fontWeight: "bold", color: "#111827", marginLeft: "4px" }}>{selectedAckForPrint.cluster}</span></div>
                                     <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>కార్యాచరణ (Activity Name):</span> <span style={{ fontWeight: 900, color: "#312e81", marginLeft: "4px" }}>{selectedAckForPrint.activity_name || selectedAckForPrint.activity || "NS"}</span></div>

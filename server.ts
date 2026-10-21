@@ -1021,14 +1021,18 @@ export async function createApp() {
     }
   }
 
-  app.get("/api/materials/all", async (req, res) => {
+  app.get("/api/materials/all", (req, res) => {
     try {
       if (cachedMaterialsMap.size === 0) {
-        await refreshMaterialsCache().catch(() => {});
+        refreshMaterialsCache().catch(() => {});
       }
       const obj: Record<string, any[]> = {};
+      let count = 0;
       cachedMaterialsMap.forEach((val, key) => {
-        obj[key] = val;
+        if (count < 3000) {
+          obj[key] = val;
+          count++;
+        }
       });
       res.json({ success: true, count: cachedMaterialsMap.size, map: obj });
     } catch (err: any) {
@@ -1267,16 +1271,12 @@ export async function createApp() {
     }
   }
 
-  app.get('/api/acknowledgements/list', async (req, res) => {
-      try {
-        await ensureSheetSynced();
-      } catch (e: any) {
-        console.warn('Sync notice:', e.message);
-      }
+  app.get('/api/acknowledgements/list', (req, res) => {
+      ensureSheetSynced().catch(e => console.warn('Sync notice:', e ? e.message : e));
       res.json({ success: true, acknowledgements: memoryAcknowledgements });
   });
 
-  app.post('/api/acknowledgements/generate', async (req, res) => {
+  app.post('/api/acknowledgements/generate', (req, res) => {
       const { activityStatusUuid, beneficiaryId, activityName, beneficiaryName, cluster, gp, village, remarks, generatedBy } = req.body;
       if (!activityStatusUuid || !beneficiaryId) {
           return res.status(400).json({ error: 'Missing activityStatusUuid or beneficiaryId' });
@@ -1334,7 +1334,7 @@ export async function createApp() {
       } else {
           memoryAckMappings.unshift(mappingItem);
       }
-      await syncMappingToGoogleSheet([mappingItem]);
+      syncMappingToGoogleSheet([mappingItem]).catch(() => {});
 
       res.json({ success: true, acknowledgement: newRecord });
   });
@@ -1485,7 +1485,7 @@ export async function createApp() {
       }
 
       if (generated.length > 0) {
-          await syncMappingToGoogleSheet(generated.map(g => ({
+          syncMappingToGoogleSheet(generated.map(g => ({
               timestamp: g.created_at,
               uuid: g.activity_status_UUID,
               acknowledgementId: g.acknowledgement_number,
@@ -1497,7 +1497,7 @@ export async function createApp() {
               village: g.village,
               generatedBy: finalGeneratedBy,
               remarks: 'Bulk Generated Letter'
-          })));
+          }))).catch(() => {});
       }
 
       res.json({ success: true, count: generated.length, acknowledgements: generated });

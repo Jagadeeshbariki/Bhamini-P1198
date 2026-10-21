@@ -29,6 +29,187 @@ export const getAssetDisplayLabel = (mat: any): { title: string } => {
     return { title: "Activity Material / Asset" };
 };
 
+export function resolveSmartIds(item: any): { hhId: string; benId: string; benName: string } {
+    if (!item) return { hhId: '-', benId: '-', benName: 'Beneficiary' };
+
+    const benName = item.beneficiary_name || item.beneficiaryName || item.farmer_name || item.farmerName || item.name || 'Beneficiary';
+
+    const rawCandidates = [
+        item['beneficiary_details-beneficiary_adhaar'],
+        item['beneficiary_details/beneficiary_adhaar'],
+        item['beneficiary_details_beneficiary_adhaar'],
+        item['beneficiary_adhaar'],
+        item.beneficiaryAdhaar,
+        item.beneficiary_id,
+        item.beneficiaryId,
+        item.aadhaar,
+        item.adhaar,
+        item.farmerId,
+        item.farmer_id,
+        item.hhId,
+        item.hh_id,
+        item.householdId,
+        item.household_id,
+        item.activity_status_UUID
+    ].filter(Boolean).map(s => String(s).trim());
+
+    let hhId = '-';
+    let benId = '-';
+
+    // 1. First pass: strict digit matching (13 digits = Household ID, 12 digits = Beneficiary ID)
+    for (const idStr of rawCandidates) {
+        const cleanDigits = idStr.replace(/\D/g, '');
+        if (cleanDigits.length === 13 && hhId === '-') {
+            hhId = idStr;
+        } else if (cleanDigits.length === 12 && benId === '-') {
+            benId = idStr;
+        }
+    }
+
+    // 2. Fallbacks for Household ID
+    if (hhId === '-') {
+        const candidate = item.farmerId || item.farmer_id || item.hhId || item.hh_id || item.householdId || item.household_id;
+        if (candidate) {
+            hhId = String(candidate);
+        }
+    }
+
+    // 3. Fallbacks for Beneficiary ID (ensure it is never left as '-' if an ID exists)
+    if (benId === '-') {
+        const candidate = 
+            item['beneficiary_details-beneficiary_adhaar'] || 
+            item['beneficiary_details/beneficiary_adhaar'] || 
+            item['beneficiary_details_beneficiary_adhaar'] || 
+            item['beneficiary_adhaar'] || 
+            item.beneficiaryAdhaar || 
+            item.beneficiary_id || 
+            item.beneficiaryId || 
+            item.aadhaar || 
+            item.adhaar;
+        
+        if (candidate) {
+            benId = String(candidate);
+        } else if (hhId !== '-') {
+            benId = hhId;
+        }
+    }
+
+    // 4. Fallback for Household ID if still missing
+    if (hhId === '-' && benId !== '-') {
+        hhId = benId;
+    }
+
+    return { hhId, benId, benName };
+}
+
+export function enrichWithOdkAdhaar(item: any, odkSubmissions: any[] = [], beneficiaries: any[] = []): any {
+    if (!item) return item;
+
+    const hhIdCandidates = [
+        item.farmerId,
+        item.farmer_id,
+        item.hhId,
+        item.hh_id,
+        item.householdId,
+        item.beneficiary_id,
+        item.beneficiaryId
+    ].filter(Boolean).map(s => String(s).trim());
+
+    const nameCandidate = String(item.beneficiary_name || item.beneficiaryName || item.name || '').trim().toLowerCase();
+    const uuidCandidate = String(item.activity_status_UUID || item.uuid || '').trim();
+
+    let foundAdhaar = '';
+
+    // 1. Search in ODK Submissions (Activity Status Table) for beneficiary_details-beneficiary_adhaar
+    if (odkSubmissions && odkSubmissions.length > 0) {
+        for (const sub of odkSubmissions) {
+            const flatData: Record<string, any> = {};
+            const flatten = (obj: any, prefix = '') => {
+                if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+                    Object.keys(obj).forEach(k => {
+                        const newKey = prefix ? `${prefix}/${k}` : k;
+                        flatData[newKey] = obj[k];
+                        flatData[newKey.replace(/\//g, '.')] = obj[k];
+                        flatData[newKey.replace(/\//g, '_')] = obj[k];
+                        flatten(obj[k], newKey);
+                    });
+                }
+            };
+            flatten(sub);
+
+            const findInFlat = (keywords: string[]) => {
+                for (const kw of keywords) {
+                    if (flatData[kw] !== undefined && flatData[kw] !== null && flatData[kw] !== '') return flatData[kw];
+                }
+                const allKeys = Object.keys(flatData);
+                for (const kw of keywords) {
+                    const match = allKeys.find(k => k.toLowerCase().endsWith(kw.toLowerCase()));
+                    if (match && flatData[match] !== undefined && flatData[match] !== null && flatData[match] !== '') return flatData[match];
+                }
+                for (const kw of keywords) {
+                    const match = allKeys.find(k => k.toLowerCase().includes(kw.toLowerCase()));
+                    if (match && flatData[match] !== undefined && flatData[match] !== null && flatData[match] !== '') return flatData[match];
+                }
+                return '';
+            };
+
+            const subUuid = String(sub.__id || sub["meta/instanceID"] || sub.instanceID || sub["KEY"] || '').trim();
+            const subFarmerId = String(findInFlat(['farmer_id', 'farmerId', 'hh_id', 'hhid', 'household_id'])).trim();
+            const subName = String(findInFlat(['beneficiary_details-beneficiary_name', 'beneficiary_name', 'name', 'farmer_name'])).trim().toLowerCase();
+            const subAdhaar = String(findInFlat([
+                'beneficiary_details-beneficiary_adhaar',
+                'beneficiary_details/beneficiary_adhaar',
+                'beneficiary_details_beneficiary_adhaar',
+                'beneficiary_adhaar',
+                'beneficiary_aadhaar',
+                'adhaar',
+                'aadhaar_number'
+            ])).trim();
+
+            if (subAdhaar) {
+                const matchesUuid = uuidCandidate && subUuid && uuidCandidate === subUuid;
+                const matchesHhId = hhIdCandidates.some(id => subFarmerId && id === subFarmerId);
+                const matchesName = nameCandidate && subName && nameCandidate === subName;
+
+                if (matchesUuid || matchesHhId || matchesName) {
+                    foundAdhaar = subAdhaar;
+                    break;
+                }
+            }
+        }
+    }
+
+    // 2. Search in Master Beneficiaries List
+    if (!foundAdhaar && beneficiaries && beneficiaries.length > 0) {
+        for (const b of beneficiaries) {
+            const bId = String(b.beneficiaryId || b.adhaar || '').trim();
+            const bName = String(b.name || '').trim().toLowerCase();
+            const bHhId = String(b.hhId || b.farmerId || '').trim();
+
+            if (bId) {
+                const matchesHhId = hhIdCandidates.some(id => bHhId && id === bHhId);
+                const matchesName = nameCandidate && bName && nameCandidate === bName;
+                if (matchesHhId || matchesName) {
+                    foundAdhaar = bId;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (foundAdhaar) {
+        return {
+            ...item,
+            beneficiaryAdhaar: foundAdhaar,
+            beneficiary_adhaar: foundAdhaar,
+            'beneficiary_details-beneficiary_adhaar': foundAdhaar
+        };
+    }
+
+    return item;
+}
+
+
 const AcknowledgementLetterSheet: React.FC<AcknowledgementLetterSheetProps> = ({
     id,
     item,
@@ -38,12 +219,11 @@ const AcknowledgementLetterSheet: React.FC<AcknowledgementLetterSheetProps> = ({
 }) => {
     if (!item) return null;
 
+    const { hhId, benId, benName } = resolveSmartIds(item);
+
     const ackNumber = item.acknowledgement_number || 
-        `P1198-BHM-2026-${Math.abs(String(item.beneficiary_id || item.beneficiaryId || item.farmerId || item.hhId || '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`;
+        `P1198-BHM-2026-${Math.abs(String(hhId !== '-' ? hhId : benId !== '-' ? benId : '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`;
     
-    const benName = item.beneficiary_name || item.beneficiaryName || item.name || 'Beneficiary';
-    const hhId = item.farmerId || item.hhId || item.householdId || '-';
-    const benId = item.beneficiary_id || item.beneficiaryId || item.beneficiaryAdhaar || item.aadhaar || '-';
     const village = item.village || '-';
     const gp = item.gp || '-';
     const cluster = item.cluster || '-';
