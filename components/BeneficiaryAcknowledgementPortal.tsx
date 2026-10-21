@@ -13,7 +13,7 @@ import {
     Printer, ArrowLeft, X, Shield, Clock, Users,
     Check, AlertTriangle, Eye, Download, Archive, Layers, Code, Copy
 } from "lucide-react";
-import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, getProxyUrl } from "../config";
+import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL, getProxyUrl } from "../config";
 import { useAuth } from "../hooks/useAuth";
 
 interface AcknowledgementRecord {
@@ -181,9 +181,11 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
         setLoading(true);
         setError(null);
         try {
-            const [ackRes, mapRes, odkRes, benRes] = await Promise.all([
+            const gasDirectUrl = `/api/gas-proxy?url=${encodeURIComponent(ACKNOWLEDGEMENT_MAPPING_SCRIPT_URL)}`;
+            const [ackRes, mapRes, gasRes, odkRes, benRes] = await Promise.all([
                 fetch("/api/acknowledgements/list").then(safeJson).catch(() => ({ success: false, acknowledgements: [] })),
                 fetch("/api/acknowledgement-mapping/list").then(safeJson).catch(() => ({ success: false, records: [] })),
+                fetch(gasDirectUrl).then(safeJson).catch(() => ({ success: false, records: [] })),
                 fetch("/api/odk/data?formId=Status&projectId=3").then(safeJson).catch(() => ({ value: [] })),
                 fetch(getProxyUrl(BENEFICIARY_DATA_URL)).then(r => r.text()).catch(() => "")
             ]);
@@ -203,7 +205,10 @@ const BeneficiaryAcknowledgementPortal: React.FC<BeneficiaryAcknowledgementPorta
             }
 
             const existingAcks = ackRes.success && Array.isArray(ackRes.acknowledgements) ? ackRes.acknowledgements : [];
-            const mappedRecords = mapRes.success && Array.isArray(mapRes.records) ? mapRes.records : [];
+            const mappedRecords = [
+                ...(mapRes.success && Array.isArray(mapRes.records) ? mapRes.records : []),
+                ...(gasRes.success && Array.isArray(gasRes.records) ? gasRes.records : [])
+            ];
 
             const mergedAcks = [...existingAcks];
             for (const m of mappedRecords) {
