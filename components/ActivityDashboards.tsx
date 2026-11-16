@@ -11,7 +11,7 @@ import {
     Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL, CROPS_MATERIAL_TARGETS_URL, ASSET_DISTRIBUTION_URL, BIO_INPUTS_DATA_URL, HARVEST_DATA_URL, getProxyUrl } from '../config';
+import { BENEFICIARY_DATA_URL, CONTRIBUTION_DATA_URL, CROPS_DATA_URL, CROPS_MATERIAL_TARGETS_URL, ASSET_DISTRIBUTION_URL, BIO_INPUTS_DATA_URL, HARVEST_DATA_URL, MIS_TARGETS_URL, ACTIVITIES_MASTER_URL, IRRIGATION_DATA_URL, getProxyUrl } from '../config';
 import ActivityPhotoUploadModal from './ActivityPhotoUploadModal';
 import CapacityBuildingDashboard from './CapacityBuildingDashboard';
 
@@ -63,6 +63,7 @@ interface BeneficiaryRecord {
     lat: number;
     lng: number;
     photo: string;
+    extent?: number;
     contribution?: number;
     cropDetails?: CropRecord[];
     materialsReceived?: Record<string, number>;
@@ -117,17 +118,24 @@ const formatDriveUrl = (url: string) => {
 
 const ActivityDashboardContent: React.FC<{ 
     data: BeneficiaryRecord[]; 
+    targetCount?: number;
+    targetUnit?: string;
+    activityName?: string;
     onRefresh: (url?: string, hhId?: string) => void;
-}> = ({ data, onRefresh }) => {
+}> = ({ data, targetCount = 0, targetUnit = '', activityName = '', onRefresh }) => {
     const mapRef = useRef<HTMLDivElement>(null);
     const [mapLoaded, setMapLoaded] = useState(false);
     const [selectedCluster, setSelectedCluster] = useState('All');
+    const [selectedVillageSite, setSelectedVillageSite] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedBeneficiary, setSelectedBeneficiary] = useState<BeneficiaryRecord | null>(null);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const [showCropDetails, setShowCropDetails] = useState<BeneficiaryRecord | null>(null);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [chartFilter, setChartFilter] = useState<{ chart: string, category: string } | null>(null);
+
+    // Unique list of village / site names for filtering
+    const villageSites = useMemo(() => ['All', ...Array.from(new Set(data.map(d => d.village).filter(Boolean))).sort()], [data]);
 
     // Load Google Maps Script
     useEffect(() => {
@@ -150,11 +158,13 @@ const ActivityDashboardContent: React.FC<{
     const baseFilteredData = useMemo(() => {
         return data.filter(d => {
             const matchesCluster = selectedCluster === 'All' || d.cluster === selectedCluster;
+            const matchesVillage = selectedVillageSite === 'All' || d.village === selectedVillageSite;
             const matchesSearch = d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                 d.hhId.toLowerCase().includes(searchQuery.toLowerCase());
-            return matchesCluster && matchesSearch;
+                                 d.hhId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                 (d.benId && d.benId.toLowerCase().includes(searchQuery.toLowerCase()));
+            return matchesCluster && matchesVillage && matchesSearch;
         });
-    }, [data, selectedCluster, searchQuery]);
+    }, [data, selectedCluster, selectedVillageSite, searchQuery]);
 
     const filteredData = useMemo(() => {
         return baseFilteredData.filter(d => {
@@ -188,10 +198,11 @@ const ActivityDashboardContent: React.FC<{
             if (d.harvests && d.harvests.length > 0) harvestsCount++;
         });
 
-        // Calculate total acres if this is the Crops dashboard
+        // Calculate total acres (combining explicit record extent and crop plot extents)
         const totalAcres = baseFilteredData.reduce((sum, d) => {
             const cropSum = d.cropDetails?.reduce((s, c) => s + (c.extent || 0), 0) || 0;
-            return sum + cropSum;
+            const recordExtent = d.extent || 0;
+            return sum + (recordExtent > 0 ? recordExtent : cropSum);
         }, 0);
 
         const clusterMap: Record<string, number> = {};
@@ -372,14 +383,33 @@ const ActivityDashboardContent: React.FC<{
     return (
         <div className="space-y-4 md:space-y-6 p-2 md:p-4">
             {/* KPI Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+            <div className={`grid grid-cols-2 ${targetCount > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-2 md:gap-3`}>
+                {targetCount > 0 && (
+                    <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-indigo-100 dark:border-indigo-900/50 flex items-center gap-2">
+                        <div className="p-2 bg-indigo-50 dark:bg-indigo-900/40 rounded-lg text-indigo-600">
+                            <TrendingUp className="w-4 h-4 md:w-5 md:h-5" />
+                        </div>
+                        <div>
+                            <p className="text-[8px] md:text-[9px] font-black text-indigo-400 uppercase tracking-widest">Target {targetUnit ? `(${targetUnit})` : 'Beneficiaries'}</p>
+                            <p className="text-lg md:text-xl font-black text-indigo-600 dark:text-indigo-400">{targetCount} {targetUnit}</p>
+                        </div>
+                    </div>
+                )}
+
                 <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700 flex items-center gap-2">
-                    <div className="p-2 bg-indigo-50 dark:bg-indigo-900/40 rounded-lg text-indigo-600">
+                    <div className="p-2 bg-emerald-50 dark:bg-emerald-900/40 rounded-lg text-emerald-600">
                         <Users className="w-4 h-4 md:w-5 md:h-5" />
                     </div>
                     <div>
-                        <p className="text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest">Total Beneficiaries</p>
-                        <p className="text-lg md:text-xl font-black text-gray-900 dark:text-white">{stats.achieved}</p>
+                        <div className="flex items-center gap-1.5">
+                            <p className="text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest">Total Achieved</p>
+                            {targetCount > 0 && (
+                                <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-full text-[8px] font-black">
+                                    {Math.min(100, Math.round((stats.achieved / targetCount) * 100))}%
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-lg md:text-xl font-black text-emerald-600 dark:text-emerald-400">{stats.achieved}</p>
                     </div>
                 </div>
 
@@ -395,7 +425,7 @@ const ActivityDashboardContent: React.FC<{
                     </div>
                 ) : (
                     <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700 flex items-center gap-2">
-                        <div className="p-2 bg-emerald-50 dark:bg-emerald-900/40 rounded-lg text-emerald-600">
+                        <div className="p-2 bg-amber-50 dark:bg-amber-900/40 rounded-lg text-amber-600">
                             <IndianRupee className="w-4 h-4 md:w-5 md:h-5" />
                         </div>
                         <div>
@@ -406,7 +436,7 @@ const ActivityDashboardContent: React.FC<{
                 )}
 
                 <div className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700 flex items-center gap-2">
-                    <div className="p-2 bg-amber-50 dark:bg-amber-900/40 rounded-lg text-amber-600">
+                    <div className="p-2 bg-purple-50 dark:bg-purple-900/40 rounded-lg text-purple-600">
                         <Globe className="w-4 h-4 md:w-5 md:h-5" />
                     </div>
                     <div>
@@ -657,17 +687,35 @@ const ActivityDashboardContent: React.FC<{
             {/* Table & Filters */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl md:rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div className="p-4 md:p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row gap-4 items-center justify-between">
-                    <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-center">
+                    <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto items-center flex-wrap">
                         <div className="relative w-full md:w-64 flex-shrink-0">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                             <input
                                 type="text"
-                                placeholder="Search by ID or Name..."
+                                placeholder="Search by ID, Name or Ben ID..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500"
                             />
                         </div>
+
+                        {villageSites.length > 2 && (
+                            <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded-xl border border-gray-100 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-200">
+                                <span className="text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Site / Village:</span>
+                                <select 
+                                    value={selectedVillageSite} 
+                                    onChange={(e) => setSelectedVillageSite(e.target.value)}
+                                    className="bg-transparent text-xs font-bold border-none outline-none cursor-pointer max-w-[150px] truncate"
+                                >
+                                    {villageSites.map(v => (
+                                        <option key={v} value={v} className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                                            {v}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         {chartFilter && (
                             <button
                                 onClick={() => setChartFilter(null)}
@@ -713,8 +761,8 @@ const ActivityDashboardContent: React.FC<{
                         <thead>
                             <tr className="bg-gray-50 dark:bg-gray-900/50">
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Beneficiary</th>
-                                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Location</th>
-                                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Contribution</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Irrigation Site / Location</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Extent / Contribution</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Media</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Action</th>
                             </tr>
@@ -726,11 +774,11 @@ const ActivityDashboardContent: React.FC<{
                                         <div className="flex items-center gap-2">
                                             <div>
                                                 <p className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">{row.name}</p>
-                                                <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-0.5">{row.hhId}</p>
+                                                <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-0.5">HH: {row.hhId} {row.benId ? `• BEN: ${row.benId}` : ''}</p>
                                             </div>
-                                            {row.cropDetails && (
+                                            {row.cropDetails && row.cropDetails.length > 0 && (
                                                 <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 text-[8px] font-black rounded uppercase">
-                                                    {row.cropDetails.length} Plots
+                                                    {row.cropDetails.length} Crop Plots
                                                 </span>
                                             )}
                                             {row.bioInputs && row.bioInputs.length > 0 && (
@@ -753,9 +801,15 @@ const ActivityDashboardContent: React.FC<{
                                         <p className="text-[9px] font-bold text-gray-400 uppercase mt-0.5">{row.gp} • {row.cluster}</p>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-full text-[10px] font-black">
-                                            ₹{row.contribution?.toLocaleString() || 0}
-                                        </span>
+                                        {row.extent && row.extent > 0 ? (
+                                            <span className="px-3 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded-full text-[10px] font-black">
+                                                {row.extent} Ac
+                                            </span>
+                                        ) : (
+                                            <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-full text-[10px] font-black">
+                                                ₹{row.contribution?.toLocaleString() || 0}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4">
                                         {row.photo ? (
@@ -1002,10 +1056,37 @@ const ActivityDashboardContent: React.FC<{
     );
 };
 
+export interface MasterActivityItem {
+    code: string;
+    name: string;
+}
+
+export const FROZEN_MASTER_ACTIVITIES: MasterActivityItem[] = [
+    { code: 'A.1.1', name: 'Irrigation for crop intensification' },
+    { code: 'A.1.2', name: 'Mobile irrigation systems' },
+    { code: 'A.1.3', name: 'Eco-farm ponds' },
+    { code: 'A.1.4', name: 'Bio resource center' },
+    { code: 'A.1.5', name: 'Custom Hiring Centre' },
+    { code: 'A.1.6', name: 'Strengthening IB & enterprise CB' },
+    { code: 'A.1.7', name: 'Intensive poultry integrated farms' },
+    { code: 'A.1.8', name: 'Goatery sheds' },
+    { code: 'A.1.9', name: 'Processing hubs' },
+    { code: 'A.1.10', name: 'Rainfed Fisheries' },
+    { code: 'A.1.11', name: 'Crop diversification' },
+    { code: 'A.1.12', name: 'Capacity building' },
+    { code: 'A.1.13', name: 'Capacity Building of farmers' },
+    { code: 'A.1.14', name: 'On FRP support' },
+    { code: 'A.1.15', name: 'Video documentation of all activities' }
+];
+
 const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
     const [data, setData] = useState<BeneficiaryRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
+    const [misTargets, setMisTargets] = useState<any[]>([]);
+    const [selectedFY, setSelectedFY] = useState<string>('ALL');
+    const [masterActivities, setMasterActivities] = useState<MasterActivityItem[]>(FROZEN_MASTER_ACTIVITIES);
+    const [selectedMasterCode, setSelectedMasterCode] = useState<string>('ALL');
 
     const parseCSV = (csv: string): any[] => {
         const lines = csv.trim().split(/\r?\n/).filter(l => l.trim());
@@ -1075,14 +1156,17 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 }
             };
 
-            const [benRes, contribRes, cropsRes, assetRes, bioRes, harvRes, targetsRes] = await Promise.all([
+            const [benRes, contribRes, cropsRes, assetRes, bioRes, harvRes, targetsRes, misRes, masterRes, irriRes] = await Promise.all([
                 fetchSafe(BENEFICIARY_DATA_URL),
                 fetchSafe(CONTRIBUTION_DATA_URL),
                 fetchSafe(CROPS_DATA_URL),
                 fetchSafe(ASSET_DISTRIBUTION_URL),
                 fetchSafe(BIO_INPUTS_DATA_URL),
                 fetchSafe(HARVEST_DATA_URL),
-                fetchSafe(CROPS_MATERIAL_TARGETS_URL)
+                fetchSafe(CROPS_MATERIAL_TARGETS_URL),
+                fetchSafe(MIS_TARGETS_URL),
+                fetchSafe(ACTIVITIES_MASTER_URL),
+                fetchSafe(IRRIGATION_DATA_URL)
             ]);
 
             if (!benRes.ok || !contribRes.ok || !cropsRes.ok) throw new Error("Failed to fetch primary data.");
@@ -1094,6 +1178,54 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
             const bioText = await bioRes.text();
             const harvestText = await harvRes.text();
             const targetsText = await targetsRes.text();
+            const misText = (misRes.ok && misRes.text) ? await misRes.text() : '';
+            const masterText = (masterRes.ok && masterRes.text) ? await masterRes.text() : '';
+            const irriText = (irriRes.ok && irriRes.text) ? await irriRes.text() : '';
+
+            if (masterText) {
+                try {
+                    const lines = masterText.trim().split(/\r?\n/).filter(l => l.trim());
+                    if (lines.length > 1) {
+                        const parsedList: MasterActivityItem[] = [];
+                        lines.slice(1).forEach(line => {
+                            const parts = parseLine(line);
+                            const code = (parts[0] || '').trim();
+                            const name = (parts[1] || '').trim();
+                            if (code && name) {
+                                parsedList.push({ code, name });
+                            }
+                        });
+                        if (parsedList.length > 0) {
+                            setMasterActivities(parsedList);
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Failed to parse master activities CSV:", e);
+                }
+            }
+
+            if (misText) {
+                try {
+                    const lines = misText.trim().split(/\r?\n/).filter(l => l.trim());
+                    if (lines.length > 1) {
+                        const rows = lines.slice(1).map(line => {
+                            const parts = parseLine(line);
+                            return {
+                                activityId: parts[0] || '',
+                                activityName: parts[1] || '',
+                                financialYear: parts[2] || '',
+                                quarter: parts[3] || '',
+                                month: parts[4] || '',
+                                target: parseFloat(parts[5] || '0') || 0,
+                                unit: parts[6] || ''
+                            };
+                        }).filter(r => r.activityName);
+                        setMisTargets(rows);
+                    }
+                } catch (e) {
+                    console.warn("Failed to parse misTargets:", e);
+                }
+            }
 
             const parsedBens = parseCSV(benText);
             const parsedTargets = (() => {
@@ -1389,7 +1521,39 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                 }
             });
 
-            setData(augmentedBens);
+            // Parse Irrigation Dataset
+            const parsedIrriRaw = rawCsv(irriText);
+            const irriBens: BeneficiaryRecord[] = parsedIrriRaw.map(row => {
+                const hhId = row['HH ID'] || row['HH_ID'] || row['HH_Id'] || row['HHID'] || row['FARMER ID'] || row['FID'];
+                const normId = normalizeId(hhId);
+                const extentVal = parseFloat(row['EXTENT'] || '0') || 0;
+                const activityName = row['ACTIVITY'] || 'Fixed_Irrigation';
+                return {
+                    hhId: hhId || normId,
+                    name: row['NAME'] || row['BENEFICIARY NAME'] || 'Unknown Farmer',
+                    activity: activityName,
+                    gp: row['GP'] || '',
+                    village: row['VILLAGE'] || '',
+                    age: row['AGE'] || '',
+                    benId: row['BENEFICIARY ID'] || row['BENEFICIARY_ID'] || row['BEN_ID'] || '',
+                    cluster: row['CLUSTER'] || 'Other',
+                    lat: parseFloat(row['LAT'] || row['LATITUDE'] || '0') || 0,
+                    lng: parseFloat(row['LONG'] || row['LONGITUDE'] || '0') || 0,
+                    photo: row['PHOTO'] || row['PHOTO_LINK'] || '',
+                    extent: extentVal,
+                    contribution: (contribMap.get(normId) || {})['Irrigation'] || 0,
+                    cropDetails: cropsMap.get(normId),
+                    bioInputs: bioMap.get(normId),
+                    harvests: harvestMap.get(normId),
+                    materialsReceived: assetMap.get(normId)
+                };
+            }).filter(b => b.hhId);
+
+            // Filter out duplicate irrigation records if already present in augmentedBens
+            const existingKeys = new Set(augmentedBens.map(b => `${normalizeId(b.hhId)}-${b.activity.toUpperCase()}`));
+            const uniqueIrriBens = irriBens.filter(b => !existingKeys.has(`${normalizeId(b.hhId)}-${b.activity.toUpperCase()}`));
+
+            setData([...augmentedBens, ...uniqueIrriBens]);
         } catch (err: any) {
             console.warn("Fetch error:", err.message);
         } finally {
@@ -1401,28 +1565,127 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
         fetchData();
     }, [fetchData]);
 
+    const matchRecordToMasterActivity = useCallback((m: MasterActivityItem, recActivity: string): boolean => {
+        if (!recActivity) return false;
+        const r = recActivity.toLowerCase().trim();
+        const code = m.code.toLowerCase().trim();
+        const name = m.name.toLowerCase().trim();
+
+        if (r === name || r === code || r.includes(code)) return true;
+
+        if (code === 'a.1.1' || name.includes('intensification')) {
+            return r.includes('fixed_irrigation') || r.includes('intensification') || (r.includes('irrigation') && !r.includes('mobile'));
+        }
+        if (code === 'a.1.2' || name.includes('mobile')) {
+            return r.includes('mobile');
+        }
+        if (code === 'a.1.3' || name.includes('eco-farm') || name.includes('farmpond') || name.includes('farm pond')) {
+            return r.includes('farmpond') || r.includes('farm pond') || r.includes('eco');
+        }
+        if (code === 'a.1.4' || name.includes('bio resource') || name.includes('brc')) {
+            return r.includes('brc') || r.includes('bio resource') || r.includes('bio');
+        }
+        if (code === 'a.1.5' || name.includes('custom hiring') || name.includes('chc')) {
+            return r.includes('chc') || r.includes('custom hiring') || r.includes('hiring');
+        }
+        if (code === 'a.1.6' || name.includes('strengthening ib') || name.includes('enterprise cb')) {
+            return r.includes('ib') || r.includes('enterprise') || r.includes('group') || r.includes('shg') || r.includes('institution');
+        }
+        if (code === 'a.1.7' || name.includes('poultry')) {
+            return r.includes('poultry') || r.includes('byp');
+        }
+        if (code === 'a.1.8' || name.includes('goatery')) {
+            return r.includes('goat') || r.includes('goatery') || r.includes('shed');
+        }
+        if (code === 'a.1.9' || name.includes('processing')) {
+            return r.includes('processing');
+        }
+        if (code === 'a.1.10' || name.includes('fisheries')) {
+            return r.includes('fish') || r.includes('fisheries');
+        }
+        if (code === 'a.1.11' || name.includes('crop diversification')) {
+            return r.includes('crops') || r.includes('crop');
+        }
+        if (code === 'a.1.12' || name === 'capacity building') {
+            return r === 'capacity building' || (r.includes('capacity') && !r.includes('farmer'));
+        }
+        if (code === 'a.1.13' || name.includes('capacity building of farmers')) {
+            return r.includes('capacity building of farmers') || r.includes('training') || r.includes('farmer');
+        }
+        if (code === 'a.1.14' || name.includes('frp')) {
+            return r.includes('frp');
+        }
+        if (code === 'a.1.15' || name.includes('video')) {
+            return r.includes('video');
+        }
+
+        return false;
+    }, []);
+
+    const getTargetForMasterActivity = useCallback((m: MasterActivityItem): { target: number; unit: string } => {
+        if (misTargets.length === 0) return { target: 0, unit: '' };
+        const filtered = misTargets.filter(r => {
+            if (selectedFY === 'ALL') return true;
+            const fy = (r.financialYear || '').replace(/^FY\s*-\s*/i, '').trim();
+            return fy === selectedFY || r.financialYear === selectedFY;
+        });
+
+        let sum = 0;
+        let detectedUnit = '';
+        filtered.forEach(r => {
+            const tId = (r.activityId || '').toLowerCase().trim();
+            const tName = (r.activityName || '').toLowerCase().trim();
+            const code = m.code.toLowerCase().trim();
+            const name = m.name.toLowerCase().trim();
+
+            const isMatch = tId === code || tName === name ||
+                (code === 'a.1.1' && (tName.includes('irrigation for crop intensification') || tName.includes('fixed_irrigation') || tName.includes('intensification'))) ||
+                (code === 'a.1.2' && tName.includes('mobile irrigation')) ||
+                (code === 'a.1.3' && (tName.includes('eco-farm') || tName.includes('farmpond') || tName.includes('farm pond'))) ||
+                (code === 'a.1.4' && (tName.includes('bio resource') || tName.includes('brc'))) ||
+                (code === 'a.1.5' && (tName.includes('custom hiring') || tName.includes('chc'))) ||
+                (code === 'a.1.6' && (tName.includes('strengthening ib') || tName.includes('enterprise'))) ||
+                (code === 'a.1.7' && tName.includes('poultry')) ||
+                (code === 'a.1.8' && (tName.includes('goatery') || tName.includes('goat'))) ||
+                (code === 'a.1.9' && tName.includes('processing')) ||
+                (code === 'a.1.10' && (tName.includes('fisheries') || tName.includes('fish'))) ||
+                (code === 'a.1.11' && (tName.includes('crop diversification') || tName.includes('crop'))) ||
+                (code === 'a.1.12' && tName === 'capacity building') ||
+                (code === 'a.1.13' && (tName.includes('farmers') || tName.includes('training'))) ||
+                (code === 'a.1.14' && tName.includes('frp')) ||
+                (code === 'a.1.15' && tName.includes('video'));
+
+            if (isMatch) {
+                sum += r.target;
+                if (r.unit && !detectedUnit) detectedUnit = r.unit;
+            }
+        });
+        return { target: sum, unit: detectedUnit };
+    }, [misTargets, selectedFY]);
+
     const handleRefresh = (newPhotoUrl?: string, hhId?: string) => {
         if (newPhotoUrl && hhId) {
             setData(prev => prev.map(b => 
                 b.hhId === hhId ? { ...b, photo: newPhotoUrl } : b
             ));
-            // Delay fetchData to allow spreadsheet to update and avoid immediate overwrite with cached old data
             setTimeout(() => fetchData(), 5000);
         } else {
             fetchData();
         }
     };
 
-    const activities = useMemo(() => {
-        const unique = Array.from(new Set(data.map(d => d.activity))).sort();
-        return [...unique, 'Capacity Building'];
-    }, [data]);
+    const displayedActivities = useMemo(() => {
+        if (selectedMasterCode === 'ALL') {
+            return masterActivities;
+        }
+        return masterActivities.filter(m => m.code === selectedMasterCode);
+    }, [masterActivities, selectedMasterCode]);
 
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
                 <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
-                <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em] animate-pulse">Synchronizing Activity Dashboards...</p>
+                <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em] animate-pulse">Synchronizing Master Activities Dashboards...</p>
             </div>
         );
     }
@@ -1438,32 +1701,89 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                     Back to Dashboards
                 </button>
             )}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div>
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="px-2.5 py-1 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 rounded-full text-[10px] font-black uppercase tracking-widest">
+                            Frozen Master List (A.1.1 – A.1.15)
+                        </span>
+                    </div>
                     <h1 className="text-4xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">
-                        Activity Dashboards
+                        Activities Dashboards
                     </h1>
                     <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-2 flex items-center gap-2">
                         <LayoutDashboard className="w-3 h-3" />
-                        Unified Project Monitoring System
+                        Unified Project Monitoring & Activity-Wise Tracking
                     </p>
                 </div>
-                <button 
-                    onClick={fetchData}
-                    className="p-4 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 hover:scale-110 active:rotate-180 transition-all duration-500 group"
+
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 bg-white dark:bg-gray-800 px-4 py-2.5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <Calendar className="w-4 h-4 text-indigo-600" />
+                        <span className="text-[10px] font-black uppercase text-gray-400">Financial Year:</span>
+                        <select 
+                            value={selectedFY} 
+                            onChange={(e) => setSelectedFY(e.target.value)}
+                            className="bg-transparent text-xs font-bold text-gray-900 dark:text-white border-none outline-none cursor-pointer"
+                        >
+                            <option value="ALL">ALL FYs</option>
+                            <option value="2025-26">2025-26</option>
+                            <option value="2026-27">2026-27</option>
+                            <option value="2027-28">2027-28</option>
+                            <option value="2028-Part">2028-Part</option>
+                        </select>
+                    </div>
+
+                    <button 
+                        onClick={fetchData}
+                        className="p-3.5 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 hover:scale-110 active:rotate-180 transition-all duration-500 group"
+                        title="Refresh Data"
+                    >
+                        <RefreshCw className="w-5 h-5 text-indigo-600 group-hover:animate-spin" />
+                    </button>
+                </div>
+            </div>
+
+            {/* Quick Activity Filter Bar */}
+            <div className="flex items-center gap-2 bg-white dark:bg-gray-900 p-3 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-x-auto scrollbar-hide">
+                <button
+                    onClick={() => setSelectedMasterCode('ALL')}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${
+                        selectedMasterCode === 'ALL'
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'bg-gray-50 dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
                 >
-                    <RefreshCw className="w-5 h-5 text-indigo-600 group-hover:animate-spin" />
+                    All 15 Activities
+                    <span className="px-1.5 py-0.5 rounded-md text-[8px] bg-white/20 text-white">15</span>
                 </button>
+                {masterActivities.map((m) => (
+                    <button
+                        key={m.code}
+                        onClick={() => setSelectedMasterCode(m.code)}
+                        className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                            selectedMasterCode === m.code
+                            ? 'bg-indigo-600 text-white shadow-md'
+                            : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                    >
+                        <span className="font-mono text-indigo-400 dark:text-indigo-300">{m.code}</span>
+                        <span className="truncate max-w-[120px]">{m.name}</span>
+                    </button>
+                ))}
             </div>
 
             <div className="space-y-4">
-                {activities.map((activity) => {
-                    const activityData = data.filter(d => d.activity === activity);
-                    const isExpanded = expandedActivity === activity;
+                {displayedActivities.map((m) => {
+                    const activityData = data.filter(d => matchRecordToMasterActivity(m, d.activity));
+                    const isExpanded = expandedActivity === m.code || expandedActivity === m.name;
+                    const { target: targetVal, unit: targetUnit } = getTargetForMasterActivity(m);
+                    const pct = targetVal > 0 ? Math.min(100, Math.round((activityData.length / targetVal) * 100)) : 0;
 
                     return (
                         <div 
-                            key={activity}
+                            key={m.code}
                             className={`bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-2xl border transition-all duration-500 overflow-hidden ${
                                 isExpanded 
                                 ? 'border-indigo-500 ring-4 ring-indigo-500/10' 
@@ -1471,31 +1791,49 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                             }`}
                         >
                             <button
-                                onClick={() => setExpandedActivity(isExpanded ? null : activity)}
+                                onClick={() => setExpandedActivity(isExpanded ? null : m.code)}
                                 className="w-full flex items-center justify-between p-8 text-left group"
                             >
-                                <div className="flex items-center gap-6">
-                                    <div className={`w-16 h-16 rounded-3xl flex items-center justify-center transition-all duration-500 ${
+                                <div className="flex items-center gap-6 flex-1 min-w-0 pr-4">
+                                    <div className={`w-16 h-16 rounded-3xl flex items-center justify-center transition-all duration-500 flex-shrink-0 ${
                                         isExpanded ? 'bg-indigo-600 text-white rotate-12' : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 group-hover:rotate-12'
                                     }`}>
                                         <TrendingUp className="w-8 h-8" />
                                     </div>
-                                    <div>
-                                        <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">{activity}</h2>
-                                        <div className="flex items-center gap-4 mt-1">
-                                            {activity === 'Capacity Building' ? (
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-3 flex-wrap">
+                                            <span className="px-3 py-1 bg-indigo-600 text-white rounded-full text-xs font-mono font-black uppercase tracking-widest shadow-sm">
+                                                {m.code}
+                                            </span>
+                                            <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">{m.name}</h2>
+                                            {targetVal > 0 && (
+                                                <span className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 rounded-full text-[10px] font-black uppercase tracking-widest">
+                                                    Target: {targetVal} {targetUnit}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-4 mt-2 flex-wrap">
+                                            {m.name.toLowerCase().includes('capacity building') ? (
                                                 <span className="flex items-center gap-1 text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
                                                     <Calendar className="w-3 h-3" />
-                                                    Training & Reports
+                                                    Training & Event Reports
                                                 </span>
                                             ) : (
                                                 <>
                                                     <span className="flex items-center gap-1 text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
                                                         <Users className="w-3 h-3" />
-                                                        {activityData.length} Beneficiaries
+                                                        {activityData.length} {targetVal > 0 ? `/ ${targetVal}` : ''} Beneficiaries
                                                     </span>
+                                                    {targetVal > 0 && (
+                                                        <>
+                                                            <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                                                            <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
+                                                                {pct}% Achieved
+                                                            </span>
+                                                        </>
+                                                    )}
                                                     <span className="w-1 h-1 bg-gray-300 rounded-full" />
-                                                    {activity.toUpperCase().includes('CROP') ? (
+                                                    {m.name.toUpperCase().includes('CROP') ? (
                                                         <span className="flex items-center gap-1 text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">
                                                             <TrendingUp className="w-3 h-3" />
                                                             {activityData.reduce((sum, d) => sum + (d.cropDetails?.reduce((s, c) => s + (c.extent || 0), 0) || 0), 0).toFixed(2)} Acres
@@ -1509,6 +1847,15 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
                                                 </>
                                             )}
                                         </div>
+
+                                        {targetVal > 0 && (
+                                            <div className="w-full max-w-xs bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden mt-3">
+                                                <div 
+                                                    className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`} 
+                                                    style={{ width: `${pct}%` }} 
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div className={`p-4 rounded-2xl transition-all duration-500 ${isExpanded ? 'bg-indigo-600 text-white rotate-180' : 'bg-gray-50 dark:bg-gray-800 text-gray-400'}`}>
@@ -1518,11 +1865,14 @@ const ActivityDashboards: React.FC<ActivityDashboardsProps> = ({ onBack }) => {
 
                             {isExpanded && (
                                 <div className="border-t border-gray-50 dark:border-gray-800 animate-in slide-in-from-top-4 duration-500">
-                                    {activity === 'Capacity Building' ? (
+                                    {m.name.toLowerCase().includes('capacity building') ? (
                                         <CapacityBuildingDashboard />
                                     ) : (
                                         <ActivityDashboardContent 
                                             data={activityData} 
+                                            targetCount={targetVal}
+                                            targetUnit={targetUnit}
+                                            activityName={m.name}
                                             onRefresh={handleRefresh}
                                         />
                                     )}

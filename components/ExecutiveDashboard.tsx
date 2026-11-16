@@ -8,7 +8,7 @@ import {
     Download, X, ArrowUpDown, ArrowUp,
     Activity as ActivityIcon, UserCheck,
     ChevronDown, ChevronUp, ArrowLeft,
-    TrendingUp, TrendingDown, Target, Package, CheckCircle, AlertTriangle, Lightbulb, Calendar, Map as MapIcon, Heart, Star, LayoutDashboard, Database, TrendingRight
+    TrendingUp, TrendingDown, Target, Package, CheckCircle, AlertTriangle, Lightbulb, Calendar, Map as MapIcon, Heart, Star, LayoutDashboard, Database
 } from 'lucide-react';
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#f43f5e', '#14b8a6', '#f97316', '#06b6d4'];

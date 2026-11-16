@@ -1270,7 +1270,7 @@ export const UploadLettersDashboard: React.FC<UploadLettersDashboardProps> = ({ 
 
                                 <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-2.5 rounded-xl border border-gray-200 a4-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px 14px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "7px 12px", fontSize: "11px" }}>
                                     {(() => {
-                                        const { hhId, benId, benName } = resolveSmartIds(selectedAckLetterForPreview);
+                                        const { hhId, benId, benName } = resolveSmartIds(selectedAckLetterForPreview, activityRecords.map(r => r.raw), beneficiaries);
                                         return (
                                             <>
                                                 <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని పేరు (Name):</span> <span style={{ fontWeight: 900, color: "#111827", marginLeft: "4px" }}>{benName || selectedAckLetterForPreview.beneficiaryName || selectedAckLetterForPreview.beneficiary}</span></div>
@@ -1441,6 +1441,8 @@ export const UploadLettersDashboard: React.FC<UploadLettersDashboardProps> = ({ 
                             id={`upload-batch-sheet-${idx}`}
                             item={item}
                             materials={item.materials}
+                            odkSubmissions={activityRecords.map(r => r.raw)}
+                            beneficiaries={beneficiaries}
                         />
                     ))}
                 </div>

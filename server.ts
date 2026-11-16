@@ -34,6 +34,71 @@ export async function createApp() {
   let odkSessionToken: string | null = null;
   let tokenExpiresAt: number = 0;
 
+  // Helper for resilient fetch to handle ODK Central socket closed / terminated errors
+  async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 2, delayMs = 300): Promise<Response> {
+    let attempt = 0;
+    let lastError: any = null;
+
+    while (attempt <= retries) {
+      try {
+        const headers = new Headers(options.headers || {});
+        if (!headers.has('Connection')) {
+          headers.set('Connection', 'close');
+        }
+
+        const fetchOpts: RequestInit = {
+          ...options,
+          headers
+        };
+
+        const response = await fetch(url, fetchOpts);
+        
+        if ([502, 503, 504].includes(response.status) && attempt < retries) {
+          attempt++;
+          await new Promise(r => setTimeout(r, delayMs * attempt));
+          continue;
+        }
+
+        return response;
+      } catch (err: any) {
+        lastError = err;
+        attempt++;
+
+        const errMessage = String(err.message || '').toLowerCase();
+        const errCauseMsg = String(err.cause?.message || err.cause || '').toLowerCase();
+        const errCauseCode = String(err.cause?.code || '').toLowerCase();
+        
+        const isSocketOrTerminatedError =
+          err.name === 'TypeError' ||
+          err.name === 'FetchError' ||
+          err.name === 'SocketError' ||
+          errMessage.includes('terminated') ||
+          errMessage.includes('socket') ||
+          errMessage.includes('fetch failed') ||
+          errMessage.includes('other side closed') ||
+          errCauseMsg.includes('closed') ||
+          errCauseMsg.includes('socket') ||
+          errCauseCode.includes('econnreset') ||
+          err['Symbol(undici.error.UND_ERR)'] === true ||
+          err['Symbol(undici.error.UND_ERR_SOCKET)'] === true;
+
+        if (err.name === 'AbortError' && !isSocketOrTerminatedError) {
+          throw err;
+        }
+
+        if (attempt <= retries) {
+          console.warn(`[FETCH RETRY] Attempt ${attempt}/${retries} for ${url} failed (${err.message || err}). Retrying in ${delayMs * attempt}ms...`);
+          await new Promise(r => setTimeout(r, delayMs * attempt));
+          continue;
+        }
+
+        throw err;
+      }
+    }
+
+    throw lastError;
+  }
+
   async function getOdkToken() {
     const email = (process.env.ODK_EMAIL || '').trim();
     const password = (process.env.ODK_PASSWORD || '').trim();
@@ -48,17 +113,18 @@ export async function createApp() {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout for auth
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout for auth
       
-      const res = await fetch('https://central.wassan.org/v1/sessions', {
+      const res = await fetchWithRetry('https://central.wassan.org/v1/sessions', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'User-Agent': 'Wassan-App/1.0'
+          'User-Agent': 'Wassan-App/1.0',
+          'Connection': 'close'
         },
         body: JSON.stringify({ email, password }),
         signal: controller.signal
-      });
+      }, 2, 300);
 
       clearTimeout(timeoutId);
 
@@ -76,6 +142,7 @@ export async function createApp() {
         const err = new Error(message) as any;
         err.status = status;
         err.details = errorText;
+        odkSessionToken = null;
         throw err;
       }
 
@@ -84,6 +151,7 @@ export async function createApp() {
       tokenExpiresAt = new Date(data.expiresAt).getTime();
       return odkSessionToken;
     } catch (e: any) {
+      odkSessionToken = null;
       console.error('[ODK AUTH] Error:', e.message);
       throw e;
     }
@@ -112,26 +180,26 @@ export async function createApp() {
       const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       try {
-        let response = await fetch(odataUrl, {
+        let response = await fetchWithRetry(odataUrl, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'Accept': 'application/json',
             'User-Agent': 'Wassan-App/1.0'
           },
           signal: controller.signal
-        });
+        }, 2, 300);
 
         // Smart Fallback: If OData fails (404/405/501), try REST API
         if (!response.ok && [404, 405, 501].includes(response.status)) {
           console.log(`[ODK ENTITIES] OData not supported. Falling back to REST: ${restUrl}`);
-          response = await fetch(restUrl, {
+          response = await fetchWithRetry(restUrl, {
             headers: { 
               'Authorization': `Bearer ${token}`,
               'Accept': 'application/json',
               'User-Agent': 'Wassan-App/1.0'
             },
             signal: controller.signal
-          });
+          }, 2, 300);
         }
 
         clearTimeout(timeoutId);
@@ -177,17 +245,18 @@ export async function createApp() {
       const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       try {
-        const response = await fetch(url, {
+        const response = await fetchWithRetry(url, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'User-Agent': 'Wassan-App/1.0'
           },
           signal: controller.signal
-        });
+        }, 2, 300);
 
         clearTimeout(timeoutId);
 
         if (!response.ok) {
+          if (response.status === 401) odkSessionToken = null;
           console.error(`ODK Fetch Failed: ${response.status} for ${url}`);
           return res.status(response.status).json({ error: 'Failed to fetch image from ODK', status: response.status });
         }
@@ -207,7 +276,8 @@ export async function createApp() {
       if (error.name === 'AbortError') {
         return res.status(504).send('ODK Image request timed out (12s)');
       }
-      if (error.message === '401') {
+      if (error.message === '401' || error.status === 401) {
+         odkSessionToken = null;
          return res.status(401).send('ODK Authentication Failed');
       }
       console.error('ODK Proxy Error:', error);
@@ -232,18 +302,19 @@ export async function createApp() {
       const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       try {
-        const response = await fetch(url, {
+        const response = await fetchWithRetry(url, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'User-Agent': 'Wassan-App/1.0',
             'Accept': 'application/json'
           },
           signal: controller.signal
-        });
+        }, 2, 300);
 
         clearTimeout(timeoutId);
 
         if (!response.ok) {
+          if (response.status === 401) odkSessionToken = null;
           const text = await response.text();
           return res.status(response.status).json({ error: 'ODK Submissions API Failed', details: text });
         }
@@ -298,14 +369,14 @@ export async function createApp() {
           
           try {
             console.log(`[ODK FETCH] ${label} - Page ${pages}: ${nextLink}`);
-            const resp = await fetch(nextLink, {
+            const resp = await fetchWithRetry(nextLink, {
               headers: { 
                 'Authorization': `Bearer ${token}`, 
                 'Accept': 'application/json',
                 'User-Agent': 'Bhamini-P1198/1.0'
               },
               signal: controller.signal
-            });
+            }, 2, 300);
             clearTimeout(timeoutId);
             
             if (!resp.ok) {
@@ -384,37 +455,39 @@ export async function createApp() {
        const timeoutId = setTimeout(() => controller.abort(), 12000);
 
        try {
-         const formRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/forms`, {
+         const formRes = await fetchWithRetry(`https://central.wassan.org/v1/projects/${projectId}/forms`, {
            headers: { 
              'Authorization': `Bearer ${token}`,
              'User-Agent': 'Wassan-App/1.0',
              'Accept': 'application/json'
            },
            signal: controller.signal
-         });
+         }, 2, 300);
          const forms = await formRes.json();
 
-         const appUsersRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/app-users`, {
+         const appUsersRes = await fetchWithRetry(`https://central.wassan.org/v1/projects/${projectId}/app-users`, {
            headers: { 
              'Authorization': `Bearer ${token}`,
              'User-Agent': 'Wassan-App/1.0',
              'Accept': 'application/json'
            },
            signal: controller.signal
-         });
+         }, 2, 300);
          const appUsers = await appUsersRes.json();
          const usersMap: Record<string, string> = {};
-         appUsers.forEach((u: any) => usersMap[u.id] = u.displayName);
+         if (Array.isArray(appUsers)) {
+           appUsers.forEach((u: any) => usersMap[u.id] = u.displayName);
+         }
 
-         const submissionsData = await Promise.all(forms.map(async (form: any) => {
-             const subRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(form.xmlFormId)}/submissions`, {
+         const submissionsData = await Promise.all((Array.isArray(forms) ? forms : []).map(async (form: any) => {
+             const subRes = await fetchWithRetry(`https://central.wassan.org/v1/projects/${projectId}/forms/${encodeURIComponent(form.xmlFormId)}/submissions`, {
                headers: { 
                  'Authorization': `Bearer ${token}`,
                  'User-Agent': 'Wassan-App/1.0',
                  'Accept': 'application/json'
                },
                signal: controller.signal
-             });
+             }, 2, 300);
              const subs = await subRes.json();
              return { formId: form.xmlFormId, formName: form.name, submissions: subs };
          }));
@@ -544,7 +617,7 @@ export async function createApp() {
       try {
         const json = JSON.parse(text);
         res.json(json);
-      } catch (e) {
+      } catch {
         console.warn(`[GAS PROXY] Response was not JSON. Returning raw text.`);
         if (text.includes('<!DOCTYPE html>')) {
           res.status(502).json({ error: "Google returned HTML (likely an error page). Check Script Quotas." });
@@ -586,7 +659,7 @@ export async function createApp() {
       try {
         const json = JSON.parse(text);
         res.json(json);
-      } catch (e) {
+      } catch {
         res.send(text);
       }
     } catch (error: any) {
@@ -642,7 +715,7 @@ export async function createApp() {
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
-        const response = await fetch(url, {
+        const response = await fetchWithRetry(url, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'Accept': 'application/json',
@@ -650,7 +723,7 @@ export async function createApp() {
           },
           cache: 'no-store',
           signal: controller.signal
-        });
+        }, 2, 300);
 
         clearTimeout(timeoutId);
 
@@ -663,6 +736,7 @@ export async function createApp() {
 
         // 8. Handle non-2xx
         if (!response.ok) {
+          if (response.status === 401) odkSessionToken = null;
           return res.status(response.status).json({
             error: "ODK request failed",
             odkStatus: response.status,
@@ -702,7 +776,7 @@ export async function createApp() {
       console.error("[ODK PROXY] FATAL EXCEPTION:", error);
       res.status(500).json({
         error: "ODK data API failed",
-        message: error.message
+        message: error.message || "Network error communicating with ODK Central"
       });
     }
   });
@@ -726,14 +800,14 @@ export async function createApp() {
       console.log(`[ODK ODATA] Resolved Project: ${projectId}, Form: ${formId}`);
       console.log(`[ODK ODATA] URL: ${url}`);
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
           'User-Agent': 'Wassan-App/1.0'
         },
         cache: 'no-store'
-      });
+      }, 2, 300);
 
       const contentType = response.headers.get('content-type') || '';
       const status = response.status;
@@ -743,6 +817,7 @@ export async function createApp() {
       console.log(`[ODK PROXY] Content-Type: ${contentType}`);
       
       if (!response.ok) {
+        if (status === 401) odkSessionToken = null;
         console.error(`[ODK PROXY] Fetch failed with status ${status}`);
         console.error(`[ODK PROXY] Error Body: ${text.substring(0, 1000)}`);
         
@@ -837,9 +912,9 @@ export async function createApp() {
 
       const token = await getOdkToken();
       
-      const projectsRes = await fetch(`https://central.wassan.org/v1/projects`, {
+      const projectsRes = await fetchWithRetry(`https://central.wassan.org/v1/projects`, {
         headers: { 'Authorization': `Bearer ${token}` }
-      });
+      }, 2, 300);
       
       const projects = await projectsRes.json();
       
@@ -871,17 +946,18 @@ export async function createApp() {
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       try {
-        const projectRes = await fetch(`https://central.wassan.org/v1/projects/${projectId}`, {
+        const projectRes = await fetchWithRetry(`https://central.wassan.org/v1/projects/${projectId}`, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'User-Agent': 'Wassan-App/1.0'
           },
           signal: controller.signal
-        });
+        }, 2, 300);
         
         clearTimeout(timeoutId);
         
         if (!projectRes.ok) {
+          if (projectRes.status === 401) odkSessionToken = null;
           return res.status(200).json({ 
             status: 'error', 
             message: `ODK Central connection failed: ${projectRes.status}`,
@@ -1035,7 +1111,7 @@ export async function createApp() {
         }
       });
       res.json({ success: true, count: cachedMaterialsMap.size, map: obj });
-    } catch (err: any) {
+    } catch {
       res.json({ success: true, count: 0, map: {} });
     }
   });
@@ -1073,7 +1149,7 @@ export async function createApp() {
       }
 
       res.json({ success: true, count: matched.length, materials: matched });
-    } catch (err: any) {
+    } catch {
       res.json({ success: true, count: 0, materials: [] });
     }
   });
@@ -1187,7 +1263,7 @@ export async function createApp() {
             });
           }
         }
-      } catch (eCsv) {
+      } catch {
         // ignore fallback CSV error
       }
 
@@ -1290,11 +1366,18 @@ export async function createApp() {
       const finalGeneratedBy = rawGenBy && rawGenBy !== 'System' && rawGenBy !== 'user' ? rawGenBy : 'Admin';
 
       const ackNum = `P1198-BHM-2026-${String(ackCounter++).padStart(6, '0')}`;
+      const farmerId = req.body.farmerId || req.body.farmer_id || req.body.householdId || null;
+      const benAdhaar = req.body.beneficiaryAdhaar || req.body['beneficiary_details-beneficiary_adhaar'] || null;
+
       const newRecord = {
           id: 'ack_' + Math.random().toString(36).substring(2, 11),
           acknowledgement_number: ackNum,
           activity_status_UUID: activityStatusUuid,
           beneficiary_id: beneficiaryId,
+          farmerId: farmerId,
+          farmer_id: farmerId,
+          beneficiaryAdhaar: benAdhaar,
+          'beneficiary_details-beneficiary_adhaar': benAdhaar,
           activity_name: activityName || 'NS',
           beneficiary_name: beneficiaryName || 'Beneficiary',
           cluster: cluster || 'Cluster 1',
@@ -1442,11 +1525,18 @@ export async function createApp() {
           let existing = memoryAcknowledgements.find(a => a.activity_status_UUID === item.activityStatusUuid && a.beneficiary_id === item.beneficiaryId);
           if (!existing) {
               const ackNum = `P1198-BHM-2026-${String(ackCounter++).padStart(6, '0')}`;
+              const farmerId = item.farmerId || item.farmer_id || item.householdId || null;
+              const benAdhaar = item.beneficiaryAdhaar || item['beneficiary_details-beneficiary_adhaar'] || null;
+
               existing = {
                   id: 'ack_' + Math.random().toString(36).substring(2, 11),
                   acknowledgement_number: ackNum,
                   activity_status_UUID: item.activityStatusUuid,
                   beneficiary_id: item.beneficiaryId,
+                  farmerId: farmerId,
+                  farmer_id: farmerId,
+                  beneficiaryAdhaar: benAdhaar,
+                  'beneficiary_details-beneficiary_adhaar': benAdhaar,
                   activity_name: item.activityName || 'NS',
                   beneficiary_name: item.beneficiaryName || 'Beneficiary',
                   cluster: item.cluster || 'Cluster 1',

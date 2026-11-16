@@ -29,12 +29,12 @@ import UploadLettersDashboard from './components/UploadLettersDashboard';
 import { APP_VERSION } from './config';
 import { ArrowLeft } from 'lucide-react';
 
-type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution' | 'odk-dashboard' | 'staff-attendance' | 'attendance-monitoring' | 'capacity-building' | 'institution-dashboard' | 'activity-status' | 'beneficiary-acknowledgement' | 'upload-letters';
+type Page = 'home' | 'login' | 'attendance-report' | 'mark-attendance' | 'admin' | 'budget-tracker' | 'field-mis' | 'baseline' | 'contribution' | 'activities' | 'activity-dashboards' | 'dashboards' | 'beneficiary-explorer' | 'asset-tracking' | 'odk-asset-distribution' | 'odk-dashboard' | 'staff-attendance' | 'attendance-monitoring' | 'capacity-building' | 'institution-dashboard' | 'activity-status' | 'beneficiary-acknowledgement' | 'upload-letters';
 
 const AppContent: React.FC = () => {
     const [page, setPage] = useState<Page>(() => {
         const hash = window.location.hash.replace('#', '') as Page;
-        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'activity-status', 'beneficiary-acknowledgement', 'upload-letters'];
+        const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activities', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'activity-status', 'beneficiary-acknowledgement', 'upload-letters'];
         return validPages.includes(hash) ? hash : 'home';
     });
     const { user, logout } = useAuth();
@@ -44,7 +44,7 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         const handleHashChange = () => {
             const hash = window.location.hash.replace('#', '') as Page;
-            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'activity-status', 'beneficiary-acknowledgement', 'upload-letters'];
+            const validPages: Page[] = ['home', 'login', 'attendance-report', 'mark-attendance', 'admin', 'budget-tracker', 'field-mis', 'baseline', 'contribution', 'activities', 'activity-dashboards', 'dashboards', 'beneficiary-explorer', 'asset-tracking', 'odk-asset-distribution', 'odk-dashboard', 'staff-attendance', 'attendance-monitoring', 'capacity-building', 'institution-dashboard', 'activity-status', 'beneficiary-acknowledgement', 'upload-letters'];
             if (validPages.includes(hash)) {
                 setPage(hash);
             }
@@ -162,6 +162,7 @@ const AppContent: React.FC = () => {
                 return <BaselinePage />;
             case 'contribution':
                 return <ContributionPage />;
+            case 'activities':
             case 'activity-dashboards':
                 return <ActivityDashboards onBack={() => handleNavigate('dashboards')} />;
             case 'dashboards':

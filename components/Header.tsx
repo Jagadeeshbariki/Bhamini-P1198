@@ -100,6 +100,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                     <NavLink {...navLinkProps} page="attendance-report">Attendance Report</NavLink>
                                     <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
                                     <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
+                                    <NavLink {...navLinkProps} page="activities" primary>Activities</NavLink>
                                     <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
                                 </>
                             )}
@@ -154,6 +155,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, onLogout }) =>
                                 <NavLink {...navLinkProps} page="attendance-report">Attendance Report</NavLink>
                                 <NavLink {...navLinkProps} page="staff-attendance">Staff Attendance</NavLink>
                                 <NavLink {...navLinkProps} page="attendance-monitoring">Monitoring</NavLink>
+                                <NavLink {...navLinkProps} page="activities" primary>Activities</NavLink>
                                 <NavLink {...navLinkProps} page="dashboards">Dashboards</NavLink>
 
                             </>

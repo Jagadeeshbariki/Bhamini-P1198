@@ -5,6 +5,8 @@ interface AcknowledgementLetterSheetProps {
     id: string;
     item: any;
     materials?: any[];
+    odkSubmissions?: any[];
+    beneficiaries?: any[];
     className?: string;
     style?: React.CSSProperties;
 }
@@ -28,79 +30,6 @@ export const getAssetDisplayLabel = (mat: any): { title: string } => {
     }
     return { title: "Activity Material / Asset" };
 };
-
-export function resolveSmartIds(item: any): { hhId: string; benId: string; benName: string } {
-    if (!item) return { hhId: '-', benId: '-', benName: 'Beneficiary' };
-
-    const benName = item.beneficiary_name || item.beneficiaryName || item.farmer_name || item.farmerName || item.name || 'Beneficiary';
-
-    const rawCandidates = [
-        item['beneficiary_details-beneficiary_adhaar'],
-        item['beneficiary_details/beneficiary_adhaar'],
-        item['beneficiary_details_beneficiary_adhaar'],
-        item['beneficiary_adhaar'],
-        item.beneficiaryAdhaar,
-        item.beneficiary_id,
-        item.beneficiaryId,
-        item.aadhaar,
-        item.adhaar,
-        item.farmerId,
-        item.farmer_id,
-        item.hhId,
-        item.hh_id,
-        item.householdId,
-        item.household_id,
-        item.activity_status_UUID
-    ].filter(Boolean).map(s => String(s).trim());
-
-    let hhId = '-';
-    let benId = '-';
-
-    // 1. First pass: strict digit matching (13 digits = Household ID, 12 digits = Beneficiary ID)
-    for (const idStr of rawCandidates) {
-        const cleanDigits = idStr.replace(/\D/g, '');
-        if (cleanDigits.length === 13 && hhId === '-') {
-            hhId = idStr;
-        } else if (cleanDigits.length === 12 && benId === '-') {
-            benId = idStr;
-        }
-    }
-
-    // 2. Fallbacks for Household ID
-    if (hhId === '-') {
-        const candidate = item.farmerId || item.farmer_id || item.hhId || item.hh_id || item.householdId || item.household_id;
-        if (candidate) {
-            hhId = String(candidate);
-        }
-    }
-
-    // 3. Fallbacks for Beneficiary ID (ensure it is never left as '-' if an ID exists)
-    if (benId === '-') {
-        const candidate = 
-            item['beneficiary_details-beneficiary_adhaar'] || 
-            item['beneficiary_details/beneficiary_adhaar'] || 
-            item['beneficiary_details_beneficiary_adhaar'] || 
-            item['beneficiary_adhaar'] || 
-            item.beneficiaryAdhaar || 
-            item.beneficiary_id || 
-            item.beneficiaryId || 
-            item.aadhaar || 
-            item.adhaar;
-        
-        if (candidate) {
-            benId = String(candidate);
-        } else if (hhId !== '-') {
-            benId = hhId;
-        }
-    }
-
-    // 4. Fallback for Household ID if still missing
-    if (hhId === '-' && benId !== '-') {
-        hhId = benId;
-    }
-
-    return { hhId, benId, benName };
-}
 
 export function enrichWithOdkAdhaar(item: any, odkSubmissions: any[] = [], beneficiaries: any[] = []): any {
     if (!item) return item;
@@ -131,6 +60,7 @@ export function enrichWithOdkAdhaar(item: any, odkSubmissions: any[] = [], benef
                         flatData[newKey] = obj[k];
                         flatData[newKey.replace(/\//g, '.')] = obj[k];
                         flatData[newKey.replace(/\//g, '_')] = obj[k];
+                        flatData[newKey.replace(/\//g, '-')] = obj[k];
                         flatten(obj[k], newKey);
                     });
                 }
@@ -167,9 +97,9 @@ export function enrichWithOdkAdhaar(item: any, odkSubmissions: any[] = [], benef
             ])).trim();
 
             if (subAdhaar) {
-                const matchesUuid = uuidCandidate && subUuid && uuidCandidate === subUuid;
+                const matchesUuid = uuidCandidate && subUuid && (uuidCandidate === subUuid || subUuid.includes(uuidCandidate) || uuidCandidate.includes(subUuid));
                 const matchesHhId = hhIdCandidates.some(id => subFarmerId && id === subFarmerId);
-                const matchesName = nameCandidate && subName && nameCandidate === subName;
+                const matchesName = nameCandidate && subName && (nameCandidate === subName || subName.includes(nameCandidate) || nameCandidate.includes(subName));
 
                 if (matchesUuid || matchesHhId || matchesName) {
                     foundAdhaar = subAdhaar;
@@ -209,17 +139,101 @@ export function enrichWithOdkAdhaar(item: any, odkSubmissions: any[] = [], benef
     return item;
 }
 
+export function resolveSmartIds(item: any, odkSubmissions: any[] = [], beneficiaries: any[] = []): { hhId: string; benId: string; benName: string } {
+    if (!item) return { hhId: '-', benId: '-', benName: 'Beneficiary' };
+
+    const enrichedItem = (odkSubmissions.length > 0 || beneficiaries.length > 0)
+        ? enrichWithOdkAdhaar(item, odkSubmissions, beneficiaries)
+        : item;
+
+    const benName = enrichedItem.beneficiary_name || enrichedItem.beneficiaryName || enrichedItem.farmer_name || enrichedItem.farmerName || enrichedItem.name || 'Beneficiary';
+
+    const directBenAdhaar = 
+        enrichedItem['beneficiary_details-beneficiary_adhaar'] ||
+        enrichedItem['beneficiary_details/beneficiary_adhaar'] ||
+        enrichedItem['beneficiary_details_beneficiary_adhaar'] ||
+        enrichedItem['beneficiary_adhaar'] ||
+        enrichedItem.beneficiaryAdhaar ||
+        enrichedItem.aadhaar ||
+        enrichedItem.adhaar;
+
+    const directHhId = 
+        enrichedItem.farmerId ||
+        enrichedItem.farmer_id ||
+        enrichedItem.hhId ||
+        enrichedItem.hh_id ||
+        enrichedItem.householdId ||
+        enrichedItem.household_id;
+
+    const directBenId = 
+        enrichedItem.beneficiary_id ||
+        enrichedItem.beneficiaryId;
+
+    const rawCandidates = [
+        directBenAdhaar,
+        directBenId,
+        directHhId,
+        enrichedItem.activity_status_UUID
+    ].filter(Boolean).map(s => String(s).trim());
+
+    let hhId = '-';
+    let benId = '-';
+
+    // 1. Strict digit matching: 13 digits = Household ID, 12 digits = Beneficiary ID
+    for (const idStr of rawCandidates) {
+        const cleanDigits = idStr.replace(/\D/g, '');
+        if (cleanDigits.length === 13 && hhId === '-') {
+            hhId = idStr;
+        } else if (cleanDigits.length === 12 && benId === '-') {
+            benId = idStr;
+        }
+    }
+
+    // 2. Household ID fallback
+    if (hhId === '-') {
+        if (directHhId) {
+            hhId = String(directHhId);
+        }
+    }
+
+    // 3. Beneficiary ID fallback (NEVER SET benId = hhId IF hhId IS A 13-DIGIT HOUSEHOLD ID!)
+    if (benId === '-') {
+        if (directBenAdhaar) {
+            benId = String(directBenAdhaar);
+        } else if (directBenId) {
+            const bStr = String(directBenId).trim();
+            const bDigits = bStr.replace(/\D/g, '');
+            if (bDigits.length !== 13 && bStr !== hhId) {
+                benId = bStr;
+            }
+        }
+    }
+
+    // 4. Final check: ensure hhId and benId do NOT duplicate a 13-digit Household ID into Beneficiary ID
+    if (benId !== '-' && hhId !== '-' && benId === hhId) {
+        const cleanDigits = benId.replace(/\D/g, '');
+        if (cleanDigits.length === 13) {
+            benId = directBenAdhaar && String(directBenAdhaar) !== hhId ? String(directBenAdhaar) : '-';
+        } else if (cleanDigits.length === 12) {
+            hhId = directHhId && String(directHhId) !== benId ? String(directHhId) : '-';
+        }
+    }
+
+    return { hhId, benId, benName };
+}
 
 const AcknowledgementLetterSheet: React.FC<AcknowledgementLetterSheetProps> = ({
     id,
     item,
     materials = [],
+    odkSubmissions = [],
+    beneficiaries = [],
     className = "",
     style = {}
 }) => {
     if (!item) return null;
 
-    const { hhId, benId, benName } = resolveSmartIds(item);
+    const { hhId, benId, benName } = resolveSmartIds(item, odkSubmissions, beneficiaries);
 
     const ackNumber = item.acknowledgement_number || 
         `P1198-BHM-2026-${Math.abs(String(hhId !== '-' ? hhId : benId !== '-' ? benId : '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`;

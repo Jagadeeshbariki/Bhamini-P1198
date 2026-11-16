@@ -52,6 +52,17 @@ const DashboardsPortal: React.FC<DashboardsPortalProps> = ({ onNavigate }) => {
             allowed: isAdminOrProject
         },
         {
+            id: 'activities' as const,
+            title: 'Activities (Master List)',
+            description: 'Master dashboard section for all 15 frozen project activities in official CSV sequence (A.1.1 to A.1.15).',
+            icon: Activity,
+            color: 'bg-indigo-600',
+            lightColor: 'bg-indigo-50',
+            textColor: 'text-indigo-600',
+            borderColor: 'border-indigo-100',
+            allowed: true
+        },
+        {
             id: 'activity-dashboards' as const,
             title: 'Activity Dashboards',
             description: 'Unified project monitoring and activity tracking with photo evidence.',

@@ -20,10 +20,22 @@ import {
 } from 'recharts';
 import PhotoGallery from './PhotoGallery';
 import { useAuth } from '../hooks/useAuth';
-import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, UPLOAD_LETTERS_SCRIPT_URL, getProxyUrl } from '../config';
+import { BENEFICIARY_DATA_URL, ASSET_DISTRIBUTION_URL, UPLOAD_LETTERS_SCRIPT_URL, MIS_TARGETS_URL, getProxyUrl } from '../config';
+
+interface MisTargetRow {
+    activityId: string;
+    activityName: string;
+    financialYear: string;
+    quarter: string;
+    month: string;
+    target: number;
+    unit: string;
+}
 
 interface StatusRecord {
     id: string;
+    uuid?: string;
+    beneficiaryId?: string;
     date: string;
     benefitDate: string;
     activity: string;
@@ -164,29 +176,11 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
     const isAdminOrProject = role === 'admin' || role === 'project' || role === 'da';
     const isAdmin = role === 'admin';
 
-    if (!isAdminOrProject) {
-        return (
-            <div className="max-w-4xl mx-auto py-20 text-center space-y-6">
-                <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
-                    <AlertCircle className="w-10 h-10" />
-                </div>
-                <h1 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Access Restricted</h1>
-                <p className="text-gray-500 font-medium">The Activity Status section is restricted to 'Admin', 'Project', and 'DA' roles only.</p>
-                {onBack && (
-                    <button
-                        onClick={onBack}
-                        className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-lg"
-                    >
-                        Back to Dashboards
-                    </button>
-                )}
-            </div>
-        );
-    }
-
     const [data, setData] = useState<StatusRecord[]>([]);
+    const [submissions, setSubmissions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [ackSuccessMessage, setAckSuccessMessage] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCluster, setSelectedCluster] = useState('ALL');
     const [selectedActivity, setSelectedActivity] = useState('ALL');
@@ -212,6 +206,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
     const [previewDocUrl, setPreviewDocUrl] = useState<string | null>(null);
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
     const [autoDownloadAck, setAutoDownloadAck] = useState(false);
+    const [misTargets, setMisTargets] = useState<MisTargetRow[]>([]);
 
     // Escape key listener for photo preview modal
     useEffect(() => {
@@ -297,6 +292,32 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
         return `FY - ${fyYear}-${String(fyYear + 1).slice(2)}`;
     };
 
+    const normFY = (fyStr: string): string => {
+        if (!fyStr) return '';
+        return fyStr.replace(/^FY\s*-\s*/i, '').trim();
+    };
+
+    const matchActivityName = (targetName: string, submissionName: string): boolean => {
+        if (!targetName || !submissionName) return false;
+        const t = targetName.toLowerCase().trim();
+        const s = submissionName.toLowerCase().trim();
+        if (t === s) return true;
+        if (t.includes('goat') && (s.includes('goat') || s.includes('shed'))) return true;
+        if ((t.includes('farm pond') || t.includes('farmpond') || t.includes('eco-farm')) && 
+            (s.includes('farmpond') || s.includes('farm pond') || s.includes('eco') || s.includes('rk') || s.includes('కుంట'))) return true;
+        if (t.includes('processing') && s.includes('processing')) return true;
+        if (t.includes('poultry') && s.includes('poultry')) return true;
+        if (t.includes('crop') && (s.includes('crop') || s.includes('bfe') || s.includes('seed'))) return true;
+        if ((t.includes('chc') || t.includes('custom hiring')) && (s.includes('chc') || s.includes('custom hiring'))) return true;
+        if ((t.includes('brc') || t.includes('bio resource')) && (s.includes('brc') || s.includes('bio resource'))) return true;
+        if (t.includes('irrigation') && s.includes('irrigation')) return true;
+        if (t.includes('frp') && s.includes('frp')) return true;
+        if (t.includes('capacity') && (s.includes('capacity') || s.includes('training'))) return true;
+        if (t.includes('video') && s.includes('video')) return true;
+        if (t.includes('fisheries') && s.includes('fish')) return true;
+        return false;
+    };
+
     const fetchData = async () => {
         setLoading(true);
         setError(null);
@@ -304,9 +325,10 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
 
         try {
             const targetFormId = 'Status';
-            const [odkRes, benRes] = await Promise.all([
+            const [odkRes, benRes, misRes] = await Promise.all([
                 fetch(`/api/odk/data?formId=${encodeURIComponent(targetFormId)}&projectId=3`),
-                fetch(getProxyUrl(BENEFICIARY_DATA_URL)).catch(() => ({ ok: false, text: async () => '' } as any))
+                fetch(getProxyUrl(BENEFICIARY_DATA_URL)).catch(() => ({ ok: false, text: async () => '' } as any)),
+                fetch(getProxyUrl(MIS_TARGETS_URL)).catch(() => ({ ok: false, text: async () => '' } as any))
             ]);
 
             const odataText = await odkRes.text();
@@ -327,8 +349,53 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             }
 
             const rawSubmissions = json.value || (Array.isArray(json) ? json : []);
+            setSubmissions(rawSubmissions);
             if (rawSubmissions.length > 0) {
                 setRawSample(rawSubmissions[0]);
+            }
+
+            // Parse MIS Targets data
+            if (misRes && misRes.ok) {
+                try {
+                    const misText = await misRes.text();
+                    if (misText) {
+                        const lines = misText.trim().split(/\r?\n/).filter(l => l.trim());
+                        if (lines.length > 1) {
+                            const parseCsvLine = (line: string) => {
+                                const vals: string[] = [];
+                                let cur = '';
+                                let inQuotes = false;
+                                for (let i = 0; i < line.length; i++) {
+                                    const char = line[i];
+                                    if (char === '"') inQuotes = !inQuotes;
+                                    else if (char === ',' && !inQuotes) {
+                                        vals.push(cur.trim().replace(/^"|"$/g, ''));
+                                        cur = '';
+                                    } else {
+                                        cur += char;
+                                    }
+                                }
+                                vals.push(cur.trim().replace(/^"|"$/g, ''));
+                                return vals;
+                            };
+                            const rows: MisTargetRow[] = lines.slice(1).map(line => {
+                                const parts = parseCsvLine(line);
+                                return {
+                                    activityId: parts[0] || '',
+                                    activityName: parts[1] || '',
+                                    financialYear: parts[2] || '',
+                                    quarter: parts[3] || '',
+                                    month: parts[4] || '',
+                                    target: parseFloat(parts[5] || '0') || 0,
+                                    unit: parts[6] || ''
+                                };
+                            }).filter(r => r.activityName);
+                            setMisTargets(rows);
+                        }
+                    }
+                } catch (misErr) {
+                    console.warn("Failed to parse MIS targets CSV:", misErr);
+                }
             }
 
             // Parse beneficiary data from the single Beneficiary table
@@ -577,93 +644,95 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
     }, [data]);
 
     const financialYearsList = useMemo(() => {
-        return ['ALL', ...Array.from(new Set(data.map(d => d.financialYear))).sort()];
-    }, [data]);
+        const set = new Set(['ALL', '2025-26', '2026-27', '2027-28', '2028-Part']);
+        data.forEach(d => {
+            if (d.financialYear) {
+                const clean = normFY(d.financialYear);
+                if (clean) set.add(clean);
+            }
+        });
+        misTargets.forEach(t => {
+            if (t.financialYear) set.add(t.financialYear.trim());
+        });
+        return Array.from(set);
+    }, [data, misTargets]);
 
-    
+    const targetByActivityName = useMemo(() => {
+        const map: Record<string, { target: number; unit: string }> = {};
+        misTargets.forEach(row => {
+            const rowFY = normFY(row.financialYear);
+            if (selectedFY === 'ALL' || rowFY === selectedFY || row.financialYear === selectedFY) {
+                const act = row.activityName.trim();
+                if (!map[act]) {
+                    map[act] = { target: 0, unit: row.unit || '' };
+                }
+                map[act].target += row.target;
+                if (row.unit && !map[act].unit) {
+                    map[act].unit = row.unit;
+                }
+            }
+        });
+        return map;
+    }, [misTargets, selectedFY]);
+
+    const filteredData = useMemo(() => {
+        return data.filter(d => {
+            const computedAckNum = `P1198-BHM-2026-${Math.abs(String(d.farmerId || d.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`;
+            const matchesSearch = 
+                d.activity.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                d.village.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                d.submitter.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                d.beneficiaryName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                d.beneficiaryAdhaar.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                d.hhId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                d.farmerId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (d.uuid && d.uuid.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                (d.id && d.id.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                computedAckNum.toLowerCase().includes(searchQuery.toLowerCase());
+            
+            const matchesCluster = selectedCluster === 'ALL' || d.cluster === selectedCluster;
+            const matchesActivity = selectedActivity === 'ALL' || d.activity === selectedActivity || matchActivityName(selectedActivity, d.activity);
+            const matchesStatus = selectedStatus === 'ALL' || d.status === selectedStatus;
+            const matchesFY = selectedFY === 'ALL' || d.financialYear === selectedFY || d.financialYear.includes(selectedFY) || normFY(d.financialYear) === selectedFY;
+
+            return matchesSearch && matchesCluster && matchesActivity && matchesStatus && matchesFY;
+        });
+    }, [data, searchQuery, selectedCluster, selectedActivity, selectedStatus, selectedFY]);
+
     const eligibleBeneficiaries = useMemo(() => {
         return data.filter(d => {
-            const isCompleted = d.status.toLowerCase().includes("complete") || d.status === "Completed";
-            const matchesSearch = !searchQuery || 
-                (d.beneficiaryName && d.beneficiaryName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                (d.farmerId && d.farmerId.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                (d.village && d.village.toLowerCase().includes(searchQuery.toLowerCase()));
-            const matchesCluster = selectedCluster === "ALL" || d.cluster === selectedCluster;
-            const matchesActivity = selectedActivity === "ALL" || d.activity === selectedActivity;
-            return isCompleted && matchesSearch && matchesCluster && matchesActivity;
+            const st = (d.status || '').toLowerCase();
+            const isCompleted = d.status === 'Completed' || (st.includes('complete') && !st.includes('in') && !st.includes('not'));
+            if (!isCompleted) return false;
+
+            const q = searchQuery.toLowerCase().trim();
+            const computedAckNum = `P1198-BHM-2026-${Math.abs(String(d.farmerId || d.hhId || '0').split('').reduce((a, c) => ((a << 5) - a) + c.charCodeAt(0), 0)).toString().substring(0, 6)}`;
+            const matchesSearch = !q ||
+                d.activity.toLowerCase().includes(q) ||
+                d.village.toLowerCase().includes(q) ||
+                d.submitter.toLowerCase().includes(q) ||
+                d.beneficiaryName.toLowerCase().includes(q) ||
+                d.beneficiaryAdhaar.toLowerCase().includes(q) ||
+                d.hhId.toLowerCase().includes(q) ||
+                d.farmerId.toLowerCase().includes(q) ||
+                (d.uuid && d.uuid.toLowerCase().includes(q)) ||
+                (d.id && d.id.toLowerCase().includes(q)) ||
+                computedAckNum.toLowerCase().includes(q);
+
+            const matchesCluster = selectedCluster === 'ALL' || d.cluster === selectedCluster;
+            const matchesActivity = selectedActivity === 'ALL' || d.activity === selectedActivity || matchActivityName(selectedActivity, d.activity);
+            const matchesFY = selectedFY === 'ALL' || d.financialYear === selectedFY || d.financialYear.includes(selectedFY) || normFY(d.financialYear) === selectedFY;
+
+            return matchesSearch && matchesCluster && matchesActivity && matchesFY;
         });
-    }, [data, searchQuery, selectedCluster, selectedActivity]);
+    }, [data, searchQuery, selectedCluster, selectedActivity, selectedFY]);
 
-    
-    
-    
-    const openAckLetter = async (item: any, autoDownload = false) => {
-        const enriched = enrichWithOdkAdhaar(item, data, beneficiaries);
-        setAckLetterData(enriched);
-        if (autoDownload) {
-            setAutoDownloadAck(true);
-        }
-        // Pre-fill synchronously if available
-        const instantMats = getIssuedMaterials(item);
-        if (instantMats && instantMats.length > 0) {
-            setModalMaterials(instantMats);
-        } else {
-            setModalMaterials([]);
-        }
-
-        try {
-            const benId = item.beneficiaryId || item.beneficiaryAdhaar || "";
-            const farmerId = item.farmerId || item.hhId || "";
-            const bName = item.beneficiaryName || item.name || "";
-            const vName = item.village || "";
-            const params = new URLSearchParams({
-                beneficiaryId: benId,
-                farmerId: farmerId,
-                hhId: item.hhId || "",
-                name: bName,
-                village: vName
-            });
-            const res = await fetch(`/api/materials/query?${params.toString()}`);
-            const data = await safeJson(res);
-            if (data.success && Array.isArray(data.materials) && data.materials.length > 0) {
-                setModalMaterials(data.materials);
-            }
-        } catch (e) {
-            console.warn("Failed to query materials:", e);
-        }
-    };
-
-    const downloadAckLetterDirect = (item: any) => {
-        openAckLetter(item, true);
-    };
-
-    const handleDownloadCurrentModalPdf = async () => {
-        if (!ackLetterData) return;
-        setIsDownloadingPdf(true);
-        const ackNum = `P1198-BHM-2026-${Math.abs((ackLetterData.beneficiaryId || ackLetterData.farmerId || '0').split('').reduce((a: number, b: string)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,6)}`;
-        const bName = (ackLetterData.beneficiaryName || ackLetterData.name || 'beneficiary').replace(/[^a-zA-Z0-9]/g, '_');
-        await downloadA4LetterPdf("activity-status-ack-sheet", `Acknowledgement_${ackNum}_${bName}.pdf`);
-        setIsDownloadingPdf(false);
-    };
-
-    useEffect(() => {
-        if (ackLetterData && autoDownloadAck) {
-            const timer = setTimeout(async () => {
-                setIsDownloadingPdf(true);
-                const ackNum = `P1198-BHM-2026-${Math.abs((ackLetterData.beneficiaryId || ackLetterData.farmerId || '0').split('').reduce((a: number, b: string)=>((a<<5)-a)+b.charCodeAt(0),0)).toString().substring(0,6)}`;
-                const bName = (ackLetterData.beneficiaryName || ackLetterData.name || 'beneficiary').replace(/[^a-zA-Z0-9]/g, '_');
-                await downloadA4LetterPdf("activity-status-ack-sheet", `Acknowledgement_${ackNum}_${bName}.pdf`);
-                setIsDownloadingPdf(false);
-                setAutoDownloadAck(false);
-            }, 350);
-            return () => clearTimeout(timer);
-        }
-    }, [ackLetterData, autoDownloadAck]);
     const getIssuedMaterials = (item: any) => {
         if (!item) return [];
         const candidates = [
             item.farmerId,
             item.beneficiaryId,
+            item.beneficiary_id,
             item.hhId,
             item.beneficiaryAdhaar,
             item.adhaar,
@@ -676,7 +745,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             }
         }
 
-        const rawName = (item.beneficiaryName || item.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const rawName = (item.beneficiaryName || item.beneficiary_name || item.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         const rawVillage = (item.village || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         if (rawName && rawVillage && materialsMap.has(`${rawName}_${rawVillage}`)) {
             return materialsMap.get(`${rawName}_${rawVillage}`)!;
@@ -685,8 +754,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             return materialsMap.get(rawName)!;
         }
 
-        // If not found in recorded distribution, look up from activity catalog with precise matching!
-        const rawAct = String(item.activity || item.activityName || "NS").toLowerCase().trim();
+        const rawAct = String(item.activity || item.activity_name || item.activityName || "NS").toLowerCase().trim();
         let matchedKey = "";
         if (rawAct === "ns" || rawAct.includes("nursery") || rawAct.includes("net shed") || (rawAct.includes("ns") && !rawAct.includes("nutri") && !rawAct.includes("van"))) {
             matchedKey = "ns";
@@ -718,7 +786,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             return ACTIVITY_ASSET_CATALOG[matchedKey];
         }
 
-        const actDisplay = item.activity || item.activityName || "NS";
+        const actDisplay = item.activity || item.activity_name || item.activityName || "NS";
         return [
             {
                 label: `${actDisplay} Activity Work & Material Inputs Package`,
@@ -729,69 +797,106 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
             }
         ];
     };
-    const handleBulkGenerateSelected = async () => {
-        if (!isAdminOrProject) {
-            alert("Only authorized users (Admin, Project, DA) are permitted to generate acknowledgment letters.");
-            return;
+
+    const openAckLetter = async (item: any, autoDownload = false) => {
+        if (!item) return;
+        const enriched = enrichWithOdkAdhaar(item, submissions, beneficiaries);
+        setAckLetterData(enriched);
+        if (autoDownload) {
+            setAutoDownloadAck(true);
         }
-        const selected = eligibleBeneficiaries.filter(b => bulkSelected.has(b.id || b.farmerId));
-        if (selected.length === 0) {
-            alert("Please select eligible beneficiaries using the checkboxes first.");
-            return;
+        const instantMats = getIssuedMaterials(enriched);
+        if (instantMats && instantMats.length > 0) {
+            setModalMaterials(instantMats);
+        } else {
+            setModalMaterials([]);
         }
+
         try {
-            const res = await fetch("/api/acknowledgements/bulk", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    items: selected.map(s => ({
-                        activityStatusUuid: s.id,
-                        beneficiaryId: s.farmerId || s.hhId || "BEN",
-                        activityName: s.activity,
-                        beneficiaryName: s.beneficiaryName,
-                        cluster: s.cluster,
-                        gp: s.gp,
-                        village: s.village
-                    }))
-                })
+            const benId = item.beneficiary_id || item.beneficiaryId || item.beneficiaryAdhaar || "";
+            const farmerId = item.farmerId || item.hhId || "";
+            const bName = item.beneficiary_name || item.beneficiaryName || item.name || "";
+            const vName = item.village || "";
+            const params = new URLSearchParams({
+                beneficiaryId: benId,
+                farmerId: farmerId,
+                hhId: item.hhId || "",
+                name: bName,
+                village: vName
             });
-            const d = await safeJson(res);
-            if (d.success) {
-                // Sync to UUID <-> Acknowledgement mapping tracking sheet
-                if (Array.isArray(d.acknowledgements)) {
-                    fetch("/api/acknowledgement-mapping", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            items: d.acknowledgements.map((a: any) => ({
-                                uuid: a.activity_status_UUID || a.beneficiary_id,
-                                acknowledgementId: a.acknowledgement_number,
-                                beneficiaryId: a.beneficiary_id,
-                                beneficiaryName: a.beneficiary_name,
-                                activityName: a.activity_name,
-                                cluster: a.cluster,
-                                gp: a.gp,
-                                village: a.village,
-                                generatedBy: 'User'
-                            }))
-                        })
-                    }).catch(err => console.warn("Mapping sync error:", err));
-                }
-                alert(`Successfully generated ${d.count} acknowledgements!`);
-                setBulkSelected(new Set());
-                setActiveTab("letters");
+            const res = await fetch(`/api/materials/query?${params.toString()}`);
+            const matData = await safeJson(res);
+            if (matData.success && Array.isArray(matData.materials) && matData.materials.length > 0) {
+                setModalMaterials(matData.materials);
             }
-        } catch (e: any) {
-            alert("Error in bulk generation: " + e.message);
+        } catch (e) {
+            console.warn("Failed to query materials:", e);
         }
     };
 
+    const downloadAckLetterDirect = (item: any) => {
+        openAckLetter(item, true);
+    };
+
+    const handleDownloadCurrentModalPdf = async () => {
+        if (!ackLetterData) return;
+        setIsDownloadingPdf(true);
+        const ackNum = ackLetterData.acknowledgement_number || `P1198-BHM-2026-${Math.abs(String(ackLetterData.beneficiaryId || ackLetterData.farmerId || ackLetterData.hhId || '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`;
+        const bName = (ackLetterData.beneficiary_name || ackLetterData.beneficiaryName || ackLetterData.name || 'beneficiary').replace(/[^a-zA-Z0-9]/g, '_');
+        await downloadA4LetterPdf("activity-status-ack-sheet", `Acknowledgement_${ackNum}_${bName}.pdf`);
+        setIsDownloadingPdf(false);
+    };
+
+    useEffect(() => {
+        if (ackLetterData && autoDownloadAck) {
+            const timer = setTimeout(async () => {
+                setIsDownloadingPdf(true);
+                const ackNum = ackLetterData.acknowledgement_number || `P1198-BHM-2026-${Math.abs(String(ackLetterData.beneficiaryId || ackLetterData.farmerId || ackLetterData.hhId || '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`;
+                const bName = (ackLetterData.beneficiary_name || ackLetterData.beneficiaryName || ackLetterData.name || 'beneficiary').replace(/[^a-zA-Z0-9]/g, '_');
+                await downloadA4LetterPdf("activity-status-ack-sheet", `Acknowledgement_${ackNum}_${bName}.pdf`);
+                setIsDownloadingPdf(false);
+                setAutoDownloadAck(false);
+            }, 350);
+            return () => clearTimeout(timer);
+        }
+    }, [ackLetterData, autoDownloadAck]);
+
     const handleBatchDownload = async (items: any[], type: 'combined' | 'zip' | 'print') => {
         if (!items || items.length === 0) return;
-        setBatchStagingItems(items);
+        setBatchProgress({ current: 0, total: items.length, statusText: 'Resolving materials & asset catalogs...' });
+
+        const resolvedItems = await Promise.all(items.map(async (item) => {
+            const enriched = enrichWithOdkAdhaar(item, submissions, beneficiaries);
+            let mats = getIssuedMaterials(enriched);
+            if (!mats || mats.length === 0) {
+                try {
+                    const benId = item.beneficiary_id || item.beneficiaryId || item.beneficiaryAdhaar || "";
+                    const farmerId = item.farmerId || item.hhId || "";
+                    const bName = item.beneficiary_name || item.beneficiaryName || item.name || "";
+                    const vName = item.village || "";
+                    const params = new URLSearchParams({ beneficiaryId: benId, farmerId, hhId: item.hhId || "", name: bName, village: vName });
+                    const res = await fetch(`/api/materials/query?${params.toString()}`);
+                    const matData = await safeJson(res);
+                    if (matData.success && Array.isArray(matData.materials) && matData.materials.length > 0) {
+                        mats = matData.materials;
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+            if (!mats || mats.length === 0) {
+                mats = getIssuedMaterials(item);
+            }
+            return {
+                ...enriched,
+                materials: mats
+            };
+        }));
+
+        setBatchStagingItems(resolvedItems);
         setBatchProgress({ current: 0, total: items.length, statusText: 'Preparing letterhead templates...' });
 
-        await new Promise(resolve => setTimeout(resolve, 350));
+        await new Promise(resolve => setTimeout(resolve, 400));
 
         const elementIds = items.map((_, idx) => `activity-batch-sheet-${idx}`);
 
@@ -809,9 +914,9 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                 setBatchProgress({ current, total, statusText: `Generating letter ${current} of ${total}...` });
             });
         } else if (type === 'zip') {
-            const zipItems = items.map((item, idx) => {
+            const zipItems = resolvedItems.map((item, idx) => {
                 const bName = (item.beneficiary_name || item.beneficiaryName || item.name || 'beneficiary').replace(/[^a-zA-Z0-9]/g, '_');
-                const ackNum = item.acknowledgement_number || `P1198-BHM-2026-${Math.abs(String(item.beneficiary_id || item.beneficiaryId || item.farmerId || '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`;
+                const ackNum = item.acknowledgement_number || `P1198-BHM-2026-${Math.abs(String(item.beneficiary_id || item.beneficiaryId || item.farmerId || item.hhId || '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`;
                 return {
                     id: `activity-batch-sheet-${idx}`,
                     filename: `Acknowledgement_${ackNum}_${bName}.pdf`
@@ -824,64 +929,79 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
 
         setBatchProgress(null);
         setBatchStagingItems([]);
+        setAckSuccessMessage(`Successfully processed ${items.length} acknowledgement letters.`);
+        setTimeout(() => setAckSuccessMessage(null), 5000);
+    };
 
-        // Sync batch Acknowledgement ID <-> UUID mappings to tracking sheet
+    const handleBulkGenerateSelected = async () => {
+        if (!isAdminOrProject) return;
+        const selectedItems = eligibleBeneficiaries.filter(b => bulkSelected.has(b.id || b.farmerId));
+        if (selectedItems.length === 0) return;
+
         try {
-            fetch("/api/acknowledgement-mapping", {
+            const currentUserName = user?.username || 'Admin';
+            const res = await fetch("/api/acknowledgements/bulk", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    items: items.map(item => ({
-                        uuid: item.activityStatusUuid || item.uuid || item.id || item.beneficiary_id || item.farmerId || item.hhId,
-                        acknowledgementId: item.acknowledgement_number || `P1198-BHM-2026-${Math.abs(String(item.beneficiary_id || item.beneficiaryId || item.farmerId || '0').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().substring(0, 6)}`,
-                        beneficiaryId: item.beneficiary_id || item.beneficiaryId || item.farmerId || item.hhId || '-',
-                        beneficiaryName: item.beneficiary_name || item.beneficiaryName || item.name || 'Beneficiary',
-                        activityName: item.activity_name || item.activity || '-',
-                        cluster: item.cluster || '-',
-                        gp: item.gp || '-',
-                        village: item.village || '-',
-                        generatedBy: 'User',
-                        remarks: 'Batch Download'
-                    }))
+                    items: selectedItems.map(item => ({
+                        activityStatusUuid: item.id,
+                        beneficiaryId: item.beneficiaryAdhaar && item.beneficiaryAdhaar !== '-' ? item.beneficiaryAdhaar : (item.farmerId || item.hhId),
+                        farmerId: item.farmerId,
+                        beneficiaryAdhaar: item.beneficiaryAdhaar,
+                        'beneficiary_details-beneficiary_adhaar': item.beneficiaryAdhaar,
+                        activityName: item.activity,
+                        beneficiaryName: item.beneficiaryName,
+                        cluster: item.cluster,
+                        gp: item.gp,
+                        village: item.village
+                    })),
+                    generatedBy: currentUserName
                 })
-            }).catch(e => console.warn("Mapping sync notice:", e));
-        } catch { /* ignore */ }
+            });
+            const resp = await safeJson(res);
+            if (resp.success) {
+                if (Array.isArray(resp.acknowledgements)) {
+                    fetch("/api/acknowledgement-mapping", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            items: resp.acknowledgements.map((ack: any) => ({
+                                uuid: ack.activity_status_UUID || ack.beneficiary_id,
+                                acknowledgementId: ack.acknowledgement_number,
+                                beneficiaryId: ack.beneficiary_id,
+                                beneficiaryName: ack.beneficiary_name,
+                                activityName: ack.activity_name,
+                                cluster: ack.cluster,
+                                gp: ack.gp,
+                                village: ack.village,
+                                generatedBy: currentUserName
+                            }))
+                        })
+                    }).catch(e => console.warn("Bulk mapping sync notice:", e.message));
+                }
+                setBulkSelected(new Set());
+                setAckSuccessMessage(`Successfully generated ${resp.count || selectedItems.length} acknowledgement records.`);
+                setTimeout(() => setAckSuccessMessage(null), 5000);
+                setActiveTab("letters");
+            }
+        } catch (err: any) {
+            setError("Bulk generation error: " + err.message);
+        }
     };
-
-    const filteredData = useMemo(() => {
-        return data.filter(d => {
-            const computedAckNum = `P1198-BHM-2026-${Math.abs(String(d.farmerId || d.hhId || '0').split('').reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0),0)).toString().substring(0,6)}`;
-            const matchesSearch = 
-                d.activity.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                d.village.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                d.submitter.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                d.beneficiaryName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                d.beneficiaryAdhaar.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                d.hhId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                d.farmerId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (d.uuid && d.uuid.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                (d.id && d.id.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                computedAckNum.toLowerCase().includes(searchQuery.toLowerCase());
-            
-            const matchesCluster = selectedCluster === 'ALL' || d.cluster === selectedCluster;
-            const matchesActivity = selectedActivity === 'ALL' || d.activity === selectedActivity;
-            const matchesStatus = selectedStatus === 'ALL' || d.status === selectedStatus;
-            const matchesFY = selectedFY === 'ALL' || d.financialYear === selectedFY;
-
-            return matchesSearch && matchesCluster && matchesActivity && matchesStatus && matchesFY;
-        });
-    }, [data, searchQuery, selectedCluster, selectedActivity, selectedStatus, selectedFY]);
 
     const stats = useMemo(() => {
         const subMapById = new Map<string, any>();
         const subMapByAdhaar = new Map<string, any>();
         data.forEach(d => {
             if (d.beneficiaryId) subMapById.set(d.beneficiaryId.toLowerCase().trim(), d);
-            if (d.beneficiaryAdhaar) subMapByAdhaar.set(d.beneficiaryAdhaar.toLowerCase().trim(), d);
+            if (d.farmerId && d.farmerId !== '-') subMapById.set(d.farmerId.toLowerCase().trim(), d);
+            if (d.hhId && d.hhId !== '-') subMapById.set(d.hhId.toLowerCase().trim(), d);
+            if (d.beneficiaryAdhaar && d.beneficiaryAdhaar !== '-') subMapByAdhaar.set(d.beneficiaryAdhaar.toLowerCase().trim(), d);
         });
 
         const targetBeneficiaries = beneficiaries.length > 0 ? beneficiaries : data.map(d => ({
-            beneficiaryId: d.beneficiaryId,
+            beneficiaryId: d.beneficiaryId || d.farmerId,
             beneficiaryAdhaar: d.beneficiaryAdhaar,
             activity: d.activity,
             cluster: d.cluster,
@@ -889,47 +1009,79 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
         }));
 
         const filteredBeneficiaries = targetBeneficiaries.filter(b => {
-            const fy = getFinancialYear(b.benefitDate);
-            const matchesFY = selectedFY === 'ALL' || fy === selectedFY;
+            const fy = normFY(getFinancialYear(b.benefitDate));
+            const matchesFY = selectedFY === 'ALL' || fy === selectedFY || b.benefitDate.includes(selectedFY);
             const matchesCluster = selectedCluster === 'ALL' || b.cluster === selectedCluster;
             const bActivity = b.activity || (b.beneficiaryId && subMapById.get(b.beneficiaryId.toLowerCase().trim())?.activity) || 'General Activity';
-            const matchesActivity = selectedActivity === 'ALL' || bActivity === selectedActivity;
+            const matchesActivity = selectedActivity === 'ALL' || bActivity === selectedActivity || matchActivityName(selectedActivity, bActivity);
             return matchesFY && matchesCluster && matchesActivity;
         });
 
-        const fullActivityMap: Record<string, { activity: string; completed: number; pending: number; total: number; statusCounts: Record<string, number> }> = {};
+        const fullActivityMap: Record<string, { activity: string; completed: number; pending: number; total: number; target: number; unit: string; statusCounts: Record<string, number> }> = {};
+
+        // Pre-populate with targets from MIS_TARGETS_URL
+        Object.entries(targetByActivityName).forEach(([tName, tObj]) => {
+            fullActivityMap[tName] = {
+                activity: tName,
+                completed: 0,
+                pending: 0,
+                total: 0,
+                target: tObj.target,
+                unit: tObj.unit,
+                statusCounts: {}
+            };
+        });
 
         filteredBeneficiaries.forEach(b => {
-            const act = b.activity || (b.beneficiaryId && subMapById.get(b.beneficiaryId.toLowerCase().trim())?.activity) || (b.beneficiaryAdhaar && subMapByAdhaar.get(b.beneficiaryAdhaar.toLowerCase().trim())?.activity) || 'General Activity';
-            if (!fullActivityMap[act]) {
-                fullActivityMap[act] = { activity: act, completed: 0, pending: 0, total: 0, statusCounts: {} };
+            const rawAct = b.activity || (b.beneficiaryId && subMapById.get(b.beneficiaryId.toLowerCase().trim())?.activity) || (b.beneficiaryAdhaar && subMapByAdhaar.get(b.beneficiaryAdhaar.toLowerCase().trim())?.activity) || 'General Activity';
+            
+            const matchedKey = Object.keys(targetByActivityName).find(tName => matchActivityName(tName, rawAct)) || rawAct;
+
+            if (!fullActivityMap[matchedKey]) {
+                fullActivityMap[matchedKey] = {
+                    activity: matchedKey,
+                    completed: 0,
+                    pending: 0,
+                    total: 0,
+                    target: 0,
+                    unit: '',
+                    statusCounts: {}
+                };
             }
-            fullActivityMap[act].total += 1;
+
+            fullActivityMap[matchedKey].total += 1;
 
             const sub = (b.beneficiaryId && subMapById.get(b.beneficiaryId.toLowerCase().trim())) ||
                         (b.beneficiaryAdhaar && subMapByAdhaar.get(b.beneficiaryAdhaar.toLowerCase().trim()));
             
             const st = sub ? (sub.status || 'In Progress') : 'Not Started';
-            fullActivityMap[act].statusCounts[st] = (fullActivityMap[act].statusCounts[st] || 0) + 1;
+            fullActivityMap[matchedKey].statusCounts[st] = (fullActivityMap[matchedKey].statusCounts[st] || 0) + 1;
 
             if (st.toLowerCase().includes('complete') || st === 'Completed') {
-                fullActivityMap[act].completed += 1;
+                fullActivityMap[matchedKey].completed += 1;
             } else {
-                fullActivityMap[act].pending += 1;
+                fullActivityMap[matchedKey].pending += 1;
             }
         });
 
-        const activitySummary = Object.values(fullActivityMap).sort((a, b) => b.total - a.total);
+        const activitySummary = Object.values(fullActivityMap)
+            .filter(item => selectedActivity === 'ALL' || item.activity === selectedActivity || matchActivityName(selectedActivity, item.activity))
+            .sort((a, b) => (b.target || b.total) - (a.target || a.total));
+
         const activityChartData = activitySummary.map(item => ({
             activity: item.activity.length > 25 ? item.activity.substring(0, 22) + '...' : item.activity,
             completed: item.completed,
             pending: item.pending,
+            target: item.target,
+            unit: item.unit,
             total: item.total
         }));
 
-        const total = filteredBeneficiaries.length;
-        const completed = Object.values(fullActivityMap).reduce((acc, cur) => acc + cur.completed, 0);
-        const pending = total - completed;
+        const totalSubmissions = filteredBeneficiaries.length;
+        const totalCompleted = Object.values(fullActivityMap).reduce((acc, cur) => acc + cur.completed, 0);
+        const totalPending = totalSubmissions - totalCompleted;
+        const totalTargetSum = Object.values(targetByActivityName).reduce((a, b) => a + b.target, 0);
+        const overallProgressPct = totalTargetSum > 0 ? Math.min(100, Math.round((totalCompleted / totalTargetSum) * 100)) : 0;
 
         const clusterMap: Record<string, { cluster: string; completed: number; pending: number; total: number }> = {};
         filteredBeneficiaries.forEach(b => {
@@ -949,8 +1101,17 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
         });
         const clusterChartData = Object.values(clusterMap);
 
-        return { total, completed, pending, clusterChartData, activityChartData, activitySummary };
-    }, [beneficiaries, data, selectedFY, selectedCluster, selectedActivity]);
+        return { 
+            total: totalSubmissions, 
+            completed: totalCompleted, 
+            pending: totalPending, 
+            totalTargetSum,
+            overallProgressPct,
+            clusterChartData, 
+            activityChartData, 
+            activitySummary 
+        };
+    }, [beneficiaries, data, selectedFY, selectedCluster, selectedActivity, targetByActivityName]);
 
     const fySummary = useMemo(() => {
         const fyMap: Record<string, { fy: string; beneficiaryCount: number; completedCount: number; totalCount: number }> = {};
@@ -1003,6 +1164,26 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                     {[1, 2, 3].map(i => <Skeleton key={i} className="h-32 rounded-3xl" />)}
                 </div>
                 <Skeleton className="h-96 rounded-3xl" />
+            </div>
+        );
+    }
+
+    if (!isAdminOrProject) {
+        return (
+            <div className="max-w-4xl mx-auto py-20 text-center space-y-6">
+                <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                    <AlertCircle className="w-10 h-10" />
+                </div>
+                <h1 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Access Restricted</h1>
+                <p className="text-gray-500 font-medium">The Activity Status section is restricted to 'Admin', 'Project', and 'DA' roles only.</p>
+                {onBack && (
+                    <button
+                        onClick={onBack}
+                        className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-lg"
+                    >
+                        Back to Dashboards
+                    </button>
+                )}
             </div>
         );
     }
@@ -1065,6 +1246,16 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                             {JSON.stringify(rawSample, null, 2)}
                         </pre>
                     )}
+                </div>
+            )}
+
+            {ackSuccessMessage && (
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-4 rounded-2xl flex items-center justify-between gap-4 text-emerald-700 dark:text-emerald-300">
+                    <div className="flex items-center gap-3">
+                        <CheckCircle2 size={20} />
+                        <p className="text-xs font-bold">{ackSuccessMessage}</p>
+                    </div>
+                    <button onClick={() => setAckSuccessMessage(null)} className="text-emerald-600 hover:text-emerald-800"><X size={16} /></button>
                 </div>
             )}
 
@@ -1327,8 +1518,8 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                         <Activity className="w-6 h-6" />
                     </div>
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Filtered Submissions</p>
-                        <h3 className="text-3xl font-black text-gray-900 dark:text-white tabular-nums">{stats.total}</h3>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Target ({selectedFY})</p>
+                        <h3 className="text-3xl font-black text-indigo-600 dark:text-indigo-400 tabular-nums">{stats.totalTargetSum}</h3>
                     </div>
                 </div>
 
@@ -1337,8 +1528,15 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                         <CheckCircle2 className="w-6 h-6" />
                     </div>
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Completed Status</p>
-                        <h3 className="text-3xl font-black text-gray-900 dark:text-white tabular-nums">{stats.completed}</h3>
+                        <div className="flex items-center gap-2">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Completed Status</p>
+                            {stats.totalTargetSum > 0 && (
+                                <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-full text-[9px] font-black">
+                                    {stats.overallProgressPct}%
+                                </span>
+                            )}
+                        </div>
+                        <h3 className="text-3xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{stats.completed}</h3>
                     </div>
                 </div>
 
@@ -1348,7 +1546,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                     </div>
                     <div>
                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">In Progress / Pending</p>
-                        <h3 className="text-3xl font-black text-gray-900 dark:text-white tabular-nums">{stats.pending}</h3>
+                        <h3 className="text-3xl font-black text-amber-600 dark:text-amber-400 tabular-nums">{stats.pending}</h3>
                     </div>
                 </div>
 
@@ -1357,47 +1555,69 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                         <Users className="w-6 h-6" />
                     </div>
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Active Clusters</p>
-                        <h3 className="text-3xl font-black text-gray-900 dark:text-white tabular-nums">{Math.max(0, clustersList.length - 1)}</h3>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total ODK Submissions</p>
+                        <h3 className="text-3xl font-black text-gray-900 dark:text-white tabular-nums">{stats.total}</h3>
                     </div>
                 </div>
             </div>
 
             {/* Activity-Wise Beneficiary & Completion Summary (Filtered by Active FY) */}
             <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div>
-                        <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">Activity-Wise Beneficiary & Completion Summary</h3>
-                        <p className="text-xs text-gray-500 font-medium">Total registered and completed beneficiaries for each activity</p>
+                        <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">Activity-Wise Targets & Status Summary</h3>
+                        <p className="text-xs text-gray-500 font-medium">Activity targets vs completed achievements & progress for FY: <span className="font-bold text-indigo-600">{selectedFY}</span></p>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {stats.activitySummary.map((item) => (
-                        <div key={item.activity} onClick={() => { setSelectedActivity(item.activity); setActiveTab("eligible"); }} className="p-6 rounded-2xl bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 space-y-3 cursor-pointer hover:border-indigo-500 hover:shadow-lg transition-all group" title="Click to view eligible beneficiaries for this activity">
-                            <div className="flex items-center justify-between">
-                                <span className="text-xs font-black px-3 py-1 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 rounded-xl uppercase tracking-wider truncate max-w-[160px]" title={item.activity}>{item.activity}</span>
-                                <span className="text-[10px] font-bold text-gray-400">Activity</span>
-                            </div>
+                    {stats.activitySummary.map((item) => {
+                        const pct = item.target > 0 
+                            ? Math.min(100, Math.round((item.completed / item.target) * 100)) 
+                            : (item.total > 0 && item.completed > 0 ? 100 : 0);
+                        return (
+                            <div 
+                                key={item.activity} 
+                                onClick={() => { setSelectedActivity(item.activity); setActiveTab("eligible"); }} 
+                                className="p-6 rounded-2xl bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 space-y-3 cursor-pointer hover:border-indigo-500 hover:shadow-lg transition-all group" 
+                                title="Click to view eligible beneficiaries for this activity"
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-black px-3 py-1 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 rounded-xl uppercase tracking-wider truncate max-w-[170px]" title={item.activity}>
+                                        {item.activity}
+                                    </span>
+                                    <span className="text-[10px] font-black px-2 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full">
+                                        Target: {item.target || 'N/A'} {item.unit}
+                                    </span>
+                                </div>
                                 <div className="space-y-1 pt-1 border-t border-gray-200/50 dark:border-gray-800">
                                     <div className="flex justify-between items-center text-xs">
-                                        <span className="text-gray-500 font-bold uppercase">Total Beneficiaries:</span>
-                                        <span className="font-black text-gray-900 dark:text-white tabular-nums text-sm">{item.total}</span>
+                                        <span className="text-gray-500 font-bold uppercase">Target:</span>
+                                        <span className="font-black text-indigo-600 dark:text-indigo-400 tabular-nums text-sm">{item.target || item.total || 0} {item.unit}</span>
                                     </div>
-                                    {Object.entries(item.statusCounts).map(([statusName, count]) => (
-                                        <div key={statusName} className="flex justify-between items-center text-xs">
-                                            <span className="text-gray-500 font-medium capitalize">{statusName}:</span>
-                                            <span className={`font-black tabular-nums text-xs ${statusName.toLowerCase().includes('complete') ? 'text-emerald-600' : 'text-amber-600'}`}>{count}</span>
-                                        </div>
-                                    ))}
+                                    <div className="flex justify-between items-center text-xs">
+                                        <span className="text-gray-500 font-bold uppercase">Completed:</span>
+                                        <span className="font-black text-emerald-600 dark:text-emerald-400 tabular-nums text-sm">{item.completed}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-xs">
+                                        <span className="text-gray-500 font-bold uppercase">In Progress:</span>
+                                        <span className="font-black text-amber-600 dark:text-amber-400 tabular-nums text-sm">{item.pending}</span>
+                                    </div>
                                 </div>
-                            <div className="w-full bg-gray-200 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
-                                <div 
-                                    className="bg-indigo-600 h-full rounded-full transition-all" 
-                                    style={{ width: `${item.total > 0 ? (item.completed / item.total) * 100 : 0}%` }}
-                                />
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-[10px] font-black uppercase text-gray-400">
+                                        <span>Achievement</span>
+                                        <span className="text-indigo-600 dark:text-indigo-400">{pct}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 dark:bg-gray-800 h-2.5 rounded-full overflow-hidden">
+                                        <div 
+                                            className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-indigo-600' : 'bg-gray-300'}`} 
+                                            style={{ width: `${pct}%` }}
+                                        />
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
@@ -1568,7 +1788,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {Object.entries(groupedByActivity).map(([activityName, records]) => {
+                    {Object.entries<StatusRecord[]>(groupedByActivity).map(([activityName, records]) => {
                         const isExpanded = !!expandedActivities[activityName];
                         const completedCount = records.filter(r => r.status === 'Completed').length;
                         const pendingCount = records.length - completedCount;
@@ -2509,7 +2729,7 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                                 {/* Beneficiary Information Grid */}
                                 <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50/80 p-2.5 rounded-xl border border-gray-200 a4-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px 14px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "7px 12px", fontSize: "11px" }}>
                                     {(() => {
-                                        const { hhId, benId, benName } = resolveSmartIds(ackLetterData);
+                                        const { hhId, benId, benName } = resolveSmartIds(ackLetterData, submissions, beneficiaries);
                                         return (
                                             <>
                                                 <div><span style={{ fontWeight: "bold", color: "#4b5563" }}>లబ్ధిదారుని పేరు (Name):</span> <span style={{ fontWeight: 900, color: "#111827", marginLeft: "4px" }}>{benName || ackLetterData.beneficiaryName || ackLetterData.name}</span></div>
@@ -2708,6 +2928,8 @@ const ActivityStatusDashboard: React.FC<ActivityStatusDashboardProps> = ({ onBac
                             id={`activity-batch-sheet-${idx}`}
                             item={item}
                             materials={item.materials}
+                            odkSubmissions={submissions}
+                            beneficiaries={beneficiaries}
                         />
                     ))}
                 </div>
